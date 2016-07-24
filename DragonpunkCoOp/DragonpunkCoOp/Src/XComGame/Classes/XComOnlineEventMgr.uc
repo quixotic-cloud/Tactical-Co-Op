@@ -3375,7 +3375,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 	local bool bIsMoviePlaying;
 	
 	`log("Dragonpunk test test test",true,'Team Dragonpunk');
-
+	
 	if(XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()!=152423072016)
 		StockOnGameInviteAccepted(InviteResult,bWasSuccessful);
 	else
@@ -3421,7 +3421,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 			return;
 		}
 
-
+		
 		// Mark that we accepted an invite. and active game is now marked failed
 		//SetShuttleToMPInviteLoadout(true);
 		bAcceptedInviteDuringGameplay = true;
@@ -3433,7 +3433,8 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 			`log(`location @ " -----> Shutting down the playing movie and returning to the MP Main Menu, then accepting the invite again.",,'XCom_Online');
 			return;
 		}
-
+		AddGameInviteAcceptedDelegate(GameInviteAccepted);
+		AddGameInviteCompleteDelegate(GameInviteComplete);
 		bIsMoviePlaying = `XENGINE.IsAnyMoviePlaying();
 		if (bIsMoviePlaying || IsPlayerReadyForInviteTrigger() )
 		{
@@ -3498,6 +3499,30 @@ function bool CheckInviteGameVersionMismatch(XComOnlineGameSettings InviteGameSe
 			//InstalledModsHash != InviteGameSettings.GetInstalledModsHash();
 } 
   
+function GameInviteAccepted(bool bWasSuccessful)
+{
+	local UISquadSelect SquadSelectScreen;
+	
+	`log(bWasSuccessful @"OnGameInviteAccepted", true, 'Team Dragonpunk');
+	if(`XENGINE.IsAnyMoviePlaying())
+		`XENGINE.StopCurrentMovie();
+	if(bWasSuccessful)
+	{		
+		//`SCREENSTACK.Screens[0].ConsoleCommand("open"@`Maps.SelectShellMap()$"?Game=XComGame.XComShell");
+		//SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
+		//if(`XENGINE.IsAnyMoviePlaying())
+		//`XENGINE.StopCurrentMovie();
+		//`SCREENSTACK.Push(SquadSelectScreen);
+	}	
+//`ONLINEEVENTMGR.TriggerAcceptedInvite();
+}
+
+function GameInviteComplete(ESystemMessageType MessageType, bool bWasSuccessful)
+{
+	`log(bWasSuccessful @"OnGameInviteComplete", true, 'Team Dragonpunk');
+}
+
+
 function StockOnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
 {
 	local XComPlayerController xPlayerController;
