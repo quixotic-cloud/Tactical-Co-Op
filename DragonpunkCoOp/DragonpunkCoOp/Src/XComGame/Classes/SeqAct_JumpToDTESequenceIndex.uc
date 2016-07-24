@@ -1,0 +1,2 @@
+class SeqAct_JumpToDTESequenceIndex extends SequenceAction
+	deprecated;

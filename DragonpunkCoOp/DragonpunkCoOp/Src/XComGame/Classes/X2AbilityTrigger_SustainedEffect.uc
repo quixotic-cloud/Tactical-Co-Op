@@ -1,0 +1,1 @@
+class X2AbilityTrigger_SustainedEffect extends X2AbilityTrigger;

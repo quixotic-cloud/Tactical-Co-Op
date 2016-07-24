@@ -1,0 +1,2 @@
+class XComWaitCondition_UnitHasSelectedOtherUnit extends SeqAct_XComWaitCondition
+	deprecated;
