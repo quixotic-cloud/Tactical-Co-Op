@@ -9,7 +9,12 @@ static function bool IsInvitedToCoOp()
 	lastestInviteSettings=XComOnlineGameSettings(`ONLINEEVENTMGR.m_tAcceptedGameInviteResults[`ONLINEEVENTMGR.m_tAcceptedGameInviteResults.Length].GameSettings);
 	return(lastestInviteSettings.GetMaxSquadCost()>=2147483647 && lastestInviteSettings.GetTurnTimeSeconds()==3600);
 }
-function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
+
+static function AddItemToAcceptedInvites(OnlineGameSearchResult InviteResult)
+{
+	`ONLINEEVENTMGR.m_tAcceptedGameInviteResults[`ONLINEEVENTMGR.m_tAcceptedGameInviteResults.Length]=InviteResult;
+}
+function OnMyGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
 {
 	local UISquadSelect SquadSelectScreen;
 	local bool bIsMoviePlaying;

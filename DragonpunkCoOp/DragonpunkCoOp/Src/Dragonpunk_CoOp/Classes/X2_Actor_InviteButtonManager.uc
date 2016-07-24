@@ -73,7 +73,8 @@ function MPAddLobbyDelegates()
 	GameInterface.AddLobbyReceiveMessageDelegate(OnLobbyReceiveMessage);
 	GameInterface.AddLobbyReceiveBinaryDataDelegate(OnLobbyReceiveBinaryData);
 	GameInterface.AddLobbyJoinGameDelegate(OnLobbyJoinGame);
-
+	GameInterface.ClearGameInviteAcceptedDelegate(0,`ONLINEEVENTMGR.OnGameInviteAccepted);
+	GameInterface.AddGameInviteAcceptedDelegate(0,OnGameInviteAccepted);
 
 }
 
@@ -89,6 +90,8 @@ function MPClearLobbyDelegates()
 	GameInterface.ClearLobbyReceiveMessageDelegate(OnLobbyReceiveMessage);
 	GameInterface.ClearLobbyReceiveBinaryDataDelegate(OnLobbyReceiveBinaryData);
 	GameInterface.ClearLobbyJoinGameDelegate(OnLobbyJoinGame);
+	GameInterface.ClearGameInviteAcceptedDelegate(0,OnGameInviteAccepted);
+
 }
 
 function OnJoinLobbyComplete(bool bWasSuccessful, const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex, UniqueNetId LobbyUID, string Error)
@@ -138,6 +141,8 @@ function OnLobbyKicked(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> 
 {
 	`log(`location @ `ShowVar(LobbyIndex) @ `ShowVar(AdminIndex),,'XCom_Online');
 }
+
+
 function OSSCreateCoOpOnlineGame(name SessionName)
 {
 	local OnlineGameSettings kGameSettings;
@@ -158,9 +163,10 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 
 	bSuccess = true;
 	MPAddLobbyDelegates();	
+	//OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).AddCreateLobbyCompleteDelegate(OnCreateLobbyComplete);
 	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CreateLobby(2, XLV_Public);
-	//OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).PublishSteamServer();
-	//OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).RefreshPublishLobbySettings();
+	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).PublishSteamServer();
+	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).RefreshPublishLobbySettings();
 	OnlineURL.Map = `Maps.SelectShellMap();
 	OnlineURL.Op.AddItem("Game=XComGame.XComShell");
 
@@ -248,6 +254,7 @@ function OnPlayerJoined(string RequestURL, string Address, const UniqueNetId Uni
 {
 	OnNetworkCreateGame();
 }
+
 function OnSteamClientTimer()
 {
 	local XComGameStateNetworkManager NetManager;
@@ -306,11 +313,11 @@ function OSSOnCreateCoOpGameComplete(name SessionName,bool bWasSuccessful)
 		m_nMatchingSessionName = SessionName;
 		// Set timer to allow dialog data to be presented
 		SetTimer(1.0, false, 'OnCreateCoOpGameTimerComplete');
-		`log("Successfully created online game: Session=" $ SessionName $ ", Server=" @ "TODO: implement, i used to come from the GameReplicationInfo: WorldInfo.GRI.ServerName", true, 'Team Dragonpunk');
+		`log("Successfully created online game: Session=" $ SessionName $ ", Server=" @ "TODO: implement, i used to come from the GameReplicationInfo: WorldInfo.GRI.ServerName", true, 'Team Dragonpunk Co Op');
 	}
 	else
 	{
-		`log("Failed to create online game: Session=" $ SessionName, true, 'Team Dragonpunk');
+		`log("Failed to create online game: Session=" $ SessionName, true, 'Team Dragonpunk Co Op');
 	}
 }
 function OnCreateCoOpGameTimerComplete()
@@ -321,4 +328,132 @@ function OnCreateCoOpGameTimerComplete()
 	
 	//set the input state back to normal
 	XComShellInput(XComPlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).Owner).PlayerInput).PopState();
+}
+
+function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
+{
+	local UISquadSelect SquadSelectScreen;
+	local bool bIsMoviePlaying;
+	
+	`log("Dragonpunk test test test NOT IN XComOnlineEventMgr",true,'Team Dragonpunk Co Op');
+
+	if(XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()<2147483647)
+		`ONLINEEVENTMGR.OnGameInviteAccepted(InviteResult,bWasSuccessful);
+	else
+	{
+
+		if (!bWasSuccessful)
+		{
+			if (class'GameEngine'.static.GetOnlineSubsystem().PlayerInterface.GetLoginStatus(`ONLINEEVENTMGR.LocalUserIndex) != LS_LoggedIn)
+			{
+				if (class'WorldInfo'.static.IsConsoleBuild(CONSOLE_PS3))
+				{
+					class'GameEngine'.static.GetOnlineSubsystem().PlayerInterface.AddLoginUICompleteDelegate(`ONLINEEVENTMGR.OnLoginUIComplete);
+					class'GameEngine'.static.GetOnlineSubsystem().PlayerInterface.ShowLoginUI(true); // Show Online Only
+				}
+				else
+				{
+					`ONLINEEVENTMGR.InviteFailed(SystemMessage_LostConnection);
+					`log("InviteFailed(SystemMessage_LostConnection)",true,'Team Dragonpunk Co Op');
+
+				}
+			}
+			else
+			{
+				`ONLINEEVENTMGR.InviteFailed(SystemMessage_BootInviteFailed);
+				`log("InviteFailed(SystemMessage_BootInviteFailed)",true,'Team Dragonpunk Co Op');
+			}
+			return;
+		}
+
+		if (InviteResult.GameSettings == none)
+		{
+			// XCOM_EW: BUG 5321: [PCR] [360Only] Client receives the incorrect message 'Game Full' and 'you haven't selected a storage device' when accepting a game invite which has been dismissed.
+			// BUG 20260: [ONLINE] - Users will soft crash when accepting an invite to a full lobby.
+			`ONLINEEVENTMGR.InviteFailed(SystemMessage_InviteSystemError, !`ONLINEEVENTMGR.IsCurrentlyTriggeringBootInvite()); // Travel to the MP Menu only if the invite was made while in-game.
+			return;
+		}
+
+		if (CheckInviteGameVersionMismatch(XComOnlineGameSettings(InviteResult.GameSettings)))
+		{
+			`ONLINEEVENTMGR.InviteFailed(SystemMessage_VersionMismatch, true);
+			`log("InviteFailed(SystemMessage_VersionMismatch)",true,'Team Dragonpunk Co Op');
+			return;
+		}
+
+
+		// Mark that we accepted an invite. and active game is now marked failed
+		`ONLINEEVENTMGR.SetShuttleToMPInviteLoadout(true);
+		`ONLINEEVENTMGR.bAcceptedInviteDuringGameplay = true;
+		class'XComOnlineEventMgr_Co_Op_Override'.static.AddItemToAcceptedInvites(InviteResult);
+
+		// If on the boot-train, ignore the rest of the checks and reprocess once at the next valid time.
+		if (bWasSuccessful && !`ONLINEEVENTMGR.bHasProfileSettings)
+		{
+			`log(`location @ " -----> Shutting down the playing movie and returning to the MP Main Menu, then accepting the invite again.",,'XCom_Online');
+			return;
+		}
+
+		bIsMoviePlaying = `XENGINE.IsAnyMoviePlaying();
+		if (bIsMoviePlaying || `ONLINEEVENTMGR.IsPlayerReadyForInviteTrigger() )
+		{
+			if (bIsMoviePlaying)
+			{
+				// By-pass movie and continue accepting the invite.
+				`XENGINE.StopCurrentMovie();
+			}
+			if(!`SCREENSTACK.IsCurrentScreen('UISquadSelect'))
+			{
+				SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
+				`SCREENSTACK.Push(SquadSelectScreen);
+				`log("Pushing SquadSelectUI to screen stack",true,'Team Dragonpunk Co Op');
+			}
+			else
+			{
+				`log("Already in Squad Select UI",true,'Team Dragonpunk Co Op');
+			}
+			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).AcceptGameInvite(LocalPlayer(PlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).Owner).Player).ControllerId,'XComOnlineCoOpGame_TeamDragonpunk');
+		}
+		else
+		{
+			`log(`location @ "Waiting for whatever to finish and transition to the UISquadSelect screen.",true,'Team Dragonpunk Co Op');
+		}
+	}
+}
+function bool CheckInviteGameVersionMismatch(XComOnlineGameSettings InviteGameSettings)
+{
+	local string ByteCodeHash;
+	local int InstalledDLCHash;
+	local int InstalledModsHash;
+	local string INIHash;
+	local string TempToLog;
+	local array<string> TempLog;
+	
+	ByteCodeHash = class'Helpers'.static.NetGetVerifyPackageHashes();
+	InstalledDLCHash = class'Helpers'.static.NetGetInstalledMPFriendlyDLCHash();
+	InstalledModsHash = class'Helpers'.static.NetGetInstalledModsHash();
+	INIHash = class'Helpers'.static.NetGetMPINIHash();
+
+	TempLog=class'Helpers'.static.GetInstalledModNames();
+	foreach TempLog(TempToLog)
+	{
+		`log("Installed Mods:"@TempToLog,true,'Team Dragonpunk Co Op');
+	}
+	`log("Installed Mods Hash:"@InstalledModsHash @InstalledModsHash== InviteGameSettings.GetInstalledModsHash(),true,'Team Dragonpunk Co Op');
+
+	TempLog=class'Helpers'.static.GetInstalledDLCNames();
+	foreach TempLog(TempToLog)
+	{
+		`log("Installed DLCs:"@TempToLog,true,'Team Dragonpunk Co Op');
+	}
+	`log("Installed DLCs Hash:"@InstalledDLCHash @InstalledDLCHash== InviteGameSettings.GetInstalledDLCHash(),true,'Team Dragonpunk Co Op');
+	`log("INI HASH:"@INIHash @INIHash== InviteGameSettings.GetINIHash() ,true,'Team Dragonpunk Co Op');
+	`log("ByteCode HASH:"@ByteCodeHash @ByteCodeHash==InviteGameSettings.GetByteCodeHash(),true,'Team Dragonpunk Co Op');
+
+
+	`log(`location @ "InviteGameSettings=" $ InviteGameSettings.ToString(),, 'Team Dragonpunk Co Op');
+	`log(`location @ `ShowVar(ByteCodeHash) @ `ShowVar(InstalledDLCHash) @ `ShowVar(InstalledModsHash) @ `ShowVar(INIHash),, 'Team Dragonpunk Co Op');
+	return false; //ByteCodeHash != InviteGameSettings.GetByteCodeHash() ||
+			//InstalledDLCHash != InviteGameSettings.GetInstalledDLCHash() ||
+			//InstalledModsHash != InviteGameSettings.GetInstalledModsHash();
 }
