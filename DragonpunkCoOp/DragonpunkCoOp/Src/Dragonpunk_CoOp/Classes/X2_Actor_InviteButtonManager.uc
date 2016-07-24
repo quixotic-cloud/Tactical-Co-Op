@@ -14,8 +14,16 @@ function SetAllElements(array<UIButton> Buttons,array<UITextContainer> AllText)
 	AllInviteButtons=Buttons;
 	AllInviteText=AllText;
 }
-simulated event Destroyed ()
+simulated event Destroyed()
 {
+	local UIButton BT;
+	`log("Destroyed InviteButtonManager");
+	MPClearLobbyDelegates();
+	foreach AllInviteButtons(BT)
+	{
+		BT.Hide();
+		BT.Remove();
+	}
 	AllInviteButtons.Length=0;	
 	AllInviteText.Length=0;	
 }
@@ -114,9 +122,10 @@ function OnLobbyMemberSettingsUpdate(const out array<OnlineGameInterfaceXCom_Act
 function OnLobbyMemberStatusUpdate(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex, int MemberIndex, int InstigatorIndex, string Status)
 {
 	`log(`location @ `ShowVar(LobbyIndex) @ `ShowVar(MemberIndex) @ `ShowVar(InstigatorIndex) @ `ShowVar(Status),,'XCom_Online');
+	`log("DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK",,'Team Dragonpunk Co Op');
 	if( LobbyList.Length >= 2 )
 	{
-		MPCreateLobbyServer();
+		OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).PublishSteamServer();
 	}
 }
 
@@ -142,6 +151,11 @@ function OnLobbyKicked(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> 
 	`log(`location @ `ShowVar(LobbyIndex) @ `ShowVar(AdminIndex),,'XCom_Online');
 }
 
+function OnCreateLobbyComplete(bool bWasSuccessful, UniqueNetId LobbyId, string Error)
+{
+	`log(`location @ `ShowVar(class'GameEngine'.static.GetOnlineSubsystem().UniqueNetIdToHexString( LobbyId )) @ `ShowVar(bWasSuccessful) @ `ShowVar(Error),,'XCom_Online');
+	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).JoinLobby(LobbyId);
+}
 
 function OSSCreateCoOpOnlineGame(name SessionName)
 {
@@ -163,7 +177,7 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 
 	bSuccess = true;
 	MPAddLobbyDelegates();	
-	//OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).AddCreateLobbyCompleteDelegate(OnCreateLobbyComplete);
+	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).AddCreateLobbyCompleteDelegate(OnCreateLobbyComplete);
 	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CreateLobby(2, XLV_Public);
 	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).PublishSteamServer();
 	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).RefreshPublishLobbySettings();

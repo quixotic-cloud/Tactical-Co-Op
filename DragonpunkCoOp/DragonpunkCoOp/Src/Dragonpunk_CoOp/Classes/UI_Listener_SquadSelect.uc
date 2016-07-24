@@ -14,10 +14,15 @@ event OnReceiveFocus(UIScreen Screen)
 {
 	local UISquadSelect SSS;
 	local int i,Count;
-	IBM=Screen.Spawn(class'X2_Actor_InviteButtonManager');
-	AllButtons.Length=0;
-	AllText.Length=0;
-
+	if(!Once)
+	{
+		IBM=Screen.Spawn(class'X2_Actor_InviteButtonManager');
+		AllButtons.Length=0;
+		AllText.Length=0;
+		IBM.MPClearLobbyDelegates();
+		IBM.MPAddLobbyDelegates();
+		Once=true;
+	}
 	if(Screen.isA('UISquadSelect'))
 	{
 		//`ONLINEEVENTMGR.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
@@ -64,9 +69,13 @@ event OnReceiveFocus(UIScreen Screen)
 
 event OnLoseFocus(UIScreen Screen)
 {
-	IBM.Destroy();
-	AllText.Length=0;
-	AllButtons.Length=0;	
+	if(Screen.isA('UISquadSelect'))
+	{
+		IBM.Destroy();
+		AllText.Length=0;
+		AllButtons.Length=0;	
+		Once=false;	
+	}
 }
 // This event is triggered when a screen is removed
 event OnRemoved(UIScreen Screen)
