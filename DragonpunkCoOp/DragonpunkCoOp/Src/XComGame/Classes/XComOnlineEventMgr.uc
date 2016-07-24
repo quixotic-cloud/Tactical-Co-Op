@@ -3423,7 +3423,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 
 
 		// Mark that we accepted an invite. and active game is now marked failed
-		SetShuttleToMPInviteLoadout(true);
+		//SetShuttleToMPInviteLoadout(true);
 		bAcceptedInviteDuringGameplay = true;
 		m_tAcceptedGameInviteResults[m_tAcceptedGameInviteResults.Length] = InviteResult;
 
@@ -3452,6 +3452,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 			{
 				`log("Already in Squad Select UI",true,'Team Dragonpunk');
 			}
+			TriggerAcceptedInvite();
 		}
 		else
 		{

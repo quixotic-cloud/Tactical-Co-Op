@@ -108,11 +108,11 @@ function OnGameInviteAccepted(bool bWasSuccessful)
 		`XENGINE.StopCurrentMovie();
 	if(bWasSuccessful)
 	{		
-		`SCREENSTACK.Screens[0].ConsoleCommand("open"@`Maps.SelectShellMap()$"?Game=XComGame.XComShell");
-		SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
-		if(`XENGINE.IsAnyMoviePlaying())
-		`XENGINE.StopCurrentMovie();
-		`SCREENSTACK.Push(SquadSelectScreen);
+		//`SCREENSTACK.Screens[0].ConsoleCommand("open"@`Maps.SelectShellMap()$"?Game=XComGame.XComShell");
+		//SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
+		//if(`XENGINE.IsAnyMoviePlaying())
+		//`XENGINE.StopCurrentMovie();
+		//`SCREENSTACK.Push(SquadSelectScreen);
 	}	
 //`ONLINEEVENTMGR.TriggerAcceptedInvite();
 }
