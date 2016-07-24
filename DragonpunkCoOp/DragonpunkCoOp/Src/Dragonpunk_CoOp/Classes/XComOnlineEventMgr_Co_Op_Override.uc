@@ -2,6 +2,13 @@
                            
 class XComOnlineEventMgr_Co_Op_Override extends XComOnlineEventMgr;
 
+static function bool IsInvitedToCoOp()
+{
+	local XComOnlineGameSettings lastestInviteSettings;
+
+	lastestInviteSettings=XComOnlineGameSettings(`ONLINEEVENTMGR.m_tAcceptedGameInviteResults[`ONLINEEVENTMGR.m_tAcceptedGameInviteResults.Length].GameSettings);
+	return(lastestInviteSettings.GetMaxSquadCost()>=2147483647 && lastestInviteSettings.GetTurnTimeSeconds()==3600);
+}
 function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
 {
 	local UISquadSelect SquadSelectScreen;
@@ -9,7 +16,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 	
 	`log("Dragonpunk test test test",true,'Team Dragonpunk');
 
-	if(XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()!=152423072016)
+	/*if(XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()<2147483647)
 		StockOnGameInviteAccepted(InviteResult,bWasSuccessful);
 	else
 	{
@@ -90,7 +97,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 		{
 			`log(`location @ "Waiting for whatever to finish and transition to the UISquadSelect screen.",true,'Team Dragonpunk');
 		}
-	}
+	}*/
 }
 function bool CheckInviteGameVersionMismatch(XComOnlineGameSettings InviteGameSettings)
 {

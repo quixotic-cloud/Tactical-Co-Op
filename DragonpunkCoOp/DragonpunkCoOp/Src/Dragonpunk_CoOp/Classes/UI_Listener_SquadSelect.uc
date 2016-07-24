@@ -20,8 +20,8 @@ event OnReceiveFocus(UIScreen Screen)
 
 	if(Screen.isA('UISquadSelect'))
 	{
-		`ONLINEEVENTMGR.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
-		`ONLINEEVENTMGR.AddGameInviteCompleteDelegate(OnGameInviteComplete);
+		//`ONLINEEVENTMGR.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
+		//`ONLINEEVENTMGR.AddGameInviteCompleteDelegate(OnGameInviteComplete);
 		XComCheatManager(UISquadSelect(Screen).GetALocalPlayerController().CheatManager).UnsuppressMP();
 		SSS=UISquadSelect(Screen);
 		Count=SSS.m_kSlotList.ItemCount;
@@ -99,9 +99,9 @@ function OnInviteButtonClicked()
 	IBM.OSSCreateCoOpOnlineGame('XComOnlineCoOpGame_TeamDragonpunk');
 }
 
-function OnGameInviteAccepted(bool bWasSuccessful)
+function GameInviteAccepted(bool bWasSuccessful)
 {
-	local UISquadSelect SquadSelectScreen;
+	//local UISquadSelect SquadSelectScreen;
 	
 	`log(bWasSuccessful @"OnGameInviteAccepted", true, 'Team Dragonpunk');
 	if(`XENGINE.IsAnyMoviePlaying())
@@ -117,7 +117,7 @@ function OnGameInviteAccepted(bool bWasSuccessful)
 //`ONLINEEVENTMGR.TriggerAcceptedInvite();
 }
 
-function OnGameInviteComplete(ESystemMessageType MessageType, bool bWasSuccessful)
+function GameInviteComplete(ESystemMessageType MessageType, bool bWasSuccessful)
 {
 	`log(bWasSuccessful @"OnGameInviteComplete", true, 'Team Dragonpunk');
 }

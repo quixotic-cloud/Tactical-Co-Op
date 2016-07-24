@@ -38,6 +38,9 @@
     <Content Include="Src\Dragonpunk_CoOp\Classes\XComOnlineEventMgr_Co_Op_Override.uc">
       <SubType>Content</SubType>
     </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\XComPresentationLayerBase_CoOp_Override.uc">
+      <SubType>Content</SubType>
+    </Content>
     <Content Include="Src\XComGame\Classes\AnalyticsManager.uc">
       <SubType>Content</SubType>
     </Content>

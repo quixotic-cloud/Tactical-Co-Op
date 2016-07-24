@@ -3368,7 +3368,7 @@ function OnShellLoginComplete_SwitchUsers(bool bWasSuccessful)
  *    NOTE: This will be called multiple times with the same InviteResult, due to the way the invite callbacks are
  *    registered on all controllers.
  */
-   
+/*   
 function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
 {
 	local UISquadSelect SquadSelectScreen;
@@ -3376,7 +3376,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 	
 	`log("Dragonpunk test test test",true,'Team Dragonpunk');
 	
-	if(XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()!=152423072016)
+	if(XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()<2147483647)
 		StockOnGameInviteAccepted(InviteResult,bWasSuccessful);
 	else
 	{
@@ -3460,7 +3460,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 			`log(`location @ "Waiting for whatever to finish and transition to the UISquadSelect screen.",true,'Team Dragonpunk');
 		}
 	}
-}
+}*/
 function bool CheckInviteGameVersionMismatch(XComOnlineGameSettings InviteGameSettings)
 {
 	local string ByteCodeHash;
@@ -3498,32 +3498,8 @@ function bool CheckInviteGameVersionMismatch(XComOnlineGameSettings InviteGameSe
 			//InstalledDLCHash != InviteGameSettings.GetInstalledDLCHash() ||
 			//InstalledModsHash != InviteGameSettings.GetInstalledModsHash();
 } 
-  
-function GameInviteAccepted(bool bWasSuccessful)
-{
-	local UISquadSelect SquadSelectScreen;
-	
-	`log(bWasSuccessful @"OnGameInviteAccepted", true, 'Team Dragonpunk');
-	if(`XENGINE.IsAnyMoviePlaying())
-		`XENGINE.StopCurrentMovie();
-	if(bWasSuccessful)
-	{		
-		//`SCREENSTACK.Screens[0].ConsoleCommand("open"@`Maps.SelectShellMap()$"?Game=XComGame.XComShell");
-		//SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
-		//if(`XENGINE.IsAnyMoviePlaying())
-		//`XENGINE.StopCurrentMovie();
-		//`SCREENSTACK.Push(SquadSelectScreen);
-	}	
-//`ONLINEEVENTMGR.TriggerAcceptedInvite();
-}
 
-function GameInviteComplete(ESystemMessageType MessageType, bool bWasSuccessful)
-{
-	`log(bWasSuccessful @"OnGameInviteComplete", true, 'Team Dragonpunk');
-}
-
-
-function StockOnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
+function /*Stock*/OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
 {
 	local XComPlayerController xPlayerController;
 	local XComPresentationLayerBase Presentation;
@@ -3566,7 +3542,7 @@ function StockOnGameInviteAccepted(const out OnlineGameSearchResult InviteResult
 		return;
 	}
 
-	if (StockCheckInviteGameVersionMismatch(XComOnlineGameSettings(InviteResult.GameSettings)))
+	if (/*Stock*/CheckInviteGameVersionMismatch(XComOnlineGameSettings(InviteResult.GameSettings)))
 	{
 		InviteFailed(SystemMessage_VersionMismatch, true);
 		return;
