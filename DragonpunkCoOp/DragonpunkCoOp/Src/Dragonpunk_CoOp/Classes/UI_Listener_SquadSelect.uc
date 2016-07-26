@@ -5,6 +5,7 @@ var array<UIButton> AllButtons;
 var array<UITextContainer> AllText;
 var X2_Actor_InviteButtonManager IBM;
 var bool Once;
+var XComCo_Op_ConnectionSetup ConnectionSetupActor;
 event OnInit(UIScreen Screen)
 {
 	OnReceiveFocus(Screen);
@@ -14,15 +15,18 @@ event OnReceiveFocus(UIScreen Screen)
 {
 	local UISquadSelect SSS;
 	local int i,Count;
-	if(!Once)
+
+	if(!once)
 	{
-		IBM=Screen.Spawn(class'X2_Actor_InviteButtonManager');
-		AllButtons.Length=0;
-		AllText.Length=0;
-		IBM.MPClearLobbyDelegates();
-		IBM.MPAddLobbyDelegates();
+		ConnectionSetupActor=Screen.Spawn(class'XComCo_Op_ConnectionSetup').InitConnectionSetup("",'XComOnlineCoOpGame_TeamDragonpunk');
 		Once=true;
 	}
+	if(ConnectionSetupActor==none)
+		Once=false;
+
+	IBM=Screen.Spawn(class'X2_Actor_InviteButtonManager');
+	AllButtons.Length=0;
+	AllText.Length=0;
 	if(Screen.isA('UISquadSelect'))
 	{
 		//`ONLINEEVENTMGR.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
@@ -69,13 +73,9 @@ event OnReceiveFocus(UIScreen Screen)
 
 event OnLoseFocus(UIScreen Screen)
 {
-	if(Screen.isA('UISquadSelect'))
-	{
-		IBM.Destroy();
-		AllText.Length=0;
-		AllButtons.Length=0;	
-		Once=false;	
-	}
+	IBM.Destroy();
+	AllText.Length=0;
+	AllButtons.Length=0;		
 }
 // This event is triggered when a screen is removed
 event OnRemoved(UIScreen Screen)
@@ -105,30 +105,7 @@ function OnInviteButtonClicked()
 
 	LocalUserNum = `ONLINEEVENTMGR.LocalUserIndex;
 	onlineSub.PlayerInterfaceEx.ShowInviteUI(LocalUserNum);
-	IBM.OSSCreateCoOpOnlineGame('XComOnlineCoOpGame_TeamDragonpunk');
-}
-
-function GameInviteAccepted(bool bWasSuccessful)
-{
-	//local UISquadSelect SquadSelectScreen;
-	
-	`log(bWasSuccessful @"OnGameInviteAccepted", true, 'Team Dragonpunk');
-	if(`XENGINE.IsAnyMoviePlaying())
-		`XENGINE.StopCurrentMovie();
-	if(bWasSuccessful)
-	{		
-		//`SCREENSTACK.Screens[0].ConsoleCommand("open"@`Maps.SelectShellMap()$"?Game=XComGame.XComShell");
-		//SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
-		//if(`XENGINE.IsAnyMoviePlaying())
-		//`XENGINE.StopCurrentMovie();
-		//`SCREENSTACK.Push(SquadSelectScreen);
-	}	
-//`ONLINEEVENTMGR.TriggerAcceptedInvite();
-}
-
-function GameInviteComplete(ESystemMessageType MessageType, bool bWasSuccessful)
-{
-	`log(bWasSuccessful @"OnGameInviteComplete", true, 'Team Dragonpunk');
+	ConnectionSetupActor.OSSCreateCoOpOnlineGame();
 }
 
 defaultproperties
