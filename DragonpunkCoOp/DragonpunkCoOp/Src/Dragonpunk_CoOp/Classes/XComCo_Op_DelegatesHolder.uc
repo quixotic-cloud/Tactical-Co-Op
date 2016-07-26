@@ -54,6 +54,17 @@ function OnJoinLobbyComplete(bool bWasSuccessful, const out array<OnlineGameInte
 	local string LobbyUIDString;
 	LobbyUIDString = class'GameEngine'.static.GetOnlineSubsystem().UniqueNetIdToHexString( LobbyUID );
 	`log(`location @ `ShowVar(bWasSuccessful) @ `ShowVar(LobbyIndex) @ `ShowVar(LobbyUIDString) @ `ShowVar(Error),,'XCom_Online');
+	if(bWasSuccessful)
+	{
+		`log("DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK",,'Team Dragonpunk Co Op');
+		if( LobbyList.Length >= 2 )
+		{
+			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).PublishSteamServer();
+			SetLobbyServer(LobbyList[LobbyIndex].LobbyUID,OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CurrentGameServerId);
+			XComCheatManager(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().CheatManager).MPSendHistory();
+			XComCheatManager(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().CheatManager).MPCheckConnections();
+		}
+	}
 }
 
 function OnLobbySettingsUpdate(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex)
@@ -69,13 +80,6 @@ function OnLobbyMemberSettingsUpdate(const out array<OnlineGameInterfaceXCom_Act
 function OnLobbyMemberStatusUpdate(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex, int MemberIndex, int InstigatorIndex, string Status)
 {
 	`log(`location @ `ShowVar(LobbyIndex) @ `ShowVar(MemberIndex) @ `ShowVar(InstigatorIndex) @ `ShowVar(Status),,'XCom_Online');
-	`log("DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK",,'Team Dragonpunk Co Op');
-	if( LobbyList.Length >= 2 )
-	{
-		OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).PublishSteamServer();
-		SetLobbyServer(LobbyList[LobbyIndex].LobbyUID,OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CurrentGameServerId);
-		XComCheatManager(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().CheatManager).MPSetPlayerSync();
-	}
 }
 
 function OnLobbyReceiveMessage(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex, int MemberIndex, string Type, string Message)

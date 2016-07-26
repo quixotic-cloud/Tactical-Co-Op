@@ -205,9 +205,9 @@ function OnCreateCoOpGameTimerComplete()
 {
 	//clear any repeat timers to prevent the multiplayer match from exiting prematurely during load
 	XComShellInput(XComPlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).Owner).PlayerInput).ClearAllRepeatTimers();
-	//StartNetworkGame(m_nMatchingSessionName);
 	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).AddCreateLobbyCompleteDelegate(DelegatesHolder.OnCreateLobbyComplete);
 	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CreateLobby(2, XLV_Public);
+	StartNetworkGame(m_nMatchingSessionName);
 	//set the input state back to normal
 	XComShellInput(XComPlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).Owner).PlayerInput).PopState();
 }
