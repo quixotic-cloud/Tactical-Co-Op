@@ -11,7 +11,7 @@ public function XComCo_Op_ConnectionSetup InitConnectionSetup(string MatchOption
 {
 	m_strMatchOptions=	MatchOptions;
 	m_nMatchingSessionName= SessionName;
-	m_kMPShellManager= XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).m_kMPShellManager;
+	m_kMPShellManager= XComShellPresentationLayer(UISquadSelect(`Screenstack.GetCurrentScreen()).Movie.Pres).m_kMPShellManager;
 	DelegatesHolder=Spawn(class'XComCo_Op_DelegatesHolder');
 	DelegatesHolder.m_strMatchOptions=MatchOptions;
 	DelegatesHolder.m_nMatchingSessionName=SessionName;
@@ -31,7 +31,7 @@ function OSSCreateCoOpOnlineGame(optional name SessionName)
 	m_kMPShellManager.OnlineGame_SetAutomatch(false);
 	kGameSettings = CreateGameSettings();
 	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.AddCreateOnlineGameCompleteDelegate(OSSOnCreateCoOpGameComplete);	
-	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.CreateOnlineGame( LocalPlayer(PlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).Owner).Player).ControllerId, m_nMatchingSessionName, kGameSettings );
+	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.CreateOnlineGame( LocalPlayer(PlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetCurrentScreen()).Movie.Pres).Owner).Player).ControllerId, m_nMatchingSessionName, kGameSettings );
 	
 }
 function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
@@ -43,11 +43,12 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 	local bool bSuccess;
 
 	bSuccess = true;
+	`log("Dragonpunk Creating Network Game", true, 'Team Dragonpunk');
 
 	//OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).PublishSteamServer();
 	//OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).RefreshPublishLobbySettings();
-	OnlineURL.Map = `Maps.SelectShellMap();
-	OnlineURL.Op.AddItem("Game=XComGame.XComShell");
+	OnlineURL.Map = "XComShell_Multiplayer";
+	OnlineURL.Op.AddItem("Game=XComGame.X2MPLobbyGame");
 
 	m_nMatchingSessionName = SessionName;
 	m_strMatchOptions = BuildURL(OnlineURL);
@@ -57,6 +58,7 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 	if (ResolvedURL == "")
 	{
 		`log(`location @ "Creating Network Server to host the Online Game.",,'XCom_Online');
+		`log("Dragon PUNK PUNK PUNK",,'XCom_Online');
 		NetManager.CreateServer(OnlineURL, sError);
 		if (sError == "")
 		{
@@ -117,7 +119,7 @@ function PublishLobbyServer()
 
 function OnNetworkCreateGame()
 {
-	`log("Loading online game: Session=" $ m_nMatchingSessionName $ ", URL=" $ m_strMatchOptions, true, 'XCom_Online');
+	`log("Dragonpunk Loading online game: Session=" $ m_nMatchingSessionName $ ", URL=" $ m_strMatchOptions, true, 'XCom_Online');
 	XComPlayerController(Owner).ClientTravel(m_strMatchOptions, TRAVEL_Absolute);
 }
 function string BuildURL(const out URL InURL)
@@ -189,9 +191,10 @@ function OSSOnCreateCoOpGameComplete(name SessionName,bool bWasSuccessful)
 	if(bWasSuccessful)
 	{
 		//block all input, by this point we are committed to the travel
-		XComShellInput(XComPlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).Owner).PlayerInput).PushState('BlockingInput');
+		XComShellInput(XComPlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetCurrentScreen()).Movie.Pres).Owner).PlayerInput).PushState('BlockingInput');
 
 		m_nMatchingSessionName = SessionName;
+		StartNetworkGame(m_nMatchingSessionName);
 		// Set timer to allow dialog data to be presented
 		SetTimer(1.0, false, 'OnCreateCoOpGameTimerComplete');
 		`log("Successfully created online game: Session=" $ SessionName $ ", Server=" @ "TODO: implement, i used to come from the GameReplicationInfo: WorldInfo.GRI.ServerName", true, 'Team Dragonpunk Co Op');
@@ -204,11 +207,14 @@ function OSSOnCreateCoOpGameComplete(name SessionName,bool bWasSuccessful)
 function OnCreateCoOpGameTimerComplete()
 {
 	//clear any repeat timers to prevent the multiplayer match from exiting prematurely during load
-	XComShellInput(XComPlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).Owner).PlayerInput).ClearAllRepeatTimers();
-	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).AddCreateLobbyCompleteDelegate(DelegatesHolder.OnCreateLobbyComplete);
+	//XComShellInput(XComPlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetCurrentScreen()).Movie.Pres).Owner).PlayerInput).ClearAllRepeatTimers();
 	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CreateLobby(2, XLV_Public);
-	StartNetworkGame(m_nMatchingSessionName);
 	//set the input state back to normal
-	XComShellInput(XComPlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).Owner).PlayerInput).PopState();
+	XComShellInput(XComPlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetCurrentScreen()).Movie.Pres).Owner).PlayerInput).PopState();
 }
-
+function OnCreateLobbyComplete(bool bWasSuccessful, UniqueNetId LobbyId, string Error)
+{
+	`log(`location @ `ShowVar(class'GameEngine'.static.GetOnlineSubsystem().UniqueNetIdToHexString( LobbyId )) @ `ShowVar(bWasSuccessful) @ `ShowVar(Error),,'XCom_Online');
+	if(bWasSuccessful)
+		StartNetworkGame(m_nMatchingSessionName);
+}

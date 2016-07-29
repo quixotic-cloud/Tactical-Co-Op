@@ -5,10 +5,12 @@ Class XComCo_Op_DelegatesHolder extends actor;
 var string m_strMatchOptions;
 var name m_nMatchingSessionName;
 var X2MPShellManager m_kMPShellManager;
+var bool bWaitingForHistory,bFriendJoined,bCanStartMatch,bHistoryLoaded,AllPlayersLaunched,HostJoinedAlready,CalledForHistory;
 
 function MPAddLobbyDelegates()
 {
 	local OnlineGameInterfaceXCom GameInterface;
+	local XComGameStateNetworkManager NetworkMgr;
 
 	GameInterface = OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface);
 	GameInterface.AddJoinLobbyCompleteDelegate(OnJoinLobbyComplete);
@@ -22,11 +24,22 @@ function MPAddLobbyDelegates()
 	GameInterface.AddGameInviteAcceptedDelegate(0,OnGameInviteAccepted);
 	GameInterface.AddLobbyInviteDelegate(OnLobbyInvite);
 
+	NetworkMgr = `XCOMNETMANAGER;
+	NetworkMgr.AddPlayerJoinedDelegate(PlayerJoined);
+	NetworkMgr.AddPlayerLeftDelegate(PlayerLeft);
+	NetworkMgr.AddReceiveHistoryDelegate(ReceiveHistory);
+	NetworkMgr.AddReceivePartialHistoryDelegate(ReceivePartialHistory);
+	NetworkMgr.AddReceiveGameStateDelegate(ReceiveGameState);
+	NetworkMgr.AddReceiveMergeGameStateDelegate(ReceiveMergeGameState);
+	NetworkMgr.AddReceiveRemoteCommandDelegate(OnRemoteCommand);
+	//NetworkMgr.AddNotifyConnectionClosedDelegate(OnConnectionClosed);
+
 }
 
 function MPClearLobbyDelegates()
 {
 	local OnlineGameInterfaceXCom GameInterface;
+	local XComGameStateNetworkManager NetworkMgr;
 
 	GameInterface = OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface);
 	GameInterface.ClearJoinLobbyCompleteDelegate(OnJoinLobbyComplete);
@@ -40,13 +53,24 @@ function MPClearLobbyDelegates()
 	GameInterface.AddGameInviteAcceptedDelegate(0,`ONLINEEVENTMGR.OnGameInviteAccepted);
 	GameInterface.ClearLobbyInviteDelegate(OnLobbyInvite);
 
+	NetworkMgr = `XCOMNETMANAGER;
+	NetworkMgr.ClearPlayerJoinedDelegate(PlayerJoined);
+	NetworkMgr.ClearPlayerLeftDelegate(PlayerLeft);
+	NetworkMgr.ClearReceiveHistoryDelegate(ReceiveHistory);
+	NetworkMgr.ClearReceivePartialHistoryDelegate(ReceivePartialHistory);
+	NetworkMgr.ClearReceiveGameStateDelegate(ReceiveGameState);
+	NetworkMgr.ClearReceiveMergeGameStateDelegate(ReceiveMergeGameState);
+	NetworkMgr.ClearReceiveRemoteCommandDelegate(OnRemoteCommand);
+	//NetworkMgr.ClearNotifyConnectionClosedDelegate(OnConnectionClosed);
 }
 
 function OnLobbyInvite(UniqueNetId LobbyId, UniqueNetId FriendId, bool bAccepted)
 {
 	`log("bAccepted:"@bAccepted ,true,'Team Dragonpunk Co Op');
 	if(bAccepted)
+	{
 		OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).JoinLobby(LobbyID);
+	}	
 }
 
 function OnJoinLobbyComplete(bool bWasSuccessful, const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex, UniqueNetId LobbyUID, string Error)
@@ -54,22 +78,63 @@ function OnJoinLobbyComplete(bool bWasSuccessful, const out array<OnlineGameInte
 	local string LobbyUIDString;
 	LobbyUIDString = class'GameEngine'.static.GetOnlineSubsystem().UniqueNetIdToHexString( LobbyUID );
 	`log(`location @ `ShowVar(bWasSuccessful) @ `ShowVar(LobbyIndex) @ `ShowVar(LobbyUIDString) @ `ShowVar(Error),,'XCom_Online');
-	if(bWasSuccessful)
+	if(!`XCOMNETMANAGER.HasServerConnection())
+		OnInviteJoinOnlineGameComplete(m_nMatchingSessionName,bWasSuccessful);
+	`log("Player OnJoinLobbyComplete" @"Client Connections"@ `XCOMNETMANAGER.HasClientConnection() @"Server Connections"@ `XCOMNETMANAGER.HasServerConnection() ,,'Team Dragonpunk');
+
+	if( `XCOMNETMANAGER.HasClientConnection() )
 	{
-		`log("DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK",,'Team Dragonpunk Co Op');
-		if( LobbyList.Length >= 2 )
+		bCanStartMatch = false;
+		//PushState('FriendJoining');
+		bWaitingForHistory = true;
+		SendRemoteCommand("RequestHistory");
+		SetTimer(0.05f,true,'HasHistory');
+	}
+	else if ( `XCOMNETMANAGER.HasServerConnection() )
+	{
+		bCanStartMatch = true;
+		//PushState('StartingCoOp');
+		`log(`location @ "Starting 'StartingCoOp' state!",,'Team Dragonpunk');
+		bHistoryLoaded = true;
+		if(!HostJoinedAlready)
 		{
-			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).PublishSteamServer();
-			SetLobbyServer(LobbyList[LobbyIndex].LobbyUID,OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CurrentGameServerId);
-			XComCheatManager(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().CheatManager).MPSendHistory();
-			XComCheatManager(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().CheatManager).MPCheckConnections();
+			SendRemoteCommand("HostJoined");
+			HostJoinedAlready=true;
 		}
+		SetGameSettingsAsReady();
 	}
 }
 
 function OnLobbySettingsUpdate(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex)
 {
 	`log(`location @ `ShowVar(LobbyIndex),,'XCom_Online');
+	if( LobbyList.Length >= 1 )
+	{
+		`log("Player OnLobbySettingsUpdate" @"Client Connections"@ `XCOMNETMANAGER.HasClientConnection() @"Server Connections"@ `XCOMNETMANAGER.HasServerConnection() ,,'Team Dragonpunk');
+		//`XCOMNETMANAGER.PrintDebugInformation();
+		//`log("Player TEST HERE",,'Team Dragonpunk');
+		if( `XCOMNETMANAGER.HasClientConnection() )
+		{
+			bCanStartMatch = false;
+			//PushState('FriendJoining');
+			bWaitingForHistory = true;
+			SendRemoteCommand("RequestHistory");
+			SetTimer(0.05f,true,'HasHistory');
+		}
+		else if ( `XCOMNETMANAGER.HasServerConnection() )
+		{
+			bCanStartMatch = true;
+			//PushState('StartingCoOp');
+			`log(`location @ "Starting 'StartingCoOp' state!",,'Team Dragonpunk');
+			bHistoryLoaded = true;
+			if(!HostJoinedAlready)
+			{
+				SendRemoteCommand("HostJoined");
+				HostJoinedAlready=true;
+			}
+			SetGameSettingsAsReady();
+		}
+	}
 }
 
 function OnLobbyMemberSettingsUpdate(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex, int MemberIndex)
@@ -79,9 +144,57 @@ function OnLobbyMemberSettingsUpdate(const out array<OnlineGameInterfaceXCom_Act
 
 function OnLobbyMemberStatusUpdate(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex, int MemberIndex, int InstigatorIndex, string Status)
 {
-	`log(`location @ `ShowVar(LobbyIndex) @ `ShowVar(MemberIndex) @ `ShowVar(InstigatorIndex) @ `ShowVar(Status),,'XCom_Online');
-}
+	`log(`location @`ShowVar(LobbyList.Length) @ `ShowVar(LobbyIndex) @ `ShowVar(MemberIndex) @ `ShowVar(InstigatorIndex) @ `ShowVar(Status),,'XCom_Online');
+	if(Status=="Joined")
+	{
+		`log("DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK DRAGON PUNK",,'Team Dragonpunk Co Op');
+		`XCOMNETMANAGER.ForceConnectionAttempt();
+		if( LobbyList.Length >= 1 )
+		{
+			SetLobbyServer(LobbyList[LobbyIndex].LobbyUID,OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CurrentGameServerId);
+			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).PublishSteamServer();
+			`log("Player OnLobbyMemberStatusUpdate" @"Client Connections"@ `XCOMNETMANAGER.HasClientConnection() @"Server Connections"@ `XCOMNETMANAGER.HasServerConnection() ,,'Team Dragonpunk');
+			//`XCOMNETMANAGER.PrintDebugInformation();
+			//`log("Player TEST HERE",,'Team Dragonpunk');
+			if( `XCOMNETMANAGER.HasClientConnection() )
+			{
+				bCanStartMatch = false;
+				//PushState('FriendJoining');
+				bWaitingForHistory = true;
+				SendRemoteCommand("RequestHistory");
+				SetTimer(0.05f,true,'HasHistory');
+			}
+			else if ( `XCOMNETMANAGER.HasServerConnection() )
+			{
+				bCanStartMatch = true;
+				//PushState('StartingCoOp');
+				`log(`location @ "Starting 'StartingCoOp' state!",,'Team Dragonpunk');
+				bHistoryLoaded = true;
+				if(!HostJoinedAlready)
+				{
+					SendRemoteCommand("HostJoined");
+					HostJoinedAlready=true;
+				}
+				SetGameSettingsAsReady();
+			}
 
+			//XComCheatManager(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().CheatManager).MPSendHistory();
+			//XComCheatManager(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().CheatManager).MPCheckConnections();
+		}
+		
+	}
+	
+}
+function HasHistory()
+{
+	if(!bWaitingForHistory)
+	{
+		`log("Cleared Timer Dragonpunk",,'Team Dragonpunk');
+		SendRemoteCommand("ClientJoined");
+		ClearTimer('HasHistory');
+		//CalledForHistory=false;
+	}	
+}
 function OnLobbyReceiveMessage(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex, int MemberIndex, string Type, string Message)
 {
 	`log(`location @ `ShowVar(LobbyIndex) @ `ShowVar(MemberIndex) @ `ShowVar(Type) @ `ShowVar(Message),,'XCom_Online');
@@ -107,15 +220,39 @@ function OnLobbyKicked(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> 
 function SetLobbyServer(UniqueNetId LobbyIdHexString, UniqueNetId ServerIdHexString, optional string ServerIP)
 {
 	local OnlineGameInterfaceXCom GameInterface;
+	`log("DRAGON PUNK DRAGON PUNK SET LOBBY SERVER",,'Team Dragonpunk Co Op');
 
 	GameInterface = OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface);
 	GameInterface.SetLobbyServer(LobbyIdHexString, ServerIdHexString, ServerIP);
+	
 }
 
 function OnCreateLobbyComplete(bool bWasSuccessful, UniqueNetId LobbyId, string Error)
 {
 	`log(`location @ `ShowVar(class'GameEngine'.static.GetOnlineSubsystem().UniqueNetIdToHexString( LobbyId )) @ `ShowVar(bWasSuccessful) @ `ShowVar(Error),,'XCom_Online');
 	//OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).JoinLobby(LobbyId);
+	`log("Player OnCreateLobbyComplete" @"Client Connections"@ `XCOMNETMANAGER.HasClientConnection() @"Server Connections"@ `XCOMNETMANAGER.HasServerConnection() ,,'Team Dragonpunk');
+	if( `XCOMNETMANAGER.HasClientConnection() )
+	{
+		bCanStartMatch = false;
+		//PushState('FriendJoining');
+		bWaitingForHistory = true;
+		SendRemoteCommand("RequestHistory");
+		SetTimer(0.05f,true,'HasHistory');
+	}
+	else if ( `XCOMNETMANAGER.HasServerConnection() )
+	{
+		bCanStartMatch = true;
+		//PushState('StartingCoOp');
+		`log(`location @ "Starting 'StartingCoOp' state!",,'Team Dragonpunk');
+		bHistoryLoaded = true;
+		if(!HostJoinedAlready)
+		{
+			SendRemoteCommand("HostJoined");
+			HostJoinedAlready=true;
+		}
+		SetGameSettingsAsReady();
+	}
 }
 
 function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
@@ -192,14 +329,15 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 			}
 			if(!`SCREENSTACK.IsCurrentScreen('UISquadSelect'))
 			{
-				SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
-				`SCREENSTACK.Push(SquadSelectScreen);
+				//SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
+				//`SCREENSTACK.Push(SquadSelectScreen);
 				`log("Pushing SquadSelectUI to screen stack",true,'Team Dragonpunk Co Op');
 			}
 			else
 			{
 				`log("Already in Squad Select UI",true,'Team Dragonpunk Co Op');
 			}
+			//class'GameEngine'.static.GetOnlineSubsystem().GameInterface.AddJoinOnlineGameCompleteDelegate(OnInviteJoinOnlineGameComplete);
 			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).AcceptGameInvite(LocalPlayer(PlayerController(XComShellPresentationLayer(UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')).Movie.Pres).Owner).Player).ControllerId,'XComOnlineCoOpGame_TeamDragonpunk');
 		}
 		else
@@ -245,3 +383,175 @@ function bool CheckInviteGameVersionMismatch(XComOnlineGameSettings InviteGameSe
 			//InstalledDLCHash != InviteGameSettings.GetInstalledDLCHash() ||
 			//InstalledModsHash != InviteGameSettings.GetInstalledModsHash();
 }
+
+function OnInviteJoinOnlineGameComplete(name SessionName, bool bWasSuccessful)
+{
+	`log(`location @ `ShowVar(SessionName) @ `ShowVar(bWasSuccessful), true, 'XCom_Online');
+	//class'GameEngine'.static.GetOnlineSubsystem().GameInterface.ClearJoinOnlineGameCompleteDelegate(OnInviteJoinOnlineGameComplete);
+	OnInviteJoinComplete(SessionName, bWasSuccessful);
+}
+function OnInviteJoinComplete(name SessionName,bool bWasSuccessful)
+{
+	local string URL;
+
+	if (bWasSuccessful)
+	{
+		`ONLINEEVENTMGR.OnGameInviteComplete(SystemMessage_None, bWasSuccessful);
+
+		// Set the online status for the MP menus
+		`ONLINEEVENTMGR.SetOnlineStatus(OnlineStatus_MainMenu);
+		if (class'GameEngine'.static.GetOnlineSubsystem() != None && class'GameEngine'.static.GetOnlineSubsystem().GameInterface != None)
+		{
+			// Get the platform specific information
+			if (class'GameEngine'.static.GetOnlineSubsystem().GameInterface.GetResolvedConnectString(SessionName,URL))
+			{
+				URL $= "?bIsFromInvite";
+
+				// allow game to override
+				URL = ModifyClientURL(URL);
+
+				`Log("Resulting url is ("$URL$")",,'Team Dragonpunk');
+				// Open a network connection to it
+				StartClient(SessionName, URL);
+			}
+		}
+	}
+}
+function string ModifyClientURL(string URL)
+{
+	return URL;
+}
+function StartClient(name SessionName, optional string ResolvedURL="")
+{
+	local URL OnlineURL;
+	local string sError;
+	OnlineURL.Host = ResolvedURL;
+	OnlineURL.Port = 7777;
+	`log(`location @ "Creating Network Client to join the Online Game at '"$ResolvedURL$"' on port '"$"7777"$"'.",,'XCom_Online');
+	`XCOMNETMANAGER.CreateClient(OnlineURL, sError);	
+}
+
+function SendRemoteCommand(string Command) //Copied from UIMPShell_Lobby
+{
+	local array<byte> Parms;
+	Parms.Length = 0; // Removes script warning.
+	if(Command~="RequestHistory" && !CalledForHistory)
+	{
+		`XCOMNETMANAGER.SendRemoteCommand(Command, Parms);
+		CalledForHistory=true;
+	}
+	`log(`location @ "Sent Remote Command '"$Command$"'",,'Team Dragonpunk');
+}
+
+function OnRemoteCommand(string Command, array<byte> RawParams)
+{
+	`log(`location @ `ShowVar(Command),,'Team Dragonpunk');
+	if (Command ~= "ClientJoined")
+	{
+		`log("Client JOINED",,'Team Dragonpunk');
+	}	
+	else if (Command ~= "RequestHistory")
+	{
+		`XCOMNETMANAGER.SendHistory(`XCOMHISTORY, `XEVENTMGR);
+	}
+}
+
+function SendHistory()
+{
+	`log(`location,,'XCom_Online');
+	`XCOMNETMANAGER.SendHistory(`XCOMHISTORY, `XEVENTMGR);
+}
+
+function bool SendOrMergeGamestate(XComGameState GameState)
+{
+	local bool bGameStateSubmitted;
+	bGameStateSubmitted = false;
+	if (`XCOMNETMANAGER.HasConnections())
+	{
+		if (`XCOMHISTORY.GetStartState() != none)
+		{
+			`XCOMNETMANAGER.SendMergeGameState(GameState);
+		}
+		else
+		{
+			// HACK: Setting the CachedHistory since the Tacticalrules have not been setup yet ...
+			`TACTICALRULES.BuildLocalStateObjectCache();
+			`TACTICALRULES.SubmitGameState(GameState);
+			bGameStateSubmitted = true;
+		}
+	}
+	return bGameStateSubmitted;
+}
+function PlayerJoined(string RequestURL, string Address, const UniqueNetId UniqueId, bool bSupportsAuth)
+{
+	local string strUniqueId;
+	bFriendJoined = true;
+	
+	strUniqueId = class'OnlineSubsystem'.static.UniqueNetIdToString(UniqueId);
+	`log("Player Joined" @ `ShowVar(strUniqueId),,'Team Dragonpunk');
+
+	//RemotePlayerJoined(UniqueId);  // Player joined, update!
+}
+
+function PlayerLeft(const UniqueNetId UniqueId)
+{
+	local string strUniqueId;
+	bFriendJoined = false;
+	
+	strUniqueId = class'OnlineSubsystem'.static.UniqueNetIdToString(UniqueId);
+	`log("Player Left" @ `ShowVar(strUniqueId),,'Team Dragonpunk');
+	//RemotePlayerLeft(UniqueId); // Player left, update!
+}
+
+function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventManager)
+{
+	`log(`location,,'XCom_Online');
+	bHistoryLoaded = true;
+}
+
+function ReceivePartialHistory(XComGameStateHistory InHistory, X2EventManager EventManager)
+{
+	`log(`location,,'XCom_Online');
+	bHistoryLoaded = true;
+}
+
+function ReceiveGameState(XComGameState InGameState)
+{
+	`log(`location,,'XCom_Online');
+	//CalcAllPlayersReady();
+	//UpdateButtons();
+}
+
+function ReceiveMergeGameState(XComGameState InGameState)
+{
+	`log(`location,,'XCom_Online');
+	//CalcAllPlayersReady();
+	//UpdateButtons();
+}
+
+function GetAllPlayersLaunched()
+{
+	local XComGameState_Player PlayerState;
+
+	AllPlayersLaunched=true;
+	foreach `XCOMHISTORY.IterateByClassType(class'XComGameState_Player', PlayerState)
+	{
+		if(!PlayerState.bPlayerReady)
+		{
+			AllPlayersLaunched = false;
+			break;
+		}
+	}
+		
+} 
+
+function SetGameSettingsAsReady()
+{
+	local XComOnlineGameSettings GameSettings;
+	local OnlineGameInterface GameInterface;;
+	GameInterface = class'GameEngine'.static.GetOnlineSubsystem().GameInterface;
+	GameSettings = XComOnlineGameSettings(GameInterface.GetGameSettings('XComOnlineCoOpGame_TeamDragonpunk'));
+	GameSettings.SetServerReady(true);
+	GameInterface.UpdateOnlineGame('XComOnlineCoOpGame_TeamDragonpunk', GameSettings, true);
+}
+
