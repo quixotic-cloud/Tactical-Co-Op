@@ -18,12 +18,18 @@ event OnReceiveFocus(UIScreen Screen)
 
 	if(!once)
 	{
-		ConnectionSetupActor=Screen.Spawn(class'XComCo_Op_ConnectionSetup').InitConnectionSetup("",'XComOnlineCoOpGame_TeamDragonpunk');
+		ConnectionSetupActor=Screen.Spawn(class'XComCo_Op_ConnectionSetup');
+		ConnectionSetupActor.ChangeInviteAcceptedDelegates();
 		Once=true;
 	}
 	if(ConnectionSetupActor==none)
 		Once=false;
 
+	if(ConnectionSetupActor!=none)
+	{
+		ConnectionSetupActor.RevertInviteAcceptedDelegates();
+		ConnectionSetupActor.ChangeInviteAcceptedDelegates();
+	}
 	IBM=Screen.Spawn(class'X2_Actor_InviteButtonManager');
 	AllButtons.Length=0;
 	AllText.Length=0;
@@ -86,7 +92,7 @@ event OnRemoved(UIScreen Screen)
 simulated function OnInviteFriend(UIButton button)
 {
 	`log("Invited Friend!",true,'Team Dragonpunk Soldiers of Fortune');
-	Class'Engine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('XComOnlineCoOpGame_TeamDragonpunk');
+	//Class'Engine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');
 	OnInviteButtonClicked();
 }
 simulated function OnSelectSoldier(UIButton button)
@@ -103,9 +109,9 @@ function OnInviteButtonClicked()
 	onlineSub = `ONLINEEVENTMGR.OnlineSub;
 	`assert(onlineSub != none);
 
+	ConnectionSetupActor.CreateOnlineGame();
 	LocalUserNum = `ONLINEEVENTMGR.LocalUserIndex;
 	onlineSub.PlayerInterfaceEx.ShowInviteUI(LocalUserNum);
-	ConnectionSetupActor.OSSCreateCoOpOnlineGame();
 }
 
 defaultproperties

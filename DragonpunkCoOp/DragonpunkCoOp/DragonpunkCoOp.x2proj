@@ -25,6 +25,9 @@
     <Content Include="Config\XComEngine.ini" />
     <Content Include="Config\XComGame.ini" />
     <Content Include="Localization\XComGame.int" />
+    <Content Include="Src\Dragonpunk_CoOp\Classes\UIPanel_TickActor.uc">
+      <SubType>Content</SubType>
+    </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\UISquadSelect_ListItem_Invite.uc">
       <SubType>Content</SubType>
     </Content>
@@ -38,13 +41,7 @@
     <Content Include="Src\Dragonpunk_CoOp\Classes\XComCo_Op_ConnectionSetup.uc">
       <SubType>Content</SubType>
     </Content>
-    <Content Include="Src\Dragonpunk_CoOp\Classes\XComCo_Op_DelegatesHolder.uc">
-      <SubType>Content</SubType>
-    </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\XComOnlineEventMgr_Co_Op_Override.uc">
-      <SubType>Content</SubType>
-    </Content>
-    <Content Include="Src\Dragonpunk_CoOp\Classes\XComPresentationLayerBase_CoOp_Override.uc">
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\XComGame\Classes\AnalyticsManager.uc">
