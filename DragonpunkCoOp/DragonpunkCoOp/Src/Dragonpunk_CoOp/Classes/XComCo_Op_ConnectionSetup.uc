@@ -91,6 +91,7 @@ function CreateOnlineGame()
 
 function OnCreateOnlineGameComplete(name SessionName,bool bWasSuccessful)
 {
+	//local UIPanel_TickActor TATemp;
 	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.ClearCreateOnlineGameCompleteDelegate(OnCreateOnlineGameComplete);
 
 	if(bWasSuccessful)
@@ -98,9 +99,10 @@ function OnCreateOnlineGameComplete(name SessionName,bool bWasSuccessful)
 		//block all input, by this point we are committed to the travel
 		XComShellInput(XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).PlayerInput).PushState('BlockingInput');
 		m_nMatchingSessionName = SessionName;
-		//StartNetworkGame(m_nMatchingSessionName);
-		// Set timer to allow dialog data to be presented
-		SetTimer(1.0, false, 'OnCreateCoOpGameTimerComplete');
+		StartNetworkGame(m_nMatchingSessionName);
+		//TATemp=Spawn(class'UIPanel_TickActor',`SCREENSTACK.GetCurrentScreen());
+		//TATemp.SetupCoOpTimer(0.1f);
+		//SetTimer(1.0, false, 'OnCreateCoOpGameTimerComplete');
 		`log("Successfully created online game: Session=" $ SessionName $ ", Server=" @ "TODO: implement, i used to come from the GameReplicationInfo: WorldInfo.GRI.ServerName", true, 'Team Dragonpunk Co Op');
 
 }
@@ -114,7 +116,6 @@ function OnCreateCoOpGameTimerComplete()
 {
 	//clear any repeat timers to prevent the multiplayer match from exiting prematurely during load
 	`PRESBASE.ClearInput();
-	StartNetworkGame(m_nMatchingSessionName);
 	`log("Starting Network Game Ended", true, 'Team Dragonpunk Co Op');
 	//set the input state back to normal
 	XComShellInput(XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).PlayerInput).PopState();
@@ -216,7 +217,12 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 		NetManager.CreateServer(OnlineURL, sError);
 		if (sError == "")
 		{
-				XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).ClientTravel(m_strMatchOptions, TRAVEL_Absolute);
+			XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).ClientTravel(m_strMatchOptions, TRAVEL_Absolute);
+			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CreateLobby(2, XLV_Public);
+			`PRESBASE.ClearInput();
+			`log("Starting Network Game Ended", true, 'Team Dragonpunk Co Op');
+			//set the input state back to normal
+			XComShellInput(XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).PlayerInput).PopState();
 		}
 		else
 		{
@@ -260,7 +266,7 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 			`log(`location @"Trying to connect to server BEFORE TIMER TimeForTimer:" @TimeForTimer,,'Team Dragonpunk Co Op');
 			//GoForNetworkTiming=true;
 			TickA=Spawn(class'UIPanel_TickActor',`SCREENSTACK.GetCurrentScreen());
-			TickA.SetupTick(5);
+			TickA.SetupTick(0.25);
 			//SetTimer(TimeForTimer,false,'ForceConnectFunction');
 		}
 	}
