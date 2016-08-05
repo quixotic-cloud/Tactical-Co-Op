@@ -217,7 +217,7 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 		NetManager.CreateServer(OnlineURL, sError);
 		if (sError == "")
 		{
-			XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).ClientTravel(m_strMatchOptions, TRAVEL_Absolute);
+			//XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).ClientTravel(m_strMatchOptions, TRAVEL_Absolute);
 			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CreateLobby(2, XLV_Public);
 			`PRESBASE.ClearInput();
 			`log("Starting Network Game Ended", true, 'Team Dragonpunk Co Op');
@@ -297,7 +297,7 @@ function OnPlayerJoined(string RequestURL, string Address, const UniqueNetId Uni
 	local XComGameStateNetworkManager NetManager;
 	NetManager = `XCOMNETMANAGER;
 	NetManager.ClearPlayerJoinedDelegate(OnPlayerJoined);
-	XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).ClientTravel(m_strMatchOptions, TRAVEL_Absolute);
+	//XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).ClientTravel(m_strMatchOptions, TRAVEL_Absolute);
 	`log("OnPlayerJoined",,'Team Dragonpunk Co Op');
 	
 }
