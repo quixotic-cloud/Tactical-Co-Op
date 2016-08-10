@@ -16,8 +16,11 @@ function SetupCoOpTimer(float TickTime)
 function Connect()
 {
 	local bool ForceSuccess;
+	local array<byte> Parms;
+	Parms.Length = 0; // Removes script warning.
 	`log(`location @"Trying to connect to server",,'Team Dragonpunk Co Op');
 	ForceSuccess=`XCOMNETMANAGER.ForceConnectionAttempt();
+	if(ForceSuccess) `XCOMNETMANAGER.SendRemoteCommand("HostJoined",Parms);
 	`log(`location @"ForceSuccess"@ForceSuccess,,'Team Dragonpunk Co Op');
 	ClearTimer('Connect');
 }

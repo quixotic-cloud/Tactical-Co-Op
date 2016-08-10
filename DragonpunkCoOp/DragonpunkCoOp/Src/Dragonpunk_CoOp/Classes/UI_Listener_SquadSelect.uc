@@ -4,11 +4,25 @@ class UI_Listener_SquadSelect extends UIScreenListener;
 var array<UIButton> AllButtons;
 var array<UITextContainer> AllText;
 var X2_Actor_InviteButtonManager IBM;
-var bool Once;
+var bool Once,bHistoryLoaded;
 var XComCo_Op_ConnectionSetup ConnectionSetupActor;
+
+var array<StateObjectReference> SavedSquad;
+
+
 event OnInit(UIScreen Screen)
 {
+
 	OnReceiveFocus(Screen);
+	/*if(Screen.IsA('UISquadSelect'))
+	{
+		if( `XCOMNETMANAGER.HasConnections() )
+		{
+			`log(`location @ "Sending 'Request History' command",,'Team Dragonpunk Co Op');
+			Parms.Length = 0; // Removes script warning.
+			`XCOMNETMANAGER.SendRemoteCommand("RequestHistory",Parms);
+		}
+	}*/
 }
 
 event OnReceiveFocus(UIScreen Screen)
@@ -18,7 +32,9 @@ event OnReceiveFocus(UIScreen Screen)
 
 	if(!once)
 	{
-		ConnectionSetupActor=Screen.Spawn(class'XComCo_Op_ConnectionSetup');
+		`XCOMNETMANAGER.AddReceiveHistoryDelegate(ReceiveHistory);
+		`XCOMNETMANAGER.AddReceiveMergeGameStateDelegate(ReceiveMergeGameState);
+		ConnectionSetupActor=Screen.Spawn(class'XComCo_Op_ConnectionSetup',Screen);
 		ConnectionSetupActor.ChangeInviteAcceptedDelegates();
 		Once=true;
 	}
@@ -33,6 +49,7 @@ event OnReceiveFocus(UIScreen Screen)
 	IBM=Screen.Spawn(class'X2_Actor_InviteButtonManager');
 	AllButtons.Length=0;
 	AllText.Length=0;
+
 	if(Screen.isA('UISquadSelect'))
 	{
 		//`ONLINEEVENTMGR.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
@@ -92,7 +109,7 @@ event OnRemoved(UIScreen Screen)
 simulated function OnInviteFriend(UIButton button)
 {
 	`log("Invited Friend!",true,'Team Dragonpunk Soldiers of Fortune');
-	//Class'Engine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');
+	Class'Engine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');
 	OnInviteButtonClicked();
 }
 simulated function OnSelectSoldier(UIButton button)
@@ -114,8 +131,62 @@ function OnInviteButtonClicked()
 	onlineSub.PlayerInterfaceEx.ShowInviteUI(LocalUserNum);
 }
 
+function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventManager)
+{
+	local XComGameStateNetworkManager NetworkMgr;
+	if(!bHistoryLoaded)
+	{
+		NetworkMgr = `XCOMNETMANAGER;
+		NetworkMgr.ClearReceiveHistoryDelegate(ReceiveHistory);
+		`log(`location,,'XCom_Online');
+		`log(`location @"Dragonpunk Recieved History",,'Team Dragonpunk Co Op');
+		bHistoryLoaded = true;
+		Global.ReceiveHistory(InHistory, EventManager);
+		SendRemoteCommand("RecievedHistory");
+		//SendRemoteCommand("ClientJoined");
+	}
+	//NetManager.OnReceiveHistory(InHistory, EventManager);
+	//m_kLocalPlayerInfo.InitPlayer(eTeam_Two, m_kSquadLoadout);
+	//m_kRemotePlayerInfo.InitPlayer(eTeam_One);
+	
+}
+function SendRemoteCommand(string Command) //Copied from UIMPShell_Lobby
+{
+	local array<byte> Parms;
+	Parms.Length = 0; // Removes script warning.
+	`XCOMNETMANAGER.SendRemoteCommand(Command, Parms);
+	`log(`location @ "Sent Remote Command '"$Command$"'",,'Team Dragonpunk Co Op');
+}
+
+function ReceiveMergeGameState(XComGameState InGameState)
+{
+	local XComGameState_HeadquartersXCom XComHQ;
+	local StateObjectReference UnitRef; 
+
+	`log(`location @"Recieved Merge GameState",,'Team Dragonpunk Co Op');
+	//SendRemoteCommand("HistoryRegisteredConfirmed");
+	XComHQ = XComGameState_HeadquartersXCom(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
+	foreach XComHQ.Squad(UnitRef)
+	{
+		`log("Unit in squad ReceiveMergeGameState:"@XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitRef.ObjectID)).GetFullName(),,'Team Dragonpunk Co Op');
+	}
+	SavedSquad=XComHQ.Squad;
+	//`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
+	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
+	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay();
+	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
+	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation();
+	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeList();
+	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).OnReceiveFocus();
+
+	//CalcAllPlayersReady();
+	//UpdateButtons();
+}
+
+
 defaultproperties
 {
 	// Leaving this assigned to none will cause every screen to trigger its signals on this class
 	ScreenClass = none;
 }
+

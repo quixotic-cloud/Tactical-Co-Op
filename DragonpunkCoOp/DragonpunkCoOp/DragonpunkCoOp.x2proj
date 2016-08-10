@@ -35,10 +35,25 @@
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\X2DownloadableContentInfo_Dragonpunk_CoOp.uc" />
+    <Content Include="Src\Dragonpunk_CoOp\Classes\X2MPCOOPController.uc">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\X2MPCOOPGame.uc">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\X2MPCOOPPresentationLayer.uc">
+      <SubType>Content</SubType>
+    </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\X2_Actor_InviteButtonManager.uc">
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\XComCo_Op_ConnectionSetup.uc">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\XComMPCOOPGRI.uc">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\XComMPCOOPPRI.uc">
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\XComOnlineEventMgr_Co_Op_Override.uc">
