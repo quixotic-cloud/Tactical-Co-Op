@@ -6,7 +6,7 @@ var array<UITextContainer> AllText;
 var X2_Actor_InviteButtonManager IBM;
 var bool Once,bHistoryLoaded;
 var XComCo_Op_ConnectionSetup ConnectionSetupActor;
-
+var bool AlreadyInvitedFriend;
 var array<StateObjectReference> SavedSquad;
 
 
@@ -110,7 +110,9 @@ simulated function OnInviteFriend(UIButton button)
 {
 	`log("Invited Friend!",true,'Team Dragonpunk Soldiers of Fortune');
 	Class'Engine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');
-	OnInviteButtonClicked();
+//	`XCOMNETMANAGER.Disconnect();
+//	`XCOMNETMANAGER.ResetConnectionData();
+	ConnectionSetupActor.CreateOnlineGame();
 }
 simulated function OnSelectSoldier(UIButton button)
 {
@@ -118,18 +120,6 @@ simulated function OnSelectSoldier(UIButton button)
 	`log("Selected Soldier!",true,'Team Dragonpunk');
 }
 
-function OnInviteButtonClicked()
-{
-	local OnlineSubsystem onlineSub;
-	local int LocalUserNum;
-
-	onlineSub = `ONLINEEVENTMGR.OnlineSub;
-	`assert(onlineSub != none);
-
-	ConnectionSetupActor.CreateOnlineGame();
-	LocalUserNum = `ONLINEEVENTMGR.LocalUserIndex;
-	onlineSub.PlayerInterfaceEx.ShowInviteUI(LocalUserNum);
-}
 
 function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventManager)
 {

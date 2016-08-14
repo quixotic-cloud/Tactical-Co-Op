@@ -9,9 +9,8 @@ var XComOnlineGameSettings ServerGameSettings;
 var bool bWaitingForHistory,bFriendJoined,bCanStartMatch,bHistoryLoaded,AllPlayersLaunched,HostJoinedAlready,CalledForHistory,ForceSuccess;
 var bool GoForNetworkTiming;
 var float AccumulatedDT;
-
 var array<StateObjectReference> SavedSquad;
-
+var TDialogueBoxData DialogData;
 event Tick( float DeltaTime )
 {
 	super.Tick(DeltaTime);
@@ -44,6 +43,7 @@ function ChangeInviteAcceptedDelegates()
 	GameInterface.AddJoinLobbyCompleteDelegate(OnJoinLobbyComplete);
 	GameInterface.AddLobbyInviteDelegate(OnLobbyInvite);
 	GameInterface.AddLobbyJoinGameDelegate(OnLobbyJoinGame);
+	GameInterface.AddCreateLobbyCompleteDelegate(OnCreateLobbyComplete);
 	GameInterface.AddLobbyMemberStatusUpdateDelegate(OnLobbyMemberStatusUpdate);
 
 	NetworkMgr = `XCOMNETMANAGER;
@@ -65,6 +65,7 @@ function RevertInviteAcceptedDelegates()
 	GameInterface.ClearJoinLobbyCompleteDelegate(OnJoinLobbyComplete);
 	GameInterface.ClearLobbyInviteDelegate(OnLobbyInvite);
 	GameInterface.ClearLobbyJoinGameDelegate(OnLobbyJoinGame);
+	GameInterface.ClearCreateLobbyCompleteDelegate(OnCreateLobbyComplete);
 	GameInterface.ClearLobbyMemberStatusUpdateDelegate(OnLobbyMemberStatusUpdate);
 
 	NetworkMgr = `XCOMNETMANAGER;
@@ -83,12 +84,41 @@ function CreateOnlineGame()
 	OnlineSub=class'GameEngine'.static.GetOnlineSubsystem();
 	m_kMPShellManager.OnlineGame_SetAutomatch(false);
 	OSSCreateGameSettings(false);
+	OnCreateOnlineGameComplete(m_nMatchingSessionName,true);
 	OnlineSub.GameInterface.AddCreateOnlineGameCompleteDelegate(OnCreateOnlineGameComplete);
-	// Now kick off the async publish
+// Now kick off the async publish
 	if ( !OnlineSub.GameInterface.CreateOnlineGame(LocalPlayer(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().Player).ControllerId,'Game',ServerGameSettings) )
 	{
 		OnlineSub.GameInterface.ClearCreateOnlineGameCompleteDelegate(OnCreateOnlineGameComplete);
-	}	
+	}
+	PopupServerNotification();
+}	
+function OnCreateLobbyComplete(bool bWasSuccessful, UniqueNetId LobbyId, string Error)
+{
+	XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).pres.UICloseProgressDialog();
+	OpenSteamUI();
+}
+
+function PopupServerNotification()
+{
+	DialogData.eType = eDialog_Normal;
+	DialogData.strTitle = "Creating Co-Op Server";
+	DialogData.strText = "Please Wait for the Steam Invite UI to show up";
+
+	`HQPRES.UIRaiseDialog(DialogData);
+}
+
+function OpenSteamUI()
+{
+	local OnlineSubsystem onlineSub;
+	local int LocalUserNum;
+
+	onlineSub = `ONLINEEVENTMGR.OnlineSub;
+	if(onlineSub==none)
+		return;
+
+	LocalUserNum = `ONLINEEVENTMGR.LocalUserIndex;
+	onlineSub.PlayerInterfaceEx.ShowInviteUI(LocalUserNum);	
 }
 
 function OnCreateOnlineGameComplete(name SessionName,bool bWasSuccessful)
@@ -99,7 +129,7 @@ function OnCreateOnlineGameComplete(name SessionName,bool bWasSuccessful)
 	if(bWasSuccessful)
 	{
 		//block all input, by this point we are committed to the travel
-		XComShellInput(XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).PlayerInput).PushState('BlockingInput');
+		//XComShellInput(XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).PlayerInput).PushState('BlockingInput');
 		m_nMatchingSessionName = SessionName;
 		StartNetworkGame(m_nMatchingSessionName);
 		//SendRemoteCommand("HostJoined");
@@ -117,11 +147,7 @@ function OnCreateOnlineGameComplete(name SessionName,bool bWasSuccessful)
 
 function OnCreateCoOpGameTimerComplete()
 {
-	//clear any repeat timers to prevent the multiplayer match from exiting prematurely during load
-	`PRESBASE.ClearInput();
 	`log("Starting Network Game Ended", true, 'Team Dragonpunk Co Op');
-	//set the input state back to normal
-	XComShellInput(XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).PlayerInput).PopState();
 	OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CreateLobby(2, XLV_Public);	
 }
 
@@ -170,7 +196,7 @@ function OSSCreateGameSettings(bool bAutomatch)
 	kGameSettings.SetNetworkType(eMPNetworkType_Public);
 	kGameSettings.SetGameType(eMPGameType_Deathmatch);
 	kGameSettings.SetTurnTimeSeconds(3600); 
-	kGameSettings.SetMaxSquadCost(2147483648); 
+	kGameSettings.SetMaxSquadCost(1000000); 
 	kGameSettings.SetMapPlotTypeInt(m_kMPShellManager.OnlineGame_GetMapPlotInt());
 	kGameSettings.SetMapBiomeTypeInt(m_kMPShellManager.OnlineGame_GetMapBiomeInt());
 	kGameSettings.NumPublicConnections = 2;
@@ -220,10 +246,8 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 		if (sError == "")
 		{
 			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).CreateLobby(2, XLV_Public);
-			`PRESBASE.ClearInput();
 			`log("Starting Network Game Ended", true, 'Team Dragonpunk Co Op');
 			//set the input state back to normal
-			XComShellInput(XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).PlayerInput).PopState();
 
 		}
 		else
@@ -272,6 +296,7 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 			//SetTimer(TimeForTimer,false,'ForceConnectFunction');
 		}
 	}
+
 	return bSuccess;
 }
 
@@ -325,7 +350,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 	`log("Dragonpunk test test test NOT IN XComOnlineEventMgr",true,'Team Dragonpunk Co Op');
 	OnlineSub=class'GameEngine'.static.GetOnlineSubsystem();
 
-	if(XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()<2147483647)
+	if(XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()<200000)
 		`ONLINEEVENTMGR.OnGameInviteAccepted(InviteResult,bWasSuccessful);
 	else
 	{
@@ -371,7 +396,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 
 
 		// Mark that we accepted an invite. and active game is now marked failed
-		`ONLINEEVENTMGR.SetShuttleToMPInviteLoadout(true);
+	//	`ONLINEEVENTMGR.SetShuttleToMPInviteLoadout(true);
 		`ONLINEEVENTMGR.bAcceptedInviteDuringGameplay = true;
 		class'XComOnlineEventMgr_Co_Op_Override'.static.AddItemToAcceptedInvites(InviteResult);
 

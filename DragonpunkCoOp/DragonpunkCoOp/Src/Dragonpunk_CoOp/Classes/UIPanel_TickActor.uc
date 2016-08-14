@@ -28,9 +28,7 @@ function Connect()
 function OnCreateCoOpGameTimerComplete()
 {
 	//clear any repeat timers to prevent the multiplayer match from exiting prematurely during load
-	`PRESBASE.ClearInput();
 	`log("Starting Network Game Ended", true, 'Team Dragonpunk Co Op');
 	//set the input state back to normal
-	XComShellInput(XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).PlayerInput).PopState();
 	ClearTimer('OnCreateCoOpGameTimerComplete');
 }

@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # XCOM ModBuddy Solution File, Format Version 11.00
 VisualStudioVersion = 12.0.21005.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{5DAE07AF-E217-45C1-8DE7-FF99D6011E8A}") = "DragonpunkCoOp", "DragonpunkCoOp\DragonpunkCoOp.x2proj", "{318B7360-7FA4-4107-8290-FB99D9BCA851}"
+Project("{5DAE07AF-E217-45C1-8DE7-FF99D6011E8A}") = "DragonpunkCoOp", "DragonpunkCoOp\DragonpunkCoOp.x2proj", "{F366EEBB-C409-44BC-BE7B-91273346A831}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,10 +11,10 @@ Global
 		Default|XCOM 2 = Default|XCOM 2
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{318B7360-7FA4-4107-8290-FB99D9BCA851}.Debug|XCOM 2.ActiveCfg = Default|XCOM 2
-		{318B7360-7FA4-4107-8290-FB99D9BCA851}.Debug|XCOM 2.Build.0 = Default|XCOM 2
-		{318B7360-7FA4-4107-8290-FB99D9BCA851}.Default|XCOM 2.ActiveCfg = Default|XCOM 2
-		{318B7360-7FA4-4107-8290-FB99D9BCA851}.Default|XCOM 2.Build.0 = Default|XCOM 2
+		{F366EEBB-C409-44BC-BE7B-91273346A831}.Debug|XCOM 2.ActiveCfg = Default|XCOM 2
+		{F366EEBB-C409-44BC-BE7B-91273346A831}.Debug|XCOM 2.Build.0 = Default|XCOM 2
+		{F366EEBB-C409-44BC-BE7B-91273346A831}.Default|XCOM 2.ActiveCfg = Default|XCOM 2
+		{F366EEBB-C409-44BC-BE7B-91273346A831}.Default|XCOM 2.Build.0 = Default|XCOM 2
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
