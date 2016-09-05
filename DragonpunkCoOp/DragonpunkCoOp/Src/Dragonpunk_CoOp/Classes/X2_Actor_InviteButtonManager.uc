@@ -1,4 +1,8 @@
-// This is an Unreal Script
+//  *********   DRAGONPUNK SOURCE CODE   ******************
+//  FILE:    X2_Actor_InviteButtonManager
+//  AUTHOR:  Elad Dvash
+//  PURPOSE: Shows/hides the "Invite Friend" Button to the soldier select boxes
+//---------------------------------------------------------------------------------------
                            
 class X2_Actor_InviteButtonManager extends Actor;
 
@@ -43,7 +47,7 @@ event Tick(float deltaTime)
 				MyInvite=none;
 				MySelect=none;
 				if(UISquadSelect_ListItem(MySSS.m_kSlotList.GetItem(i)).GetUnitRef().ObjectId>0 || UISquadSelect_ListItem(MySSS.m_kSlotList.GetItem(i)).bDisabled)
-				{	
+				{	// Hides the new buttons on the squad select screen
 					//MySSS.m_kSlotList.GetItem(i).SetAlpha(0.75);
 					UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('SelectPlayer')).Hide();
 					UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('InvitePlayer')).Hide();
@@ -54,13 +58,15 @@ event Tick(float deltaTime)
 				}
 				else
 				{
-					//MySSS.m_kSlotList.GetItem(i).SetAlpha(0);
-					UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('SelectPlayer')).Show();
-					UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('InvitePlayer')).Show();
-					MySelect=UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('SelectPlayer'));
-					MyInvite=UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('InvitePlayer'));
-					UITextContainer(MySelect.GetChildAt(0)).Show();
-					UITextContainer(MyInvite.GetChildAt(0)).Show();
+					if(!`XCOMNETMANAGER.HasConnections())
+					{ // Hides the new buttons on the squad select screen IF it dosnt have any connections (DANIEL...)
+						UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('SelectPlayer')).Show();
+						UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('InvitePlayer')).Show();
+						MySelect=UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('SelectPlayer'));
+						MyInvite=UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('InvitePlayer'));
+						UITextContainer(MySelect.GetChildAt(0)).Show();
+						UITextContainer(MyInvite.GetChildAt(0)).Show();
+					}
 				}
 			}
 			TimeCounter=0;

@@ -4,6 +4,8 @@
 //	Use the X2DownloadableContentInfo class to specify unique mod behavior when the 
 //  player creates a new campaign or loads a saved game.
 //  
+// Why do we need this? we dont, this is why we will leave this empty, if you want to add  
+// some stuff like haikus or something you're welcome.
 //---------------------------------------------------------------------------------------
 //  Copyright (c) 2016 Firaxis Games, Inc. All rights reserved.
 //---------------------------------------------------------------------------------------

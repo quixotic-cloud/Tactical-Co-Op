@@ -1,5 +1,9 @@
-// This is an Unreal Script
-                           
+//  *********   DRAGONPUNK SOURCE CODE   ******************
+//  FILE:    UISquadSelect_ListItem_Invite
+//  AUTHOR:  Elad Dvash
+//  PURPOSE: TO DELETE
+//---------------------------------------------------------------------------------------
+                                                                                                                    
 class UISquadSelect_ListItem_Invite extends UIPanel;
 
 var UIButton InvitePlayer;

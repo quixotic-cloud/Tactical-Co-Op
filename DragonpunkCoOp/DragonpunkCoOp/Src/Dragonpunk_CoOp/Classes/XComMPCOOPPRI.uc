@@ -1,4 +1,5 @@
 // This is an Unreal Script
+// NOT USED, WILL BE DELETED
                            
 Class XComMPCOOPPRI extends XComPlayerReplicationInfo;
 

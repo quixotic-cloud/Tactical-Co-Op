@@ -1,4 +1,8 @@
-// This is an Unreal Script
+//  *********   DRAGONPUNK SOURCE CODE   ******************
+//  FILE:    XComOnlineEventMgr_Co_Op_Override
+//  AUTHOR:  Elad Dvash
+//  PURPOSE: Not actually an Override,Exposing some protected functions and variables
+//---------------------------------------------------------------------------------------
                            
 class XComOnlineEventMgr_Co_Op_Override extends XComOnlineEventMgr;
 

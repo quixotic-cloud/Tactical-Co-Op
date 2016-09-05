@@ -1,5 +1,9 @@
-// This is an Unreal Script
-
+//  *********   DRAGONPUNK SOURCE CODE   ******************
+//  FILE:    UIPanel_TickActor
+//  AUTHOR:  Elad Dvash
+//  PURPOSE: A ticking actor to help the ConnectionSetup class to perform timed functions.
+//--------------------------------------------------------------------------------------------
+                                                                                         
 class UIPanel_TickActor extends Actor;
 
 
@@ -19,7 +23,7 @@ function Connect()
 	local array<byte> Parms;
 	Parms.Length = 0; // Removes script warning.
 	`log(`location @"Trying to connect to server",,'Team Dragonpunk Co Op');
-	ForceSuccess=`XCOMNETMANAGER.ForceConnectionAttempt();
+	ForceSuccess=`XCOMNETMANAGER.ForceConnectionAttempt(); //Forces the connection and establises the transfer of data between the server and client
 	if(ForceSuccess) `XCOMNETMANAGER.SendRemoteCommand("HostJoined",Parms);
 	`log(`location @"ForceSuccess"@ForceSuccess,,'Team Dragonpunk Co Op');
 	ClearTimer('Connect');
