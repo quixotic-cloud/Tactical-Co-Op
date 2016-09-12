@@ -46,7 +46,7 @@ event Tick(float deltaTime)
 			{
 				MyInvite=none;
 				MySelect=none;
-				if(UISquadSelect_ListItem(MySSS.m_kSlotList.GetItem(i)).GetUnitRef().ObjectId>0 || UISquadSelect_ListItem(MySSS.m_kSlotList.GetItem(i)).bDisabled)
+				if(UISquadSelect_ListItem(MySSS.m_kSlotList.GetItem(i)).GetUnitRef().ObjectId>0 || UISquadSelect_ListItem(MySSS.m_kSlotList.GetItem(i)).bDisabled ||`XCOMNETMANAGER.HasConnections())
 				{	// Hides the new buttons on the squad select screen
 					//MySSS.m_kSlotList.GetItem(i).SetAlpha(0.75);
 					UIButton(MySSS.m_kSlotList.GetItem(i).GetChild('SelectPlayer')).Hide();

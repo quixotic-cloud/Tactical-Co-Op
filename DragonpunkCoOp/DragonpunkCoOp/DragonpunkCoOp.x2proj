@@ -41,6 +41,15 @@
     <Content Include="Src\Dragonpunk_CoOp\Classes\X2_Actor_InviteButtonManager.uc">
       <SubType>Content</SubType>
     </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\XComCoOpInput.uc">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\XComCoOpReplayMgr.uc">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\XComCoOpTacticalController.uc">
+      <SubType>Content</SubType>
+    </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\XComCoOpTacticalGame.uc">
       <SubType>Content</SubType>
     </Content>

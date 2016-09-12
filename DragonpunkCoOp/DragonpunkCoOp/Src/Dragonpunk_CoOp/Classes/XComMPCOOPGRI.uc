@@ -9,6 +9,7 @@ Class XComMPCOOPGRI extends XComTacticalGRI;
 var XComGameState_BattleData m_BattleData;
 var bool m_bCallStartMatch;
 
+
 auto state PendingSetup
 {
 	simulated function StartMatch()
@@ -48,7 +49,7 @@ simulated function InitBattle()
 //-----------------------------------------------------------
 simulated function ReceivedGameClass()
 {
-	ReplayMgr = Spawn(class'XComReplayMgr', self);
+	ReplayMgr = Spawn(class'XComCoOpReplayMgr', self);
 
 	super.ReceivedGameClass();
 

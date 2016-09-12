@@ -13,12 +13,6 @@ simulated function class<X2GameRuleset> GetGameRulesetClass()
 	return class'X2TacticalCoOpGameRuleset';
 }
 
-
-simulated function CreateGameRuleset()
-{
-	GameRuleset = Spawn(class'X2TacticalCoOpGameRuleset', self);
-}
-
 static event class<GameInfo> SetGameType(string MapName, string Options, string Portal) //Basically the old version from GameInfo.uc but with the Co-op ruleset option added.
 {
 	local class<GameInfo>   GameInfoClass;
@@ -122,7 +116,7 @@ auto state PendingMatch
 				{
 					`Log( "Player quota met, calling StartMatch()" @ "State=" $ GetStateName(), true, 'XCom_Net' );
 					bMatchStarting = true;
-					StartMatch();
+					//StartMatch();
 				}
 			}
 		}
@@ -130,7 +124,7 @@ auto state PendingMatch
 
 
 	Begin:
-		`log("MY TACTICAL GAME HAS BEEN STARTED!",,'Team Dragonpunk Co Op');
+		`log("MY TACTICAL GAME HAS BEEN STARTED! In State",,'Team Dragonpunk Co Op');
 		if( IsLoading() )
 		{
 			`MAPS.AddStreamingMapsFromURL(WorldInfo.GetLocalURL(), false);
@@ -160,7 +154,8 @@ auto state PendingMatch
 
 defaultproperties
 {
-	GameReplicationInfoClass = class'XComMPCOOPGRI'
+	GameReplicationInfoClass = class'Dragonpunk_CoOp.XComMPCOOPGRI'
+	PlayerControllerClass=class'Dragonpunk_CoOp.XComCoOpTacticalController'
 	m_bMatchStarting=false
 	m_iRequiredPlayers=0
 }
