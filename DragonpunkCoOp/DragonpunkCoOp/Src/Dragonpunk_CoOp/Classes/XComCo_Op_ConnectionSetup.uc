@@ -36,6 +36,7 @@ function ChangeInviteAcceptedDelegates()
 	local OnlineGameInterfaceXCom GameInterface;
 	local XComGameStateNetworkManager NetworkMgr;
 
+	`log("I now have the new Delegates",,'Team Dragonpunk Co Op');
 	GameInterface = OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface);
 	GameInterface.ClearGameInviteAcceptedDelegate(0,`ONLINEEVENTMGR.OnGameInviteAccepted);
 	GameInterface.AddGameInviteAcceptedDelegate(0,OnGameInviteAccepted);	
@@ -55,7 +56,7 @@ function ChangeInviteAcceptedDelegates()
 function RevertInviteAcceptedDelegates()
 {	
 	local OnlineGameInterfaceXCom GameInterface;
-	
+	`log("I now have the old Delegates",,'Team Dragonpunk Co Op');	
 	GameInterface = OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface);
 	GameInterface.ClearGameInviteAcceptedDelegate(0,OnGameInviteAccepted);
 	GameInterface.AddGameInviteAcceptedDelegate(0,`ONLINEEVENTMGR.OnGameInviteAccepted);

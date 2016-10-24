@@ -248,12 +248,18 @@ simulated function bool PerformEndTurn(EPlayerEndTurnType eEndTurnType)
 
 simulated function SetInputState( name nStateName )
 {
-	if(string(nStateName)~="ActiveUnit_Moving")
-		nStateName='ActiveUnit_Moving_Coop';
-	`log("Activating State:" @string(nStateName));
+	local string CurrentState;
+	CurrentState=string(nStateName);
+	if(CurrentState~="ActiveUnit_Moving")
+	{
+		XComCoOpInput( PlayerInput ).GotoState( name(CurrentState),, true );
+		CurrentState="ActiveUnit_COOP";
+	}
+
+	`log("Activating State:" @CurrentState @"Original Name:" @string(nStateName));
 	if (!`REPLAY.bInReplay || `REPLAY.bInTutorial)
 	{
-		XComCoOpInput( PlayerInput ).GotoState( nStateName,, true );
+		XComCoOpInput( PlayerInput ).GotoState( name(CurrentState),, true );
 	}
 }
 

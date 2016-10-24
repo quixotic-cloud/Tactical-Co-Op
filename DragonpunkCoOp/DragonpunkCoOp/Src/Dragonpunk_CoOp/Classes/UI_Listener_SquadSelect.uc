@@ -18,7 +18,8 @@ var array<StateObjectReference> ServerSquad,ClientSquad;
 var bool Launched;
 event OnInit(UIScreen Screen)
 {
-	OnReceiveFocus(Screen);
+	if(Screen.isA('UISquadSelect'))
+		OnReceiveFocus(Screen);
 }
 
 event OnReceiveFocus(UIScreen Screen)
@@ -27,29 +28,34 @@ event OnReceiveFocus(UIScreen Screen)
 	local int i,Count;
 	local float listWidth,listX;
 	local UISquadSelect UISS;
-
-	if(!once)
-	{
-		`XCOMNETMANAGER.AddReceiveHistoryDelegate(ReceiveHistory);
-		`XCOMNETMANAGER.AddReceiveMergeGameStateDelegate(ReceiveMergeGameState);
-		ConnectionSetupActor=Screen.Spawn(class'XComCo_Op_ConnectionSetup',Screen);
-		ConnectionSetupActor.ChangeInviteAcceptedDelegates();
-		Once=true;
-	}
-	if(ConnectionSetupActor==none)
-		Once=false;
-
-	if(ConnectionSetupActor!=none)
-	{
-		ConnectionSetupActor.RevertInviteAcceptedDelegates();// Cleanup delegates before doing anything
-		ConnectionSetupActor.ChangeInviteAcceptedDelegates();// Re-register for all delegates
-	}
-	IBM=Screen.Spawn(class'X2_Actor_InviteButtonManager');
-	AllButtons.Length=0;
-	AllText.Length=0;
-
+	
 	if(Screen.isA('UISquadSelect'))
 	{
+		
+		if(ConnectionSetupActor==none)
+			Once=false;
+
+		if(!once)
+		{
+			`XCOMNETMANAGER.AddReceiveHistoryDelegate(ReceiveHistory);
+			`XCOMNETMANAGER.AddReceiveMergeGameStateDelegate(ReceiveMergeGameState);
+			ConnectionSetupActor=Screen.Spawn(class'XComCo_Op_ConnectionSetup',none);
+			ConnectionSetupActor.ChangeInviteAcceptedDelegates();
+			Once=true;
+		}
+
+		if(ConnectionSetupActor!=none)
+		{
+			ConnectionSetupActor.RevertInviteAcceptedDelegates();// Cleanup delegates before doing anything
+			ConnectionSetupActor.ChangeInviteAcceptedDelegates();// Re-register for all delegates
+		}
+		if(IBM==none)
+			IBM=Screen.Spawn(class'X2_Actor_InviteButtonManager');
+		IBM.StartsUpdateButtons();
+		AllButtons.Length=0;
+		AllText.Length=0;
+
+	
 		//`ONLINEEVENTMGR.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
 		//`ONLINEEVENTMGR.AddGameInviteCompleteDelegate(OnGameInviteComplete);
 		UISquadSelect(Screen).LaunchButton.AnchorTopCenter();
@@ -104,19 +110,28 @@ event OnReceiveFocus(UIScreen Screen)
 
 event OnLoseFocus(UIScreen Screen)
 {
-	IBM.Destroy();
-	AllText.Length=0;
-	AllButtons.Length=0;		
+		
 }
 // This event is triggered when a screen is removed
 event OnRemoved(UIScreen Screen)
 {
-	OnLoseFocus(Screen);
+	if(Screen.isA('UISquadSelect'))
+	{
+		IBM.KillUpdateButtons();
+		IBM.Destroy();
+		AllText.Length=0;
+		AllButtons.Length=0;	
+	}
 }
 
 simulated function OnInviteFriend(UIButton button)
 {
 	local XComGameState_HeadquartersXCom XComHQ;
+	if(ConnectionSetupActor!=none)
+	{
+		ConnectionSetupActor.RevertInviteAcceptedDelegates();// Cleanup delegates before doing anything
+		ConnectionSetupActor.ChangeInviteAcceptedDelegates();// Re-register for all delegates
+	}
 	`log("Invited Friend!",true,'Team Dragonpunk Soldiers of Fortune');
 	XComHQ = XComGameState_HeadquartersXCom(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
 	Class'Engine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');	//Destroy any lingering Online games
@@ -156,11 +171,13 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 		`log(`location @"Dragonpunk Recieved History",,'Team Dragonpunk Co Op');
 		bHistoryLoaded = true;
 		SendRemoteCommand("RecievedHistory");
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
 		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(listX); //Fix the position of the list when getting history.
-		SavedSquad=XComHQ.Squad;
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(listX); //fixes the x position of the list on the screen
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay(); //That's what getting everything updated for the player		SavedSquad=XComHQ.Squad;
 		ServerSquad=XComHQ.Squad;
 		ConnectionSetupActor.SavedSquad=XComHQ.Squad;
 		ConnectionSetupActor.ServerSquad=XComHQ.Squad;		
@@ -168,7 +185,6 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 	}
 	else 
 	{
-		
 		`log(`location @"Dragonpunk Recieved History",,'Team Dragonpunk Co Op');
 		SendRemoteCommand("RecievedHistory");
 		if(Launched)
@@ -248,7 +264,6 @@ function ReceiveMergeGameState(XComGameState InGameState) //Used when getting th
 		`log("Unit in squad ReceiveMergeGameState:"@XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitRef.ObjectID)).GetFullName(),,'Team Dragonpunk Co Op');
 	}
 	//`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
-
 	if(!SquadCheck(XComHQ.Squad,SavedSquad) ||!PerSoldierSquadCheck(InGameState)) //Check if we have any changes. Without checking you'll get a T-pose on the units and the UI becomes unresponsive.
 	{
 		`log("SquadCheck"@SquadCheck(XComHQ.Squad,SavedSquad) @"PerSoldierSquadCheck:"@PerSoldierSquadCheck(InGameState));
@@ -266,7 +281,6 @@ function ReceiveMergeGameState(XComGameState InGameState) //Used when getting th
 		ConnectionSetupActor.TotalSquad=SavedSquad;
 		ConnectionSetupActor.SentRemoteSquadCommand();
 		//CalcAllPlayersReady();
-		//UpdateButtons();
 	}
 	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).LaunchButton.OnClickedDelegate=ConnectionSetupActor.LoadTacticalMapDelegate;
 	

@@ -61,7 +61,17 @@ simulated event StepReplayForward(bool bStepAll = false)
 			bHasVisualizationBlock = class'XComGameStateVisualizationMgr'.static.VisualizerBusy();
 		}
 		until( CurrentHistoryFrame == StepForwardStopFrame || bSingleStepMode );
+		if(CurrentHistoryFrame == StepForwardStopFrame)
+			SendRemoteCommand("EndOfReplay");
 	}
+}
+
+function SendRemoteCommand(string Command)
+{
+	local array<byte> EmptyParams;
+	EmptyParams.Length = 0; // Removes script warning
+	`XCOMNETMANAGER.SendRemoteCommand(Command, EmptyParams);
+	`log("Command Sent:"@Command,,'Dragonpunk Tactical');
 }
 
 state PlayingReplay
@@ -71,7 +81,7 @@ state PlayingReplay
 		// Must set this otherwise SteppingForward might step just a tad too far because it steps past things that don't
 		// have visualization, etc.
 		`log("Starting Replay",,'Dragonpunk Coop ReplayMgr');
-		
+		XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).SetInputState('BlockingInput');	
 	}
 
 	event Tick(float DeltaTime)
