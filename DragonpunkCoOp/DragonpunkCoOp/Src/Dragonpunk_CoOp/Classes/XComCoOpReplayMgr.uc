@@ -2,6 +2,32 @@
                            
 class XComCoOpReplayMgr extends XComMPReplayMgr;
 
+var bool finishedReplay;
+var int LastKnownHistoryIndex;
+
+
+/*simulated event PostBeginPlay()
+{
+	super.PostBeginPlay();
+
+	CachedHistory = `XCOMHISTORY;
+
+	NetworkMgr = `XCOMNETMANAGER;
+	NetworkMgr.AddReceiveHistoryDelegate(ReceivePartialHistory);
+}
+
+simulated function Cleanup()
+{
+	NetworkMgr.ClearReceiveHistoryDelegate(ReceivePartialHistory);
+}
+*/
+simulated function ReceivePartialHistory(XComGameStateHistory InHistory, X2EventManager EventManager)
+{
+	`log("Recieved Partial History Replay Mgr."); 
+	`log("Max InHistory Frame:"@InHistory.GetNumGameStates()-1 @", Max XCOMHISTORY Frame:"@`XCOMHISTORY.GetNumGameStates()-1 @", Max Previous History Frame:" @CachedHistory.GetNumGameStates()-1 @", Last Known History Index:"@LastKnownHistoryIndex);
+}
+
+
 simulated event StepReplayForward(bool bStepAll = false)
 {
 	local XComGameStateVisualizationMgr VisualizationMgr;
@@ -15,6 +41,7 @@ simulated event StepReplayForward(bool bStepAll = false)
 
 	History = `XCOMHISTORY;	
 	GameRuleset = `TACTICALRULES;
+	finishedReplay=false;
 
 	if( CurrentHistoryFrame < StepForwardStopFrame )
 	{
@@ -62,7 +89,29 @@ simulated event StepReplayForward(bool bStepAll = false)
 		}
 		until( CurrentHistoryFrame == StepForwardStopFrame || bSingleStepMode );
 		if(CurrentHistoryFrame == StepForwardStopFrame)
+		{
+			finishedReplay=true;
 			SendRemoteCommand("EndOfReplay");
+		}
+	}
+//	`log("CurrentHistoryFrame" @CurrentHistoryFrame @",StepForwardStopFrame" @StepForwardStopFrame @",NumGameStates"@`XCOMHISTORY.GetNumGameStates());
+}
+
+simulated event StopReplay()
+{
+	local XComCoOpTacticalController TacticalController;
+
+	// Make sure to set the current history frame here, before the EndReplay of the Tactical Rules, since that will advance the History by changing Phases.
+	`XCOMVISUALIZATIONMGR.SetCurrentHistoryFrame(`XCOMHISTORY.GetNumGameStates() - 1);
+	`XCOMHISTORY.SetCurrentHistoryIndex(-1);
+
+	TacticalController = XComCoOpTacticalController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController());
+
+	if (TacticalController != none)
+	{
+		//TacticalController.SetInputState('ActiveUnit_Moving');
+		bInReplay = false;
+		`TACTICALRULES.EndReplay();
 	}
 }
 
@@ -81,12 +130,15 @@ state PlayingReplay
 		// Must set this otherwise SteppingForward might step just a tad too far because it steps past things that don't
 		// have visualization, etc.
 		`log("Starting Replay",,'Dragonpunk Coop ReplayMgr');
+		XComCoOpTacticalController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).IsCurrentlyWaiting=true;
 		XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).SetInputState('BlockingInput');	
 	}
 
 	event Tick(float DeltaTime)
 	{
 		StepForwardStopFrame = `XCOMHISTORY.GetNumGameStates() - 1;
+//		if(!XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).IsInState('BlockingInput'))
+//			XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).SetInputState('BlockingInput');	
 
 		if (CurrentHistoryFrame < StepForwardStopFrame)
 		{
@@ -97,6 +149,10 @@ state PlayingReplay
 		{
 			PauseReplay();
 		}
+		else if(CurrentHistoryFrame == StepForwardStopFrame && finishedReplay!=true)
+		{
+			`log("CurrentHistoryFrame" @CurrentHistoryFrame @",StepForwardStopFrame" @StepForwardStopFrame @",NumGameStates"@`XCOMHISTORY.GetNumGameStates());
+		}
 	}
 
 	simulated function PauseReplay()
@@ -105,7 +161,6 @@ state PlayingReplay
 		PauseReplayRequested = false;
 		GotoState('PausedReplay');
 		//LastSeenHistoryIndex = CachedHistory.GetCurrentHistoryIndex();
-		StopReplay();
 	}
 
 Begin:
@@ -115,6 +170,8 @@ state PausedReplay
 {
 	event BeginState(Name PreviousStateName)
 	{
+		StopReplay();
+//		XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).SetInputState('BlockingInput');	
 	}
 
 	event Tick(float DeltaTime)

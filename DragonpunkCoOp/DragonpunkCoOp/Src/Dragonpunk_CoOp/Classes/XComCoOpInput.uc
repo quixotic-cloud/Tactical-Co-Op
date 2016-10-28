@@ -2,7 +2,7 @@
                            
 class XComCoOpInput extends XComTacticalInput;
 
-state ActiveUnit_COOP extends ActiveUnit_Moving
+state ActiveUnit_Moving_Coop extends ActiveUnit_Moving
 {
 	
 	function bool NextUnit()

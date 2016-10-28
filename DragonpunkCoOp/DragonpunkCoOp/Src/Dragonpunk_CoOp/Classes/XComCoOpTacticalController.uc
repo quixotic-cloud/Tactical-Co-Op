@@ -2,6 +2,8 @@
                            
 Class XComCoOpTacticalController extends XComTacticalController;
 
+var bool IsCurrentlyWaiting;
+
 simulated function bool Visualizer_SelectNextUnit()
 {	
 	local int CurrentSelectedIndex;
@@ -139,6 +141,12 @@ simulated function bool Visualizer_SelectUnit(XComGameState_Unit SelectedUnit)
 	local XComGameState_Player PlayerState;
 	local XGPlayer PlayerVisualizer;
 	local XCom3DCursor kCursor;	
+
+	if(IsCurrentlyWaiting)
+	{
+		SetInputState('BlockingInput');
+		return false;
+	}
 	if(SelectedUnit.GetTeam()==eTeam_XCom && SelectedUnit.GetMaxStat(eStat_FlightFuel)==10 && !`XCOMNETMANAGER.HasClientConnection()) //Check for client unit when you're not the client
 	{
 		`log("This is a server trying to access a client unit with the name:"@SelectedUnit.GetFullName());
@@ -226,6 +234,14 @@ simulated function bool Visualizer_SelectUnit(XComGameState_Unit SelectedUnit)
 	return true;
 }
 
+function OnRemoteCommand(string Command, array<byte> RawParams)
+{
+	if(Command ~= "SwitchTurn")
+		IsCurrentlyWaiting=false;
+
+	else if(Command ~= "DisableControls")
+		IsCurrentlyWaiting=true;	
+}
 function SendRemoteCommand(string Command)
 {
 	local array<byte> EmptyParams;
@@ -252,8 +268,9 @@ simulated function SetInputState( name nStateName )
 	CurrentState=string(nStateName);
 	if(CurrentState~="ActiveUnit_Moving")
 	{
+		ScriptTrace();
 		XComCoOpInput( PlayerInput ).GotoState( name(CurrentState),, true );
-		CurrentState="ActiveUnit_COOP";
+		CurrentState="ActiveUnit_Moving_Coop";
 	}
 
 	`log("Activating State:" @CurrentState @"Original Name:" @string(nStateName));
