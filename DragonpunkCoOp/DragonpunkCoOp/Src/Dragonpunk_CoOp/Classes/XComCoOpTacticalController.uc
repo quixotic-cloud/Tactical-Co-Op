@@ -194,6 +194,7 @@ simulated function bool Visualizer_SelectUnit(XComGameState_Unit SelectedUnit)
 	*/
 
 	`PRES.ShowFriendlySquadStatistics();
+	`PRES.UIHideAllHUD();
 
 	PlayerState = XComGameState_Player(`XCOMHISTORY.GetGameStateForObjectID(SelectedUnit.ControllingPlayer.ObjectID));
 	PlayerVisualizer = XGPlayer(PlayerState.GetVisualizer());
@@ -237,7 +238,10 @@ simulated function bool Visualizer_SelectUnit(XComGameState_Unit SelectedUnit)
 function OnRemoteCommand(string Command, array<byte> RawParams)
 {
 	if(Command ~= "SwitchTurn")
+	{
+		`PRES.UIHideAllHUD();
 		IsCurrentlyWaiting=false;
+	}
 
 	else if(Command ~= "DisableControls")
 		IsCurrentlyWaiting=true;	

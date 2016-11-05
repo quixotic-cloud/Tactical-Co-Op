@@ -20,15 +20,63 @@ event OnInit(UIScreen Screen)
 {
 	if(Screen.isA('UISquadSelect'))
 		OnReceiveFocus(Screen);
+	else if (Screen.isA('UIMissionSummary'))
+	{
+		`log("UI Mission Summary Initiated Cleanup!");
+		Cleanup();
+				
+		if (ConnectionSetupActor != none)
+		{
+			ConnectionSetupActor.Destroy();
+			ConnectionSetupActor=none;
+		}
+	}
 }
 
+function DisconnectGame()
+{
+	if(`XCOMNETMANAGER.HasClientConnection())
+	{
+		`XCOMNETMANAGER.Disconnect();
+	}
+}
+
+function Cleanup()
+{
+	local UIButton TB;
+	local UITextContainer TT;
+
+	if(IBM!=none)
+	{
+		IBM.KillUpdateButtons();
+		IBM.Destroy();
+		IBM=none;	
+
+	}
+	foreach AllButtons(TB)
+	{
+		TB.Remove();
+	}
+	foreach AllText(TT)
+	{
+		TT.Remove();
+	}
+	AllText.Length=0;
+	AllButtons.Length=0;	
+}
+
+function EventListenerReturn EndedTacticalGameplay(Object EventData, Object EventSource, XComGameState GameState, Name EventID)
+{
+	ConnectionSetupActor.Destroy();
+	ConnectionSetupActor=none;
+	return ELR_NoInterrupt;
+}
 event OnReceiveFocus(UIScreen Screen)
 {
 	local UISquadSelect SSS;
 	local int i,Count;
 	local float listWidth,listX;
 	local UISquadSelect UISS;
-	
 	if(Screen.isA('UISquadSelect'))
 	{
 		
@@ -54,7 +102,7 @@ event OnReceiveFocus(UIScreen Screen)
 		IBM.StartsUpdateButtons();
 		AllButtons.Length=0;
 		AllText.Length=0;
-
+		
 	
 		//`ONLINEEVENTMGR.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
 		//`ONLINEEVENTMGR.AddGameInviteCompleteDelegate(OnGameInviteComplete);
@@ -98,13 +146,14 @@ event OnReceiveFocus(UIScreen Screen)
 			UIDialogueBox(UISquadSelect(Screen).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).RemoveDialog();
 		if(`XCOMNETMANAGER.HasClientConnection())
 			UISquadSelect(Screen).LaunchButton.Hide();
-
+		
 	}
 	else if(Screen.isA('UIDialogueBox'))
 	{
 		if(UIDialogueBox(Screen).ShowingDialog())
 			UIDialogueBox(Screen).RemoveDialog();				
 	}
+	
 }
 
 
@@ -122,6 +171,10 @@ event OnRemoved(UIScreen Screen)
 		AllText.Length=0;
 		AllButtons.Length=0;	
 	}
+	if (Screen.isA('UIAfterAction')) 
+	{
+		DisconnectGame();
+	}
 }
 
 simulated function OnInviteFriend(UIButton button)
@@ -135,6 +188,7 @@ simulated function OnInviteFriend(UIButton button)
 	`log("Invited Friend!",true,'Team Dragonpunk Soldiers of Fortune');
 	XComHQ = XComGameState_HeadquartersXCom(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
 	Class'Engine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');	//Destroy any lingering Online games
+	`XCOMNETMANAGER.AddNotifyConnectionClosedDelegate(OnNotifyConnectionClosed);
 //	`XCOMNETMANAGER.Disconnect();
 //	`XCOMNETMANAGER.ResetConnectionData();
   	ClientSquad.Length=0;
@@ -145,6 +199,13 @@ simulated function OnInviteFriend(UIButton button)
 	ConnectionSetupActor.ServerSquad=XComHQ.Squad;
 	ConnectionSetupActor.CreateOnlineGame();
 }
+
+function OnNotifyConnectionClosed(int ConnectionIdx)
+{
+	`log("On Connection Closed!");
+	`XCOMNETMANAGER.ClearNotifyConnectionClosedDelegate(OnNotifyConnectionClosed);
+}
+
 simulated function OnSelectSoldier(UIButton button)
 {
 	UISquadSelect_ListItem(button.ParentPanel).OnClickedSelectUnitButton(); //Turn to the stock soldier selection menu

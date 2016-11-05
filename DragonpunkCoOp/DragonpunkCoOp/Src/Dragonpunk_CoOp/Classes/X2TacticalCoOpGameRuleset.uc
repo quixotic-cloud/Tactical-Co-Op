@@ -137,8 +137,16 @@ function RevertInviteAcceptedDelegates()
 	`XCOMNETMANAGER.ClearReceiveRemoteCommandDelegate(OnRemoteCommand);
 	`XCOMNETMANAGER.ClearReceiveGameStateContextDelegate(ReceiveGameStateContext);
 	`XCOMNETMANAGER.ClearReceiveMirrorHistoryDelegate(ReceiveMirrorHistory);
+
 }
 
+function OnNotifyConnectionClosed(int ConnectionIdx)
+{
+
+	`log("Connection Closed!");
+//	`XCOMNETMANAGER.Disconnect();
+//	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');	
+}
 
 function XComCoOpReplayMgr GetReplayMgr()
 {
@@ -273,6 +281,31 @@ simulated function RebuildLocalStateObjectCache()
 }
 
 
+function MarkObjectiveAsCompleted(name ObjectiveName)
+{
+	local XComGameState_BattleData BattleData;
+	BattleData = XComGameState_BattleData(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_BattleData'));
+	BattleData.CompleteObjective(ObjectiveName);
+}
+
+function bool AllEnemiesEliminated()
+{
+	local XComGameState_Unit UnitState;
+	local XComGameState_AIReinforcementSpawner ReinfState;
+
+	foreach `XCOMHISTORY.IterateByClassType(class'XComGameState_Unit', UnitState)
+	{
+		if(UnitState.GetTeam()==eTeam_Alien && UnitState.IsAlive() && UnitState.IsInCombat() )
+			return false;
+	}
+	foreach `XCOMHISTORY.IterateByClassType(class'XComGameState_AIReinforcementSpawner', ReinfState)
+	{
+		if(ReinfState.Countdown>0)
+			return false;
+	}
+	return true;
+}
+
 simulated function ReceivePartialHistory(XComGameStateHistory InHistory, X2EventManager EventManager)
 {
 	`log(`location @"Received Partial History");
@@ -352,7 +385,6 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 	}
 	else if(Command ~="DisableControls")
 	{
-		`PRES.m_kTurnOverlay.ShowOtherTurn();
 	}
 	else if(Command ~="ReadyForFinalHistory")
 	{
@@ -384,6 +416,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		// Stop replaying, and give player control
 		PopState();
 		GetReplayMgr().RequestPauseReplay();
+		//DisconnectGame();
 	}
 	else if( Command ~= "ForfeitMatch" )
 	{
@@ -463,6 +496,7 @@ function DisconnectGame()
 	bDisconnected = true;
 	NetworkMgr.Disconnect();
 	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');
+
 }
 simulated function LoadGame()
 {
@@ -624,10 +658,12 @@ function StartStatePositionUnits()
 }
 simulated function UIShowAlienTurnOverlay()
 {
+		
 	if(`PRES.m_kTurnOverlay != none && `PRES.m_kTurnOverlay.bIsInited)
 	{
 		if( !`PRES.m_kTurnOverlay.IsShowingAlienTurn() )
 		{
+			`PRES.m_kTurnOverlay.HideOtherTurn();
 			`PRES.m_kTurnOverlay.ShowAlienTurn();
 		}
 	}
@@ -795,8 +831,10 @@ simulated function bool HasTacticalGameEnded()
 			return false;
 		}
 	}
+	if(UseTurnCounterFixed)
+		return TurnCounterFixed<=0;
 
-	return HasTimeExpired()||(TurnCounterFixed<=0 && UseTurnCounterFixed);
+	return HasTimeExpired();
 }
 
 static function OnNewGameState_GameWatcher(XComGameState GameState) //Thank you Amineri and LWS! 
@@ -1366,6 +1404,7 @@ simulated state CreateTacticalGame
 	{
 		local XComGameState StartState;
 		local int StartStateIndex;
+		local XComGameState_InteractiveObject BaseObj,newObj;
 
 		StartState = CachedHistory.GetStartState();
 		
@@ -1396,6 +1435,15 @@ simulated state CreateTacticalGame
 		`log("StartStateInitializeSquads");
 		`TACTICALMISSIONMGR.SpawnMissionObjectives();
 		`log("SpawnMissionObjectives");
+	/*	foreach CachedHistory.IterateByClassType(class'XComGameState_InteractiveObject', BaseObj)
+		{
+			if(BaseObj.Health>0)
+			{
+				newObj=XComGameState_InteractiveObject(StartState.CreateStateObject(class'XComGameState_InteractiveObject', BaseObj.ObjectID));
+				newObj.Health=0;
+				StartState.AddStateObject(newObj);
+			}	
+		}*/
 		//*************************************************************************
 		
 	}
@@ -1823,16 +1871,19 @@ simulated state TurnPhase_UnitActions
 				
 				//Notify the player state's visualizer that they are now the unit action player
 				`assert(PlayerState != none);
-				PlayerStateVisualizer = XGPlayer(PlayerState.GetVisualizer());
-				PlayerStateVisualizer.OnUnitActionPhaseBegun_NextPlayer();  // This initializes the AI turn 
-
-				// Trigger the PlayerTurnBegun event
 				if(!IsServer() && PlayerState.IsAIPlayer())
 				{
+
+				// Trigger the PlayerTurnBegun event
+				
 					`log("Encountered Alien Turn at client. Does not trigger the turn start");
+					XGAIPlayer(PlayerState.GetVisualizer()).m_bSkipAI=true;
 				}	
 				else
 				{
+					PlayerStateVisualizer = XGPlayer(PlayerState.GetVisualizer());
+					PlayerStateVisualizer.OnUnitActionPhaseBegun_NextPlayer();  // This initializes the AI turn 
+
 					EventManager.TriggerEvent( 'PlayerTurnBegun', PlayerState, PlayerState );
 
 					// build a gamestate to mark this beginning of this players turn
@@ -1873,7 +1924,6 @@ simulated state TurnPhase_UnitActions
 			//Notify the player state's visualizer that they are no longer the unit action player
 			PlayerState = XComGameState_Player(CachedHistory.GetGameStateForObjectID(CachedUnitActionPlayerRef.ObjectID));
 			`assert(PlayerState != none);
-			XGPlayer(PlayerState.GetVisualizer()).OnUnitActionPhaseFinished_NextPlayer();
 
 			//Don't process turn begin/end events if we are loading from a save
 			if( !bLoadingSavedGame )
@@ -1881,9 +1931,11 @@ simulated state TurnPhase_UnitActions
 				if(!IsServer() && PlayerState.IsAIPlayer())
 				{
 					`log("Encountered Alien Turn at client. Does not trigger the turn end");
+					XGAIPlayer(PlayerState.GetVisualizer()).m_bSkipAI=false;
 				}	
 				else
 				{
+					XGPlayer(PlayerState.GetVisualizer()).OnUnitActionPhaseFinished_NextPlayer();
 					EventManager.TriggerEvent( 'PlayerTurnEnded', PlayerState, PlayerState );
 
 					// build a gamestate to mark this end of this players turn
@@ -1892,6 +1944,8 @@ simulated state TurnPhase_UnitActions
 					SubmitGameStateContext(Context);
 				}
 			}
+			else
+				XGPlayer(PlayerState.GetVisualizer()).OnUnitActionPhaseFinished_NextPlayer();
 
 
 			ChallengeData = XComGameState_ChallengeData( CachedHistory.GetSingleGameStateObjectForClass( class'XComGameState_ChallengeData', true ) );
@@ -2038,6 +2092,7 @@ simulated state TurnPhase_UnitActions
 	{
 		if (HasTacticalGameEnded())
 		{
+			//DisconnectGame();
 			GotoState( 'EndTacticalGame' );
 		}
 		else
@@ -2174,8 +2229,10 @@ simulated state TurnPhase_UnitActions
 	function PopupServerWaitNotification()
 	{
 		DialogData.eType = eDialog_Normal;
-		DialogData.strTitle = "Waiting For Client To Show Up";
-		DialogData.strText = "Please wait for the Client to enter the tactical game";
+		DialogData.strTitle = "Waiting for other player to enter the tactical game";
+		DialogData.strText = "Please wait. This message will disappear automatically.";
+		DialogData.strAccept=" ";
+		DialogData.strCancel=" ";
 		DialogScreen=`SCREENSTACK.GetCurrentScreen();
 		DialogScreen.Movie.Pres.UIRaiseDialog(DialogData);
 	}
@@ -2206,7 +2263,6 @@ simulated state TurnPhase_UnitActions
 
 	simulated function SetCurrentTime(int DesiredTime)
 	{
-		local XComGameState_TimerData OTimer,Timer;
 		local XComGameState NewGameState;
 		local XComGameState_UITimer OUITimer,UITimer;
 		local UISpecialMissionHUD_TurnCounter TurnCounter;
@@ -2214,31 +2270,27 @@ simulated state TurnPhase_UnitActions
 		TurnCounter=UISpecialMissionHUD(`SCREENSTACK.GetFirstInstanceOf(class'UISpecialMissionHUD')).m_kGenericTurnCounter;
 		TurnCounter.SetCounter(string(DesiredTime),true);
 
-		if(DesiredTime-Timer.GetCurrentTime()>0)
+		OUITimer = XComGameState_UITimer(`XCOMHISTORY.GetSingleGameStateObjectForClass(class 'XComGameState_UITimer', true));
+
+		if(DesiredTime!=OUITimer.TimerValue)
 		{
-			OUITimer = XComGameState_UITimer(`XCOMHISTORY.GetSingleGameStateObjectForClass(class 'XComGameState_UITimer', true));
-			OTimer = XComGameState_TimerData(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_TimerData', true));
+
 			NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("UpdateTimerAgain");
 			if (OUITimer != none)
 				UITimer = XComGameState_UITimer(NewGameState.CreateStateObject(class 'XComGameState_UITimer', OUITimer.ObjectID));
 			else
 				UITimer = XComGameState_UITimer(NewGameState.CreateStateObject(class 'XComGameState_UITimer'));
 
-			if (OTimer != none)
-			{
-				OTimer = XComGameState_TimerData(NewGameState.CreateStateObject(class 'XComGameState_TimerData', OTimer.ObjectID));
-				OTimer.AddPauseTime(DesiredTime-Timer.GetCurrentTime());
-				NewGameState.AddStateObject(Timer);
-			}
-			else
-			{
-				UITimer.TimerValue=DesiredTime;
-				NewGameState.AddStateObject(UITimer);
-			}
+			UITimer.TimerValue=DesiredTime;
+			UITimer.UiState= (DesiredTime<=3 ? eUIState_Bad : eUIState_Normal);
+			NewGameState.AddStateObject(UITimer);
+
 			if(NewGameState.GetNumGameStateObjects()>0)
 				`XCOMHISTORY.AddGameStateToHistory(NewGameState);
 			else
 				`XCOMHISTORY.CleanupPendingGameState(NewGameState);
+		
+			`PRES.UITimerMessage(UITimer.DisplayMsgTitle, UITimer.DisplayMsgSubtitle, string(UITimer.TimerValue), UITimer.UiState, UITimer.ShouldShow);
 
 		}
 	}
@@ -2412,6 +2464,7 @@ Begin:
 							sleep(0.0);
 						}
 						OtherSideEndedReplay=false;
+						`PRES.m_kTurnOverlay.ShowOtherTurn();						
 						SendRemoteCommand("SwitchTurn");
 						`log("Switching To Client, Server has no actions");
 						
@@ -2441,12 +2494,15 @@ Begin:
 					`log("HasActionsLeft():"@HasActionsLeft());
 					if(ServerHasActionsLeft())
 					{
+						`PRES.m_kTurnOverlay.ShowOtherTurn();
 						SendHistoryThisTurn=true;
 						XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).IsCurrentlyWaiting=true;
 						
 					}
 					if(HasActionsLeft()&&!ServerHasActionsLeft())
 					{
+						`PRES.UIHideAllHUD();
+						`PRES.m_kTurnOverlay.HideOtherTurn();
 						`PRES.UIShowMyTurnOverlay();
 						if(XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).IsCurrentlyWaiting)		
 							XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).IsCurrentlyWaiting=false;			
@@ -2481,7 +2537,6 @@ Begin:
 						OtherSideEndedReplay=false;
 						SendRemoteCommand("SwitchTurn");
 						`log("Switching To Server, no actions left");
-						`PRES.m_kTurnOverlay.HideOtherTurn();
 						SendRemoteCommand("XComTurnEnded");
 						bSkipRemainingTurnActivty_B=true;
 					}
@@ -2628,6 +2683,10 @@ Begin:
 
 		if(IsServer())
 		{
+			if(AllEnemiesEliminated())
+			{
+				MarkObjectiveAsCompleted('Sweep');
+			}
 			while(!bClientPreparedForHistory)
 			{
 				sleep(0.0);
@@ -2665,6 +2724,7 @@ Begin:
 			`PRES.m_kTurnOverlay.HideAlienTurn();
 		}
 		//LatentWaitingForPlayerSync();
+		
 	}until( !NextPlayer() ); //NextPlayer returns false when the UnitActionPlayerIndex has reached the end of PlayerTurnOrder in the BattleData state.
 	
 	

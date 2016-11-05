@@ -96,12 +96,45 @@ function OnCreateLobbyComplete(bool bWasSuccessful, UniqueNetId LobbyId, string 
 	OpenSteamUI();
 }
 
+function RegisterLocalTalker()
+{
+	local OnlineSubsystem	OnlineSubsystem;
+
+	OnlineSubsystem = class'GameEngine'.static.GetOnlineSubsystem();
+	if( OnlineSubsystem != none )
+	{
+		OnlineSubsystem.VoiceInterface.RegisterLocalTalker( LocalPlayer(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().Player).ControllerId );
+		OnlineSubsystem.VoiceInterface.StartSpeechRecognition( LocalPlayer(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().Player).ControllerId );
+
+		OnlineSubsystem.VoiceInterface.AddRecognitionCompleteDelegate( LocalPlayer(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().Player).ControllerId, OnRecognitionComplete );
+	}
+}
+
+function OnRecognitionComplete()
+{
+	local OnlineSubsystem	OnlineSubsystem;
+	local array<SpeechRecognizedWord> Words;
+	local int i;
+
+	OnlineSubsystem = class'GameEngine'.static.GetOnlineSubsystem();
+	if( OnlineSubsystem != none )
+	{
+		OnlineSubsystem.VoiceInterface.GetRecognitionResults( LocalPlayer(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().Player).ControllerId, Words );
+		for (i = 0; i < Words.length; i++)
+		{
+			`Log("Speech recognition got word:" @ Words[i].WordText);
+		}
+	}
+}
+
+
 function PopupServerNotification()
 {
 	DialogData.eType = eDialog_Normal;
 	DialogData.strTitle = "Creating Co-Op Server";
-	DialogData.strText = "Please Wait for the Steam Invite UI to show up";
-
+	DialogData.strText = "Please Wait. This message will disappear automatically.";
+	DialogData.strAccept=" ";
+	DialogData.strCancel=" ";
 	`HQPRES.UIRaiseDialog(DialogData);
 }
 
@@ -109,9 +142,17 @@ function PopupClientNotification()
 {
 	DialogData.eType = eDialog_Normal;
 	DialogData.strTitle = "Waiting For Server To Generate Map";
-	DialogData.strText = "Please wait for the Server to generate the map";
-
+	DialogData.strText = "Please wait. This message will disappear automatically.";
+	DialogData.strAccept=" ";
+	DialogData.strCancel=" ";
 	`HQPRES.UIRaiseDialog(DialogData);
+}
+
+function EndDialogBox()
+{
+	`log("Ending Dialog box");
+	if(UIDialogueBox(`SCREENSTACK.GetCurrentScreen().Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).ShowingDialog())
+		UIDialogueBox(`SCREENSTACK.GetCurrentScreen().Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).RemoveDialog();
 }
 
 function OpenSteamUI()
@@ -125,6 +166,7 @@ function OpenSteamUI()
 
 	LocalUserNum = `ONLINEEVENTMGR.LocalUserIndex;
 	onlineSub.PlayerInterfaceEx.ShowInviteUI(LocalUserNum);	
+	EndDialogBox();
 }
 
 function OnCreateOnlineGameComplete(name SessionName,bool bWasSuccessful)
@@ -170,6 +212,7 @@ function OnLobbyMemberStatusUpdate(const out array<OnlineGameInterfaceXCom_Activ
 	if(InStr(Status,"Joined")>-1)
 	{
 		`log(`location @ `ShowVar(LobbyIndex) @"LobbyList[LobbyIndex].Members"@LobbyList[LobbyIndex].Members.Length,,'Team Dragonpunk Co Op');
+		RegisterLocalTalker();
 	}
 	else if(InStr(Status, "Exit") > -1)
 	{
@@ -614,8 +657,10 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 	local XComGameState_HeadquartersXCom XComHQ;
 	local float listWidth,listX;
 	local UISquadSelect UISS;
+	local XComGameState_Unit UnitState;
 	local StateObjectReference UnitRef;
-
+	local XComGameState SearchState;
+	local XComGameStateHistory TempH;
 //	`log(`location @"Dragonpunk Command" @ Command,,'Team Dragonpunk Co Op');
 
 	if (Command ~= "RequestHistory")
@@ -673,6 +718,15 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(listX);
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay();
+		SearchState=`ONLINEEVENTMGR.LatestSaveState(TempH);
+		foreach SearchState.IterateByClassType(class'XComGameState_Unit', UnitState)
+		{
+			if(UnitState.IsASoldier() && UnitState.IsAlive()) //Only soldiers... that are alive
+			{
+				`log("Unit Name Test:"@UnitState.GetFullName(),,'Dragonpunk Co Op Unit Load Test');
+			}
+		}	
+	
 		`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
 	}
 	else if (Command~= "HistoryRegisteredConfirmed")
@@ -691,7 +745,6 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(listX);		
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay();
-
 		`log("Updating Squad Select RegisteredConfirmed",,'Team Dragonpunk Co Op');
 	}
 	else if (Command~="LoadGame")
