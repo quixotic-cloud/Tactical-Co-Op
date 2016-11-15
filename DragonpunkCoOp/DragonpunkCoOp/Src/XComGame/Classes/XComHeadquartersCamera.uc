@@ -58,18 +58,30 @@ function ResetZoom()
 
 protected function OnCameraInterpolationComplete()
 {
+	if(`HQPRES == None) //Clean up log spam -BET
+		return;
+	`log("XComHeadquartersCamera::OnCameraInterpolationComplete <<<<<",,'DebugHQCamera');
+
+	`HQPRES.fCameraSwoopDelayTime = -1.0f;
+	
 	super.OnCameraInterpolationComplete();
 
-	if (IsInState('EarthView'))
+	if (IsInState('EarthView') || IsInState('EarthViewFocusingOnLocation'))
 	{
+		`log("  IsInState('EarthView') || IsInState('EarthViewFocusingOnLocation')",,'DebugHQCamera');
+
 		LastCameraStateOrientation.Focus = `EARTH.GetWorldViewLocation();
 		OldCameraStateOrientation.Focus = LastCameraStateOrientation.Focus;
 	}
 	else if (IsInState('BaseViewTransition'))
 	{
+		`log("  IsInState('BaseViewTransition')",,'DebugHQCamera');
+		`log("  PreviousRoom = QueuedBaseRoom which is" @ PreviousRoom,,'DebugHQCamera');		
+		
 		StartRoomView(QueuedBaseRoom, fQueuedBaseRoomInterpTime);
 	}
 
+	`HQPRES.OnCameraInterpolationComplete();
 	PreviousRoom = QueuedBaseRoom;
 	fQueuedBaseRoomInterpTime = 0;
 	QueuedBaseRoom = '';
@@ -93,6 +105,10 @@ function GetViewDistance( out float ViewDistance )
 
 	NewOrientation.ViewDistance *= CurrentZoom;
 	ViewDistance = NewOrientation.ViewDistance;
+}
+function float GetTargetViewDistance()
+{
+	return XComCamState_HQ_FreeMovement(CameraState).GetTargetViewDistance();
 }
 
 function SetRelativeViewDistance( float fRelativeDist )
@@ -130,10 +146,15 @@ function StartHeadquartersView()
 	TriggerKismetEvent('Base');
 }
 
+function bool FreeMovementInterpolationIsOccurring()
+{
+	return XComCamState_HQ_FreeMovement(CameraState).FreeMovementInterpolationIsOccurring();
+}
 function StartRoomView( name RoomName, float InterpTime )
 {
 	local CameraStateOrientation CurrentOrientation;
 	local CameraActor cameraActor;
+	`log("StartRoomView" @ string(RoomName) @ InterpTime,,'DebugHQCamera');
 
 	if (IsInState('EarthView') || IsInState('EarthViewFocusingOnLocation'))
 	{
@@ -163,14 +184,14 @@ function StartRoomView( name RoomName, float InterpTime )
 	else if(RoomName == 'FreeMovement')
 	{
 		//Only switch to free movement if we are not in a cinematic view at the moment ( cinematic mode should be toggled off first, and the matinees stopped )
-		if( XComCamState_HQ_FreeMovement(CameraState) == none && !IsInState('CinematicView'))
+		if( XComCamState_HQ_FreeMovement(CameraState) == none && !IsInState('CinematicView') && !`SCREENSTACK.HasInstanceOf(class'UIBuildFacilities'))
 		{
 			//Grab the current view...
 			GetCameraStateView( CameraState, 0.0, CurrentOrientation );
 			ResetZoom();
 
 			//...and init the free movement at the current view's focus . 
-			XComCamState_HQ_FreeMovement(SetCameraState(class'XComCamState_HQ_FreeMovement',0.0f)).Init( PCOwner, CurrentOrientation.Focus, CurrentOrientation.ViewDistance );
+			XComCamState_HQ_FreeMovement(SetCameraState(class'XComCamState_HQ_FreeMovement',1.0f)).Init( PCOwner, CurrentOrientation.Focus, CurrentOrientation.ViewDistance );
 			//TriggerKismetEvent('FreeMovement'); //TODO: will we need this? 
 			GotoState( 'FreeMovementView' );
 		}
@@ -225,16 +246,25 @@ function StartRoomViewNamed( name RoomName, float fInterpTime, optional bool bSk
 	local XComCamState_HQ_BaseRoomView RoomView;
 	RoomView = XComCamState_HQ_BaseRoomView(CameraState);
 
+	`log("StartRoomViewNamed" @ RoomName @ PreviousRoom @ RoomView.CamName @ fInterpTime,,'DebugHQCamera');
 	if(fInterpTime > 0)
 	{
+/*
 		// No need to interpolate to the same room - prevents camera jerking
 		if(RoomName == PreviousRoom)
 		{
 			return;
 		}
-
-		if (!bSkipBaseViewTransition && RoomView != none && RoomView.CamName == 'Base' && AnimTime < TotalAnimTime)
+*/
+		// This fix handles the case occurs when LBUMPER or RBUMPER is pressed twice before the camera can reach the
+		// halfway point, and the camera position jumps.  This makes the position continuous!
+		if (!bSkipBaseViewTransition && RoomView != none && RoomView.CamName == 'Base' && AnimTime < TotalAnimTime && RoomName != PreviousRoom)
 		{
+			`log("StartRoomViewNamed 2",,'DebugHQCamera');
+			`log("  QueuedBaseRoom =" @ RoomName,,'DebugHQCamera');
+			`log("  fQueuedBaseRoomInterpTime =" @ fInterpTime,,'DebugHQCamera');
+			PreviousRoom = RoomName;
+			StartRoomView( RoomName, fInterpTime );
 			QueuedBaseRoom = RoomName;
 			fQueuedBaseRoomInterpTime = fInterpTime;
 			GotoState('BaseViewTransition');
@@ -244,17 +274,20 @@ function StartRoomViewNamed( name RoomName, float fInterpTime, optional bool bSk
 	else
 	{
 		// if we get an instant camera change then drop any queued change
+		`log("StartRoomViewNamed 3",,'DebugHQCamera');
 		QueuedBaseRoom = '';
 		fQueuedBaseRoomInterpTime = 0;
 	}
 
 	if(RoomName == 'MissionControl')
 	{
+		`log("StartRoomViewNamed 4",,'DebugHQCamera');
 		RoomName = 'Base';
 	}
 
 	if(RoomName == 'Base' && fInterpTime > 0)
 	{
+		`log("StartRoomViewNamed 5",,'DebugHQCamera');
 		`XSTRATEGYSOUNDMGR.PlaySoundEvent("AntFarm_Camera_Zoom_Out");
 	}
 
@@ -318,6 +351,34 @@ function FocusOnFacility(name RoomName)
 	StartRoomView('FreeMovement', 2.0);
 	XComCamState_HQ_FreeMovement(CameraState).SetTargetFocus(FacilityLocation);
 	//SetZoom(0.3f);
+}
+
+function LookAtLocation(Vector LookLocation)
+{
+	StartRoomView('FreeMovement', 2.0);
+	XComCamState_HQ_FreeMovement(CameraState).LookAtRoom(LookLocation, false);
+}
+function SetInitialFocusToCamera(name CameraName)
+{
+	local CameraActor Camera;
+
+	if (Camera == none)
+	{
+		foreach WorldInfo.AllActors(class'CameraActor', Camera)
+		{
+			if (Camera.Tag == CameraName)
+			{
+				break;
+			}
+		}
+	}
+
+	if (Camera == none)
+	{
+		return;
+	}
+
+	XComCamState_HQ_FreeMovement(CameraState).SetInitialFocus(Camera.Location);
 }
 
 state BaseView
@@ -402,7 +463,11 @@ state FreeMovementView
 		}
 		
 		SetZoom( fZoomPercent );
-		XComCamState_HQ_FreeMovement(CameraState).LookAt( NewOrientation.Focus );
+		if(`ISCONTROLLERACTIVE)
+			XComCamState_HQ_FreeMovement(CameraState).LookAtImmediate( NewOrientation.Focus );
+		else
+			XComCamState_HQ_FreeMovement(CameraState).LookAt( NewOrientation.Focus );
+		
 		`Log("HQ cam look at " $ NewOrientation.Focus,,'XComCameramgr');
 	}
 }
@@ -418,6 +483,25 @@ function NewEarthView(float fInterpTime)
 	XComCamState_Earth(SetCameraState(class'XComCamState_Earth', fInterpTime)).Init(PCOwner, self);
 }
 
+function GeoscapePausePawnInterpActions()
+{
+	local XComHumanPawn P;
+	
+	foreach WorldInfo.AllPawns( class'XComHumanPawn', P )
+	{
+		P.GeoscapePauseInterpActions();
+	}
+}
+
+function GeoscapeUnpausePawnInterpActions()
+{
+	local XComHumanPawn P;
+	
+	foreach WorldInfo.AllPawns( class'XComHumanPawn', P )
+	{
+		P.GeoscapeUnpauseInterpActions();
+	}
+}
 state EarthView
 {
 	event BeginState(Name PreviousStateName)
@@ -430,11 +514,13 @@ state EarthView
 		}
 
 		XComInputBase(PCOwner.PlayerInput).m_bSteamControllerInGeoscapeView = true;
+		GeoscapePausePawnInterpActions();
 	}
 
 	event EndState(Name NextStateName)
 	{
 		XComInputBase(PCOwner.PlayerInput).m_bSteamControllerInGeoscapeView = false;
+		GeoscapeUnpausePawnInterpActions();
 	}
 
 
@@ -494,6 +580,147 @@ function float GetFreeCamMax_Z(float fViewDistScalar)
 function float GetFreeCamMin_Z(float fViewDistScalar)
 {
 	return FREECAM_MIN_Z - (FREECAM_MAX_Z - FREECAM_MIN_Z)*fViewDistScalar;
+}
+
+function GetViewFromCameraName( CameraActor CamActor_, name CamName_, out vector out_Focus, out rotator out_Rotation, out float out_ViewDistance, out float out_FOV, out PostProcessSettings out_PPSettings, out float out_PPOverrideAlpha )
+{
+	CameraState.GetViewFromCameraName( CamActor_, CamName_, out_Focus, out_Rotation, out_ViewDistance, out_FOV, out_PPSettings, out_PPOverrideAlpha );
+}
+
+// Overrides XComBaseCamera::InterpCameraState.
+protected function InterpCameraState(float DeltaTime, out vector out_Location, out rotator out_Rotation, out float out_FOV, out PostProcessSettings out_PPSettings, out float out_PPOverrideAlpha)
+{
+	local float tVal;
+//	local XComCamState_HQ_BaseRoomView HQCamState;
+	local vector				FacilityTransition_Focus;
+	local rotator				FacilityTransition_Rotation;
+	local float					FacilityTransition_ViewDistance;
+	local float					FacilityTransition_FOV;
+	local PostProcessSettings	FacilityTransition_PPSettings;
+	local float					FacilityTransition_PPOverrideAlpha;
+	local float					Dist;
+	local float				    RealDeltaTime;
+	
+	// Don't let the Avenger camera hitch, so interpolate with a steady DeltaTime, but
+	// maintain the RealDeltaTime so the .5 second fCameraSwoopDelayTime stays in real time.
+	RealDeltaTime = DeltaTime;
+	DeltaTime = FMin( DeltaTime, 0.0333f );	
+	
+	//`log("XComHeadquartersCamera::InterpCameraState",,'DebugHQCamera');
+
+	GetCameraStateView(CameraState, DeltaTime, LastCameraStateOrientation);
+
+//	HQCamState = XComCamState_HQ_BaseRoomView(CameraState);
+
+	// Check for special calculation done for Facilty-to-facility Parabolic Interpolation
+	if (`HQPRES.EnteringParabolicFacilityTransition())
+	{
+		`HQPRES.GetFacilityTransition(FacilityTransition_Focus, FacilityTransition_Rotation, FacilityTransition_ViewDistance, FacilityTransition_FOV,  FacilityTransition_PPSettings, FacilityTransition_PPOverrideAlpha);
+
+		Dist = VSize(OldCameraStateOrientation.Focus - FacilityTransition_Focus);
+
+		`log("InterpCameraState EnteringParabolicFacilityTransition:",,'DebugHQCamera');
+		`log("  OldCameraStateOrientation.Focus =" @ OldCameraStateOrientation.Focus  @ "ViewDistance =" @ OldCameraStateOrientation.ViewDistance,,'DebugHQCamera');
+		`log("  FacilityTransition_Focus        =" @ FacilityTransition_Focus         @ "ViewDistance =" @ FacilityTransition_ViewDistance       ,,'DebugHQCamera');
+
+		// Set camera location and other properties to the midpoint of the two locations
+		LastCameraStateOrientation.Focus            = (OldCameraStateOrientation.Focus            + FacilityTransition_Focus          ) * 0.5f;
+		LastCameraStateOrientation.Rotation         = (OldCameraStateOrientation.Rotation         + FacilityTransition_Rotation       ) * 0.5f;
+		LastCameraStateOrientation.ViewDistance     = (OldCameraStateOrientation.ViewDistance     + FacilityTransition_ViewDistance   ) * 0.5f;
+		LastCameraStateOrientation.FOV              = (OldCameraStateOrientation.FOV              + FacilityTransition_FOV            ) * 0.5f;
+		LastCameraStateOrientation.PPOverrideAlpha  = (OldCameraStateOrientation.PPOverrideAlpha  + FacilityTransition_PPOverrideAlpha) * 0.5f;
+
+		LastCameraStateOrientation.PPSettings = FacilityTransition_PPSettings;
+		class'Helpers'.static.OverridePPSettings(LastCameraStateOrientation.PPSettings, OldCameraStateOrientation.PPSettings, 0.5f);
+		
+		`log("  New Target                Focus =" @ LastCameraStateOrientation.Focus @ "ViewDistance =" @ LastCameraStateOrientation.ViewDistance,,'DebugHQCamera');
+
+
+		//TODO(AMS): implement OverridePPSettings at some point?  Perhaps after they fix the blurriness issue.
+
+		LastCameraStateOrientation.ViewDistance += Dist * 0.5f;
+	}
+
+	// Camera movement is delayed by a small amount following a left or right bumper press.
+	// (Wait .5 seconds of real time before transitioning the camera to a facility.)
+	if (`HQPRES.fCameraSwoopDelayTime > 0.0f)
+	{
+		`HQPRES.fCameraSwoopDelayTime -= RealDeltaTime;
+		tVal = 0.0f;
+	}
+	if (`HQPRES.fCameraSwoopDelayTime <= 0.0f)
+	{
+		`HQPRES.fCameraSwoopDelayTime = 0.0f;
+
+		// Once the fCameraSwoopDelayTime is done, continue to wait until the crew member background load completes.
+		if (AnimTime == 0.0 && IsAsyncLoadingWrapper())
+		{
+			`log("Waiting for AsyncLoading to complete before interpolating camera",,'DebugHQCamera');
+		}
+		else
+		{
+			/*if (`XPROFILESETTINGS.Data.GetConsoleType() == CONSOLE_Durango ||
+				`XPROFILESETTINGS.Data.GetConsoleType() == CONSOLE_Orbis)
+			{
+				DeltaTime *= (`HQINTERPTIME / `HQINTERPTIME_CONSOLE);
+			}*/
+
+			// Keep the contribution of DeltaTime constant frame-to-frame, so AnimTime does not get capped off by the FMin below.  
+			// (Note: the same value is always passed in for DeltaTime.)
+			DeltaTime = 1.0f / Round(TotalAnimTime / DeltaTime);
+
+			AnimTime += DeltaTime;
+
+			tVal = FMin( AnimTime / TotalAnimTime, 1.0f );
+		}
+	}
+
+	//`log("XComHeadquartersCamera::InterpCameraState tVal =" @ tVal,,'DebugHQCamera');
+
+	// For ViewDistance, use a parabola-like spline.
+	if (`HQPRES.EnteringParabolicFacilityTransition())
+	{
+		LastCameraStateOrientation.ViewDistance = FCubicInterp(
+			OldCameraStateOrientation.ViewDistance,
+			2.0f * (LastCameraStateOrientation.ViewDistance - OldCameraStateOrientation.ViewDistance),
+			LastCameraStateOrientation.ViewDistance,
+			0.0f,
+			tVal);
+	}
+	else if (`HQPRES.ExitingParabolicFacilityTransition())
+	{
+		LastCameraStateOrientation.ViewDistance = FCubicInterp(
+			OldCameraStateOrientation.ViewDistance,
+			0.0f,
+			LastCameraStateOrientation.ViewDistance,
+			2.0f * (LastCameraStateOrientation.ViewDistance - OldCameraStateOrientation.ViewDistance),
+			tVal);
+	}
+	else
+	{
+		LastCameraStateOrientation.ViewDistance =  Lerp( OldCameraStateOrientation.ViewDistance, LastCameraStateOrientation.ViewDistance, tVal );
+	}
+
+	LastCameraStateOrientation.Focus = VLerp( OldCameraStateOrientation.Focus, LastCameraStateOrientation.Focus, tVal );
+	LastCameraStateOrientation.Rotation =   RLerp( OldCameraStateOrientation.Rotation, LastCameraStateOrientation.Rotation, tVal, true );
+	LastCameraStateOrientation.FOV =  Lerp(OldCameraStateOrientation.FOV, LastCameraStateOrientation.FOV, tVal);
+	LastCameraStateOrientation.PPOverrideAlpha = Lerp(OldCameraStateOrientation.PPOverrideAlpha, LastCameraStateOrientation.PPOverrideAlpha, tVal);
+	class'Helpers'.static.OverridePPSettings(LastCameraStateOrientation.PPSettings, OldCameraStateOrientation.PPSettings, 1.0f - tVal);
+
+	`log("InterpCameraState Focus=" @ LastCameraStateOrientation.Focus @ "ViewDistance=" @ LastCameraStateOrientation.ViewDistance 
+		                            @ "AnimTime =" @ AnimTime @ "TotalAnimTime =" @ TotalAnimTime,,'DebugHQCamera');
+
+	out_Location = LastCameraStateOrientation.Focus - vector(LastCameraStateOrientation.Rotation) * LastCameraStateOrientation.ViewDistance;
+	out_Rotation = LastCameraStateOrientation.Rotation;
+	out_FOV = LastCameraStateOrientation.FOV;//DefaultFOV;
+	out_PPOverrideAlpha = LastCameraStateOrientation.PPOverrideAlpha;
+	out_PPSettings = LastCameraStateOrientation.PPSettings;
+
+	if ( AnimTime >= TotalAnimTime )
+	{
+		`log("Interp Done!  AnimTime=" @ AnimTime @ "TotalAnimTime =" @ TotalAnimTime,,'DebugHQCamera');
+		OnCameraInterpolationComplete();
+	}
 }
 
 DefaultProperties

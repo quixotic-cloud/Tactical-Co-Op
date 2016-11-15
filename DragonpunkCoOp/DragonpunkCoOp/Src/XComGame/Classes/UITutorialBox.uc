@@ -20,12 +20,17 @@ var string ImagePath;
 simulated function OnInit()
 {
 	local UIPanel TutorialButtonContainer;
+	local UIButton ConfirmButton;
 	super.OnInit();
 
 	`SOUNDMGR.PlaySoundEvent("TacticalUI_Tutorial_Popup");
 
 	TutorialButtonContainer = spawn(class'UIPanel', self).InitPanel('TutorialButton');
-	Spawn(class'UIButton', TutorialButtonContainer).InitButton('Button', , OnConfirmButtonClicked);
+	ConfirmButton = Spawn(class'UIButton', TutorialButtonContainer).InitButton('Button', , OnConfirmButtonClicked);
+	ConfirmButton.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+	ConfirmButton.SetGamepadIcon(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+	ConfirmButton.DisableNavigation();
+	TutorialbuttonContainer.DisableNavigation();
 
 	MC.BeginFunctionOp("UpdateInfo");
 	MC.QueueString(Title);

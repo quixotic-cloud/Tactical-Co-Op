@@ -38,12 +38,35 @@ simulated function BindLibraryItem()
 	ButtonGroup.InitPanel('ButtonGroup', '');
 
 	Button1 = Spawn(class'UIButton', ButtonGroup);
-	Button1.SetResizeToText(false);
-	Button1.InitButton('Button0', "", OnLaunchClicked);
+	
+	if( `ISCONTROLLERACTIVE )
+	{
+		Button1.InitButton('Button0', "", OnLaunchClicked, eUIButtonStyle_HOTLINK_BUTTON);
+		Button1.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+		Button1.SetX(-150.0 / 2.0);
+		Button1.SetY(-Button1.Height / 2.0);
+		Button1.DisableNavigation();
+	}
+	else
+	{
+		Button1.SetResizeToText(false);
+		Button1.InitButton('Button0', "", OnLaunchClicked);
+	}
 
 	Button2 = Spawn(class'UIButton', ButtonGroup);
-	Button2.SetResizeToText(false);
-	Button2.InitButton('Button1', "", OnCancelClicked);
+	if(`ISCONTROLLERACTIVE )
+	{
+		Button2.InitButton('Button1', "", OnCancelClicked, eUIButtonStyle_HOTLINK_BUTTON);
+		Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetBackButtonIcon());
+		Button2.SetX(-175.0 / 2.0);
+		Button2.SetY(Button2.Height / 2.0);
+		Button2.DisableNavigation();
+	}
+	else
+	{
+		Button2.SetResizeToText(false);
+		Button2.InitButton('Button1', "", OnCancelClicked);
+	}
 
 	ShadowChamber = Spawn(class'UIPanel', LibraryPanel);
 	ShadowChamber.InitPanel('ShadowChamber');
@@ -52,7 +75,7 @@ simulated function RefreshNavigation()
 {
 	if( Button1.bIsVisible )
 	{
-		Button1.EnableNavigation();
+		if(`ISCONTROLLERACTIVE == false)	Button1.EnableNavigation();
 	}
 	else
 	{
@@ -61,7 +84,7 @@ simulated function RefreshNavigation()
 
 	if( Button2.bIsVisible )
 	{
-		Button2.EnableNavigation();
+		if(`ISCONTROLLERACTIVE == false)	Button2.EnableNavigation();
 	}
 	else
 	{
@@ -102,6 +125,11 @@ simulated function BuildScreen()
 
 	// Set  up the navigation *after* the alert is built, so that the button visibility can be used. 
 	RefreshNavigation();
+	
+	if (!Movie.IsMouseActive())
+	{
+		Navigator.Clear();
+	}
 }
 
 simulated function BuildSkyrangerPanel()
@@ -145,7 +173,7 @@ simulated function OnCancelClicked(UIButton button)
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local bool bHandled;
-	local UIButton CurrentButton;
+	//local UIButton CurrentButton;
 
 	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
 		return false;
@@ -158,13 +186,16 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 	case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
 
-		CurrentButton = UIButton(ButtonGroup.Navigator.GetSelected());
-		if( CurrentButton.bIsVisible && !CurrentButton.IsDisabled )
-		{
-			CurrentButton.Click();
-			return true;
-		}
-		//If you don't have a current button, fall down and hit the Navigation system. 
+		//CurrentButton = UIButton(ButtonGroup.Navigator.GetSelected());
+		//if( CurrentButton.bIsVisible && !CurrentButton.IsDisabled )
+		//{
+		//	CurrentButton.Click();
+		//	return true;
+		//}
+		////If you don't have a current button, fall down and hit the Navigation system. 
+		
+		OnLaunchClicked(none);
+		
 		break;
 	case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:

@@ -9,6 +9,7 @@ var UIList LeftList;
 var UIList RightList;
 
 var localized string m_strPressKeyToContinue;
+var localized string m_strConsolePressKeyToContinue;
 var localized string m_strSuccessfulShotPercentage;
 var localized string m_strAverageDamagePerAttack;
 var localized string m_strAverageEnemiesKilledPerTurn;
@@ -42,8 +43,9 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	RightList.bAnimateOnInit = false;
 	RightList.InitList('rightListMC');
 
-	LaunchButton = Spawn(class'UIButton', self).InitButton('launchButton');
+	LaunchButton = Spawn(class'UIButton', self).InitButton('launchButtonMC');
 	LaunchButton.bIsVisible = false;
+	LaunchButton.DisableNavigation();
 	
 	BattleData = XComGameState_BattleData(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_BattleData'));	
 
@@ -226,10 +228,34 @@ simulated function PopulateBattleStatistics()
 
 simulated function Update()
 {
+	local string FinalLaunchStr;
+	local string CurrentLanguage;
+	local int VerticalTextOffset;
 	if (PC.bSeamlessTravelDestinationLoaded)
 	{
 		LaunchButton.bIsVisible = true;
-		MC.FunctionString("updateLaunch", m_strPressKeyToContinue);
+		if( `ISCONTROLLERACTIVE )
+		{
+			CurrentLanguage = GetLanguage();
+
+			if(CurrentLanguage == "KOR")
+				VerticalTextOffset = -19;
+
+			else if(CurrentLanguage == "CHT")
+				VerticalTextOffset = -17;
+
+			else if(CurrentLanguage == "CHN")
+				VerticalTextOffset = -20;
+
+			else
+				VerticalTextOffset = -14;
+			FinalLaunchStr = Repl(m_strConsolePressKeyToContinue, "%A", class 'UIUtilities_Input'.static.HTML(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon(),24, VerticalTextOffset));
+			MC.FunctionString("updateLaunch", FinalLaunchStr);
+		}
+		else
+		{
+			MC.FunctionString("updateLaunch", m_strPressKeyToContinue);
+		}
 		SetTimer(0.0f);
 	}
 	else

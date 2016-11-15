@@ -110,22 +110,26 @@ function DirectSetTarget(int TargetIndex)
 	local UITacticalHUD TacticalHud;
 	local XComGameStateHistory History;
 	local Actor NewTargetActor;
+	local int NewTarget;
 
 	Pres = `PRES;
+	// advance the target counter
+	NewTarget = TargetIndex % Action.AvailableTargets.Length;
+	if(NewTarget < 0) NewTarget = Action.AvailableTargets.Length + NewTarget;
+
+	// put the targeting reticle on the new target
+	TacticalHud = Pres.GetTacticalHUD();    
+	if(NewTarget != LastTarget)
+	{
+		LastTarget = NewTarget;
+		TacticalHud.TargetEnemy(NewTarget);
+	}
+
 	History = `XCOMHISTORY;
 	
 	NotifyTargetTargeted(false);
 
-	// make sure our target is in bounds (wrap around out of bounds values)
-	LastTarget = TargetIndex;
-	LastTarget = LastTarget % Action.AvailableTargets.Length;
-	if(LastTarget < 0) LastTarget = Action.AvailableTargets.Length + LastTarget;
-
 	NewTargetActor = History.GetVisualizer(Action.AvailableTargets[LastTarget].PrimaryTarget.ObjectID);
-	
-	// put the targeting reticle on the new target
-	TacticalHud = Pres.GetTacticalHUD();
-	TacticalHud.TargetEnemy(LastTarget);
 
 	// have the camera look at the new target
 	FiringUnit.TargetingCamera.SetTarget(NewTargetActor);

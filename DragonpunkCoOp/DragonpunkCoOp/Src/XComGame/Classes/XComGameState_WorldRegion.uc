@@ -957,6 +957,44 @@ function int GetNumMissingPersonsThisMonth()
 //----------------   GEOSCAPE ENTITY IMPLEMENTATION   -----------------------------------------
 //#############################################################################################
 
+/*function StaticMesh GetStaticMesh()
+{
+	if( `ISCONTROLLERACTIVE == false ) return none; 
+
+	if (bCanScanForContact || 
+		(class'UIUtilities_Strategy'.static.GetXComHQ().IsContactResearched() && ResistanceLevel == eResLevel_Unlocked))
+	{
+		return StaticMesh'XB0_XCOM2_OverworldIcons.SignalInterception';
+	}
+	else if (bCanScanForOutpost ||
+		(class'UIUtilities_Strategy'.static.GetXComHQ().IsOutpostResearched() && ResistanceLevel == eResLevel_Contact))
+	{
+		return StaticMesh'UI_3D.Overwold_Final.BuildTower';
+	}
+
+	return none;
+}*/
+
+function vector GetMeshScale()
+{
+	local vector ScaleVector;
+	if( `ISCONTROLLERACTIVE == false ) return ScaleVector;
+
+	if (bCanScanForContact || ResistanceLevel == eResLevel_Unlocked)
+	{
+		ScaleVector.X = 0.55;
+		ScaleVector.Y = 0.55;
+		ScaleVector.Z = 0.55;
+	}
+	else if (bCanScanForOutpost || ResistanceLevel == eResLevel_Contact)
+	{
+		ScaleVector.X = 1.0;
+		ScaleVector.Y = 1.0;
+		ScaleVector.Z = 1.0;
+	}
+
+	return ScaleVector;
+}
 //---------------------------------------------------------------------------------------
 function string GetDisplayName()
 {

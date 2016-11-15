@@ -568,3 +568,11 @@ enum EUIConfirmButtonStyle
 	eUIConfirmButtonStyle_BuyScience,
 	eUIConfirmButtonStyle_BuyCash,
 };
+
+enum EControllerIconType
+{
+	eControllerIconType_Mouse,
+	eControllerIconType_XBOX,
+	//eControllerIconType_Playstation,
+	eControllerIconType_MAX,
+};

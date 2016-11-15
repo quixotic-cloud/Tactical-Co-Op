@@ -73,8 +73,9 @@ var UINavigationHelp NavHelp;
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
 {
 	super.InitScreen(InitController, InitMovie, InitName);
-	
-	NavHelp = Spawn(class'UINavigationHelp', self).InitNavHelp();
+
+	NavHelp = GetNavHelp();
+	NavHelp.ClearButtonHelp();
 	NavHelp.AddBackButton(OnCancel);
 
 	ListBG = Spawn(class'UIPanel', self);
@@ -85,16 +86,27 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	List.InitList('listMC');
 
 	List.OnSelectionChanged = SelectedItemChanged;
-	Navigator.SetSelected(List);
-	if (List.ItemCount > 0)
-	{
-		List.Navigator.SetSelected(List.GetItem(0));
-	}
 
 	// send mouse scroll events to the list
 	ListBG.ProcessMouseEvents(List.OnChildMouseEvent);
 
 	XComInputBase(PC.PlayerInput).RawInputListener = RawInputHandler;
+}
+
+simulated function UINavigationHelp GetNavHelp()
+{
+	local UINavigationHelp Result;
+	Result = PC.Pres.GetNavHelp();
+	if( Result == None )
+	{
+		if( `PRES != none ) // Tactical
+		{
+			Result = Spawn(class'UINavigationHelp', Movie.Stack.GetScreen(class'UIMouseGuard')).InitNavHelp();
+		}
+		else if( `HQPRES != none ) // Strategy
+			Result = `HQPRES.m_kAvengerHUD.NavHelp;
+	}
+	return Result;
 }
 
 simulated function SelectedItemChanged(UIList ContainerList, int ItemIndex)
@@ -571,6 +583,15 @@ simulated function DeleteSelectedSaveFile()
 
 simulated function ShowRefreshingListDialog(optional delegate<UIProgressDialogue.ProgressDialogOpenCallback> ProgressDialogOpenCallback=none)
 {
+	local TProgressDialogData kDialogData;
+
+	kDialogData.strTitle = m_sRefreshingSaveGameList;
+	Movie.Pres.UIProgressDialog(kDialogData);
+
+	if(ProgressDialogOpenCallback != none)
+	{
+		ProgressDialogOpenCallback();
+	}
 }
 
 simulated public function OnDPadUp()
@@ -589,6 +610,12 @@ simulated public function OnDPadDown()
 
 simulated function SetSelection(int currentSelection)
 {
+	local int i; 
+
+	for (i = 0; i < m_arrListItems.Length; i++)
+	{
+		m_arrListItems[i].OnLoseFocus();
+	}
 	if (m_iCurrentSelection >=0 && m_iCurrentSelection < m_arrListItems.Length)
 	{
 		m_arrListItems[m_iCurrentSelection].HideHighlight();
@@ -609,6 +636,13 @@ simulated function SetSelection(int currentSelection)
 	{
 		m_arrListItems[m_iCurrentSelection].ShowHighlight();
 	}
+
+	if( `ISCONTROLLERACTIVE )
+	{
+		m_arrListItems[m_iCurrentSelection].OnReceiveFocus();
+
+		List.Scrollbar.SetThumbAtPercent(float(m_iCurrentSelection) / float(m_arrListItems.Length - 1));
+	}
 }
 
 simulated function BuildMenu()
@@ -628,7 +662,8 @@ simulated function BuildMenu()
 		m_arrListItems[i].ProcessMouseEvents(List.OnChildMouseEvent);
 	}
 	
-	m_iCurrentSelection = 0;
+	m_iCurrentSelection = -1;
+	SetSelection(0);
 }
 
 simulated function int GetSaveID(int iIndex)

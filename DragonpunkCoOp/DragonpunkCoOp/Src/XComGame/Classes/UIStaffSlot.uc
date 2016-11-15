@@ -104,7 +104,7 @@ simulated function UpdateData()
 		{
 			UnitTypeImage = class'UIUtilities_Image'.const.EventQueue_Science;
 		}
-		else if (Unit.IsASoldier())
+		else if (Unit.IsSoldier())
 		{
 			UnitTypeImage = class'UIUtilities_Image'.static.GetRankIcon(Unit.GetRank(), Unit.GetSoldierClassTemplateName());
 		}
@@ -139,6 +139,9 @@ simulated function bool IsUnitAvailableForThisSlot()
 	local StaffUnitInfo UnitInfo;
 	local XComGameState_HeadquartersXCom HQState;
 
+	local int GhostSlot;
+	local array<XComGameState_StaffSlot> AdjacentGhostStaffSlots;
+
 	History = `XCOMHISTORY;
 	SlotState = XComGameState_StaffSlot(History.GetGameStateForObjectID(StaffSlotRef.ObjectID));
 
@@ -159,6 +162,29 @@ simulated function bool IsUnitAvailableForThisSlot()
 		if (SlotState.ValidUnitForSlot(UnitInfo))
 		{
 			return true;
+		}
+	}
+	// Need to check for ghost staff (Gremlins) because if the player's only engineer is staffing
+	// the workshop the staffing button of adjacent buildings will remain inactive even if there are
+	// available Gremlins.
+	AdjacentGhostStaffSlots = SlotState.GetAdjacentGhostCreatingStaffSlots();
+	for (GhostSlot = 0; GhostSlot < AdjacentGhostStaffSlots.Length; GhostSlot++)
+	{
+		Unit = AdjacentGhostStaffSlots[GhostSlot].GetAssignedStaff();
+
+		// Failsafe check to ensure that ghosts are only displayed for matching unit and staff slot references
+		if (Unit.StaffingSlot.ObjectID == AdjacentGhostStaffSlots[GhostSlot].ObjectID)
+		{
+			// Create ghosts duplicating the unit who is staffed in the ghost-creating slot
+			UnitInfo.UnitRef = Unit.GetReference();
+			UnitInfo.bGhostUnit = true;
+			UnitInfo.GhostLocation.ObjectID = 0;
+
+			// Check if they are valid for the slot
+			if (SlotState.ValidUnitForSlot(UnitInfo))
+			{
+				return true;
+			}
 		}
 	}
 	return false;
@@ -209,7 +235,7 @@ simulated function OnClickStaffSlot(UIPanel kControl, int cmd)
 		break;
 	case class'UIUtilities_Input'.const.FXS_L_MOUSE_IN:
 	case class'UIUtilities_Input'.const.FXS_L_MOUSE_OVER:
-	case class'UIUtilities_Input'.const.FXS_L_MOUSE_DRAG_OVER:
+	case class'UIUtilities_Input'.const.FXS_L_MOUSE_DRAG_OVER: 
 		`SOUNDMGR.PlaySoundEvent("Play_Mouseover");
 		break;
 	}
@@ -281,6 +307,7 @@ simulated function OnPersonnelSelected(StaffUnitInfo UnitInfo)
 {
 	local XComGameState_StaffSlot StaffSlotState;
 
+	OnLoseFocus();
 	m_PendingStaff = UnitInfo;
 	StaffSlotState = XComGameState_StaffSlot(`XCOMHISTORY.GetGameStateForObjectID(StaffSlotRef.ObjectID));
 	
@@ -295,6 +322,15 @@ simulated function OnPersonnelSelected(StaffUnitInfo UnitInfo)
 		if (class'UIUtilities_Strategy'.static.CanReassignStaff(UnitInfo, GetNewLocationString(StaffSlotState), ReassignStaffCallback))
 			ReassignStaffCallback(eUIAction_Accept);
 	}
+}
+
+simulated function bool IsSlotFilled()
+{
+	local XComGameState_StaffSlot StaffSlot;
+
+	StaffSlot = XComGameState_StaffSlot(`XCOMHISTORY.GetGameStateForObjectID(StaffSlotRef.ObjectID));
+
+	return StaffSlot.IsSlotFilled();
 }
 
 simulated function string GetNewLocationString(XComGameState_StaffSlot StaffSlotState)
@@ -479,6 +515,41 @@ simulated function StafferCantBeMovedPopup(XComGameState_StaffSlot StaffSlotStat
 	DialogData.strAccept = class'UIDialogueBox'.default.m_strDefaultAcceptLabel;
 
 	`HQPRES.UIRaiseDialog(DialogData);
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	if( cmd == class'UIUtilities_Input'.const.FXS_BUTTON_A ||
+		cmd == class'UIUtilities_Input'.const.FXS_KEY_ENTER )
+	{
+		if (!IsDisabled)
+		{
+			OnClickStaffSlot(none, class'UIUtilities_Input'.const.FXS_L_MOUSE_UP);
+		}
+
+		return true;
+	}
+	
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function OnReceiveFocus()
+{
+	bIsFocused = true;
+	if( `ISCONTROLLERACTIVE )
+		MC.FunctionVoid("mouseIn");
+}
+
+simulated function OnLoseFocus()
+{
+	bIsFocused = false;
+	if( `ISCONTROLLERACTIVE )
+		MC.FunctionVoid("mouseOut");
 }
 
 //==============================================================================

@@ -470,12 +470,16 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
 		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
 		case class'UIUtilities_Input'.const.FXS_ARROW_LEFT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+		case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
 			OnBack();
 			break;
 		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
 		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
 		case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
 			OnContinue();
 			break;
 		default:

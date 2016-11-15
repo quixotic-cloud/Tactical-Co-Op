@@ -29,6 +29,28 @@ function SetData(string rank,
 	mc.EndOp();
 }
 
+simulated function OnReceiveFocus()
+{
+	if(!bIsFocused)
+	{		
+		Invoke("bg.onReceiveFocus");
+		MC.FunctionVoid("realizeBGFocus");
+	}		
+
+	Super.OnReceiveFocus();
+}
+
+simulated function OnLoseFocus()
+{
+	if(bIsFocused)
+	{
+		Invoke("bg.onLoseFocus");
+		MC.FunctionVoid("realizeBGFocus");
+	}
+
+	Super.OnLoseFocus();
+}
+
 defaultproperties
 {
 	LibID = "ServerListItem";

@@ -70,7 +70,7 @@ simulated function UpdateTrait( string _Title,
 							  optional delegate<UICustomize.IsSoldierEligible> _checkSoldierEligibility,
 							  optional int _startingIndex = -1, 
 							  optional string _ConfirmButtonLabel,
-							  optional delegate<OnItemSelectedCallback> _onConfirmButtonClicked )
+							  optional delegate<OnItemSelectedCallback> _onConfirmButtonClicked)
 {
 	local int i;
 	local UIListItemString ListItemString;
@@ -94,6 +94,11 @@ simulated function UpdateTrait( string _Title,
 	while(SlotsList.itemCount < Data.length)
 		Spawn(class'UIListItemString', SlotsList.itemContainer).InitListItem();
 	
+	SlotsList.SetSelectedIndex(StartingIndex);
+
+	SlotsList.bLoopSelection = true;
+	SlotsList.Navigator.LoopSelection = true;
+	CustomizeList.DisableNavigation(); 
 	for( i = 0; i < Data.Length; i++ )
 	{
 		ListItemString = UIListItemString(SlotsList.GetItem(i));
@@ -134,6 +139,15 @@ simulated function OnDoubleClickLocal(UIList _list, int itemIndex)
 simulated function bool IsAllowedToCycleSoldiers()
 {
 	return bAllowedToCycleSoldiers;
+}
+
+simulated function OnAccept()
+{
+	//Because of UScript inheritance rules, we need to call OnItemClicked from within UIArmory_WeaponTrait (it's a delegate here, and not in the parent)
+	if(SlotsList.SelectedIndex != -1 && OnItemClicked != none)
+		OnItemClicked(SlotsList, SlotsList.SelectedIndex);
+
+	CloseScreen();
 }
 //==============================================================================
 

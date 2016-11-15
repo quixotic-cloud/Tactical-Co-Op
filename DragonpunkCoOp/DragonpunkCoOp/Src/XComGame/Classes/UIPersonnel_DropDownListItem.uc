@@ -52,7 +52,7 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 
 		case class'UIUtilities_Input'.const.FXS_L_MOUSE_DRAG_OUT:
 		case class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT:
-			OwningMenu.TryToStartDelayTimer();
+			OwningMenu.TryToStartDelayTimer(args);
 			break;
 	}
 
@@ -185,6 +185,17 @@ simulated function OnChildMouseEvent(UIPanel control, int cmd)
 			break;
 		}
 	}
+}
+
+
+simulated function OnReceiveFocus()
+{
+	MC.FunctionVoid("mouseIn");
+}
+
+simulated function OnLoseFocus()
+{
+	MC.FunctionVoid("mouseOut");
 }
 
 defaultproperties

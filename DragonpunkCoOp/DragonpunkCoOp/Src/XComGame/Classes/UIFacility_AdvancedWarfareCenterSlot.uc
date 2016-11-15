@@ -105,12 +105,49 @@ simulated function RespecSoldierDialogCallback(eUIAction eAction, UICallbackData
 	}
 }
 
+simulated function UpdateData()
+{
+	super.UpdateData();
+	SetDisabled(!IsUnitAvailableForThisSlot());
+}
+
 simulated function RefreshTooltip(UITooltip Tooltip)
 {
 	if (IsUnitAvailableForThisSlot())
 		UITextTooltip(Tooltip).SetText(m_strSoldiersAvailableTooltip);
 	else
 		UITextTooltip(Tooltip).SetText(m_strNoSoldiersTooltip);
+}
+
+simulated function bool IsUnitAvailableForThisSlot()
+{
+	local int i;
+	local XComGameStateHistory History;
+	local XComGameState_Unit Unit;
+	local XComGameState_StaffSlot SlotState;
+	local StaffUnitInfo UnitInfo;
+	local XComGameState_HeadquartersXCom HQState;
+
+	History = `XCOMHISTORY;
+	SlotState = XComGameState_StaffSlot(History.GetGameStateForObjectID(StaffSlotRef.ObjectID));
+
+	if (SlotState.IsSlotFilled())
+	{
+		return true;
+	}
+
+	HQState = class'UIUtilities_Strategy'.static.GetXComHQ();
+	for (i = 0; i < HQState.Crew.Length; i++)
+	{
+		Unit = XComGameState_Unit(History.GetGameStateForObjectID(HQState.Crew[i].ObjectID));
+		UnitInfo.UnitRef = Unit.GetReference();
+
+		if (SlotState.ValidUnitForSlot(UnitInfo))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 //==============================================================================

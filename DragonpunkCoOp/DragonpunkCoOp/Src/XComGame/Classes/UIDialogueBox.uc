@@ -491,8 +491,16 @@ public function RefreshNavigationHelp()
 		strCancel = m_strDefaultCancelLabel;
 	}
 
-	AS_SetHelp( 0, strAccept, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
-	AS_SetHelp( 1, strCancel, class'UIUtilities_Input'.static.GetBackButtonIcon());	
+	if( `ISCONTROLLERACTIVE )
+	{
+		AS_SetHelp(0, strAccept, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+		AS_SetHelp(1, strCancel, class'UIUtilities_Input'.static.GetBackButtonIcon());
+	}
+	else
+	{
+		AS_SetHelp(0, strAccept, "");
+		AS_SetHelp(1, strCancel, "");
+	}
 }
 
 

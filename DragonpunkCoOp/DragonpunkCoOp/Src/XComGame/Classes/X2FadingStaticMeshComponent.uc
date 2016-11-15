@@ -53,6 +53,26 @@ native function bool IsFading();
 /// </summary>
 native function ResetMaterialTimes();
 
+/// <summary> 
+/// Sets the opacity of this mesh to value passed in value.
+/// Requires each material to have a material named 'opacity'.
+/// </summary>
+function SetOpacity(float opacity)
+{
+	local MaterialInstance MatInst;
+	local int i;
+
+	for(i = 0; i < GetNumElements(); ++i)
+	{
+		MatInst = MaterialInstance(GetMaterial(i));
+		if(MatInst == None || !MatInst.IsInMapOrTransientPackage())
+		{
+			MatInst = CreateAndSetMaterialInstanceConstant(i);
+		}
+		MatInst.SetScalarParameterValue('Opacity', opacity);
+		SetMaterial(i, MatInst);		
+	}
+}
 defaultproperties
 {
 	FullHideDelay=5

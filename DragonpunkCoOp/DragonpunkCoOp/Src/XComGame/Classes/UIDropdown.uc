@@ -188,6 +188,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 			return true;
 		case class'UIUtilities_Input'.const.FXS_ARROW_UP:
 		case class'UIUtilities_Input'.const.FXS_ARROW_LEFT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_UP:
+		case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP:
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT:
 			if(isOpen)
 			{
 				selIdx = selectedItem - 1;
@@ -202,6 +206,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 			break;
 		case class'UIUtilities_Input'.const.FXS_ARROW_DOWN:
 		case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_DOWN:
+		case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN:
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT:
 			if(isOpen)
 			{
 				selIdx = (selectedItem + 1) % Items.Length;
@@ -211,6 +219,14 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 				return true;
 			}
 			break;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
+			if (isOpen)
+			{
+				Close();
+				return true;
+			}
+		//</workshop>
 	}
 
 	return super.OnUnrealCommand(cmd, arg);

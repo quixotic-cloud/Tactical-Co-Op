@@ -51,8 +51,6 @@ function Update(float DeltaTime)
 		if( !GoodView )
 		{
 			NewTargetLocation = World.GetPositionFromTileCoordinates(BlockedTile);
-			Cursor.CursorSetLocation(NewTargetLocation);
-			//`SHAPEMGR.DrawSphere(LastTargetLocation, vect(25,25,25), MakeLinearColor(1,0,0,1), false);
 		}
 		GetTargetedActors(NewTargetLocation, CurrentlyMarkedTargets, Tiles);
 		CheckForFriendlyUnit(CurrentlyMarkedTargets);	

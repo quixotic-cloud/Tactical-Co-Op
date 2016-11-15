@@ -21,6 +21,8 @@ var localized string m_strRename;
 var localized string m_strAlien;
 var localized string m_strAdvent;
 
+var localized string m_strInfoEmptySlotText;
+var localized string m_strInfoEmptySlotAccept;
 simulated function InitSquadListItem(X2MPShellManager ShellManager)
 {
 	InitPanel();
@@ -146,6 +148,7 @@ simulated function OnClickedDismissButton()
 		MC.FunctionBool("setEditDisabled", false);
 		
 		SetUnit(none);
+		SquadScreen.OnUnitDirtied(none); //bsg-cballinger (7.10.16): Removing a unit from the loadout dirties the loadout, so the user can be prompted to save the changes.
 		UpdateData();
 		SquadScreen.UpdateData();
 	}
@@ -171,13 +174,26 @@ simulated function OpenNicknameInputBox()
 {
 	local TInputDialogData kData;
 
-	kData.strTitle = class'XComCharacterCustomization'.default.CustomizeNickName;
-	kData.iMaxChars = class'XComCharacterCustomization'.const.NICKNAME_NAME_MAX_CHARS;
-	kData.strInputBoxText = m_kEditUnit.GetNickName(true);
-	kData.fnCallback = OnNicknameInputBoxClosed;
-	kData.DialogType = eDialogType_SingleLine;
+	//if(!`GAMECORE.WorldInfo.IsConsoleBuild() || `ISCONTROLLERACTIVE )
+	//{
+		kData.strTitle = class'XComCharacterCustomization'.default.CustomizeNickName;
+		kData.iMaxChars = class'XComCharacterCustomization'.const.NICKNAME_NAME_MAX_CHARS;
+		kData.strInputBoxText = m_kEditUnit.GetNickName(true);
+		kData.fnCallback = OnNicknameInputBoxClosed;
+		kData.DialogType = eDialogType_SingleLine;
 
-	Movie.Pres.UIInputDialog(kData);
+		Movie.Pres.UIInputDialog(kData);
+/*	}
+	else
+	{
+		Movie.Pres.UIKeyboard( class'XComCharacterCustomization'.default.CustomizeNickName, 
+			m_kEditUnit.GetNickName(true), 
+			VirtualKeyboard_OnNicknameInputBoxAccepted, 
+			VirtualKeyboard_OnNicknameInputBoxCancelled,
+			false, 
+			class'XComCharacterCustomization'.const.NICKNAME_NAME_MAX_CHARS
+		);
+	}*/
 
 	UIMPShell_SquadEditor(Screen).NavHelp.Hide();
 }
@@ -192,6 +208,15 @@ function OnNicknameInputBoxClosed(string text)
 	UpdateData();
 
 	UIMPShell_SquadEditor(Screen).NavHelp.Show();
+}
+function VirtualKeyboard_OnNicknameInputBoxAccepted(string text, bool bWasSuccessful)
+{
+	OnNicknameInputBoxClosed(bWasSuccessful ? text : "");
+}
+
+function VirtualKeyboard_OnNicknameInputBoxCancelled()
+{
+	OnNicknameInputBoxClosed("");
 }
 
 simulated function OnClickedSelectUnitButton()
@@ -216,6 +241,19 @@ simulated function OnClickedInfoButton(UIButton Button)
 		Movie.Pres.ScreenStack.Push(MPStatsScreen);
 		MPStatsScreen.UpdateData(m_kEditUnit, m_kSquadLoadout);
 	}
+	else
+	{
+		InfoEmptySlotDialog();
+	}
+}
+simulated function InfoEmptySlotDialog()
+{
+	local TDialogueBoxData kDialogData;
+
+	kDialogData.strText = m_strInfoEmptySlotText;
+	kDialogData.strAccept = m_strInfoEmptySlotAccept;
+
+	Movie.Pres.UIRaiseDialog(kDialogData);
 }
 
 function OnCharacterTemplateAccept(X2MPCharacterTemplate kSelectedTemplate)
@@ -432,7 +470,8 @@ simulated function UpdateData(optional int Index = -1, optional bool bDisableEdi
 			AS_HasHeavyWeapon(false);
 		}
 
-		InfoButton.Show();
+		if( `ISCONTROLLERACTIVE == false) 
+			InfoButton.Show();
 	}
 }
 

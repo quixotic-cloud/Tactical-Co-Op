@@ -236,6 +236,25 @@ simulated function UIPanel SetDisabled(bool disabled)
 	return self;
 }
 
+simulated function OnReceiveFocus()
+{
+	super.OnReceiveFocus();
+
+	if (`ISCONTROLLERACTIVE && !bDisableSelectionBrackets)
+	{
+		mc.FunctionVoid("showSelectionBrackets");
+	}
+}
+
+simulated function OnLoseFocus()
+{
+	super.OnLoseFocus();
+
+	if (`ISCONTROLLERACTIVE && !bDisableSelectionBrackets)
+	{
+		mc.FunctionVoid("hideSelectionBrackets");
+	}
+}
 simulated function OnMouseEvent(int cmd, array<string> args)
 {
 	super.OnMouseEvent(cmd, args);

@@ -30,21 +30,6 @@ simulated function OnPersonnelSelected(StateObjectReference selectedUnitRef)
 	//TODO: add any logic here for selecting someone in the living quarters
 }
 
-simulated function bool OnUnrealCommand(int cmd, int arg)
-{
-	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
-		return false;
-
-	if ( cmd == class'UIUtilities_Input'.const.FXS_BUTTON_A ||
-		cmd == class'UIUtilities_Input'.const.FXS_KEY_ENTER ||
-		cmd == class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR)
-	{
-		OnShowPersonnel();
-		return true;
-	}
-
-	return super.OnUnrealCommand(cmd, arg);
-}
 
 //==============================================================================
 

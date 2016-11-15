@@ -38,6 +38,8 @@ simulated function UITacticalHUD_Enemies InitEnemyTargets()
 {
 	InitPanel();
 	Hide();
+	if(!Movie.IsMouseActive())
+		MC.FunctionVoid("MoveDown");
 	return self;
 }
 
@@ -63,6 +65,8 @@ simulated function OnInit()
 	EventManager.RegisterForEvent(ThisObj, 'AbilityActivated', OnAbilityActivated, ELD_OnVisualizationBlockStarted);
 
 	InitializeTooltipData();
+	if(!Movie.IsMouseActive())
+		InitNavHelp();
 }
 
 function AddLookAtTargetCamera(Actor LookAtActor)
@@ -526,6 +530,28 @@ simulated function Actor GetSelectedEnemy()
 	return none;
 }
 
+simulated function int GetCurrentTargetIndex()
+{
+	return CurrentTargetIndex;
+}
+
+//Used to display proper NavHelp and Input Handling when the Enemy Info button is pressed
+simulated function bool TargetEnemyHasEffectsToDisplay()
+{
+	local XComGameState_Unit kGameStateUnit;
+	local XGUnit kActiveUnit;
+	local array<UISummary_UnitEffect> Bonuses, Penalties;
+		
+	kActiveUnit = XGUnit(GetEnemyAtIcon(CurrentTargetIndex));
+	if(kActiveUnit != None)
+	{
+		kGameStateUnit = XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(kActiveUnit.ObjectID));
+		Bonuses = kGameStateUnit.GetUISummary_UnitEffectsByCategory(ePerkBuff_Bonus);
+		Penalties = kGameStateUnit.GetUISummary_UnitEffectsByCategory(ePerkBuff_Penalty);
+	}
+
+	return Bonuses.Length > 0 || Penalties.Length > 0;
+}
 // ------------------------------------------------------------------------------------------
 //Refactored so you can set total number of enemies after setting the icon types first. 
 simulated function SetVisibleEnemies( int iVisibleAliens)
@@ -621,6 +647,25 @@ simulated function SetShine(int TargetIndex, bool showShine, optional bool bMove
 	MC.BeginFunctionOp("SetShine");
 	MC.QueueNumber(TargetIndex);
 	MC.QueueBoolean(showShine);
+	MC.EndOp();
+}
+
+simulated function InitNavHelp()
+{
+	local String NavHelpIdL, NavHelpIdR;
+
+	NavHelpIdL = "navHelpL";
+	NavHelpIdR = "navHelpR";
+
+	//The bumper NavHelp positioning is reliant on the amount of visible enemy icons, which is handled completely in Actionscript,
+	//However, for ease of keybinding or size iteration, the icons are spawned here in Unrealscript
+	Spawn(class'UIGamepadIcons', Self, name(NavHelpIdL)).InitGamepadIcon(name(NavHelpIdL), class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LB_L1).SetSize(38, 26);
+	Spawn(class'UIGamepadIcons', Self, name(NavHelpIdR)).InitGamepadIcon(name(NavHelpIdR), class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RB_R1).SetSize(38, 26);
+
+	//sends the instance names to actionscript, where they will be handled every time 'SetTargettedEnemy' is called
+	MC.BeginFunctionOp("SetNavHelpPanels");
+	MC.QueueString(NavHelpIdL);
+	MC.QueueString(NavHelpIdR);
 	MC.EndOp();
 }
 // ------------------------------------------------------------------------------------------

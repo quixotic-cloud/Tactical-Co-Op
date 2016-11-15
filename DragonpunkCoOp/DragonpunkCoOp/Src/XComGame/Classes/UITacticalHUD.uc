@@ -58,8 +58,16 @@ var bool m_isMenuRaised;
 var bool m_bForceOverheadView;
 
 var bool m_bIgnoreShowUntilInternalUpdate;		//The Show function will immediately return until Show is called from InternalUpdate.
+var bool m_bIsHidingShotHUDForSecondaryMovement;
 
-var UINavigationHelp NavHelp;
+var UIButton CharInfoButton;
+var UIButton SkyrangerButton;
+var localized string m_strEvac;
+//</workshop>
+var bool m_bEnemyInfoVisible;
+var localized string m_strNavHelpCharShow;
+var localized string m_strNavHelpEnemyShow;
+var localized string m_strNavHelpEnemyHide;
 
 var localized string m_strConcealed;
 var localized string m_strSquadConcealed;
@@ -72,6 +80,31 @@ var localized string m_strRevealed;
 simulated function X2TargetingMethod GetTargetingMethod()
 {
 	return m_kAbilityHUD.GetTargetingMethod();
+}
+simulated function HideInputButtonRelatedHUDElements(bool bHide)
+{
+	if(bHide)
+	{
+		if (SkyrangerButton != none)
+			SkyrangerButton.Hide();
+
+		m_kAbilityHUD.Hide();
+		m_kEnemyTargets.Hide();
+		CharInfoButton.Hide();
+	}
+	else
+	{
+		UpdateSkyrangerButton();
+		m_kAbilityHUD.Show();
+		if (m_kEnemyTargets.GetEnemyCount() > 0)
+		{
+			m_kEnemyTargets.Show();
+		}
+
+		CharInfoButton.Show();
+
+		Show();
+	}
 }
 
 simulated function OnToggleHUDElements(SeqAct_ToggleHUDElements Action)
@@ -102,6 +135,11 @@ simulated function OnToggleHUDElements(SeqAct_ToggleHUDElements Action)
 				case eHUDElement_MouseControls:
 					if( m_kMouseControls != none )
 						m_kMouseControls.Hide();
+					if (SkyrangerButton != none)
+					{
+						SkyrangerButton.Hide();
+					}
+					CharInfoButton.Hide();
 					break;
 				case eHUDElement_Countdown:
 					m_kCountdown.Hide(); 
@@ -133,6 +171,11 @@ simulated function OnToggleHUDElements(SeqAct_ToggleHUDElements Action)
 				case eHUDElement_MouseControls:
 					if( m_kMouseControls != none )
 						m_kMouseControls.Show();
+					if (SkyrangerButton != none)
+					{
+						SkyrangerButton.Show();
+					}
+					CharInfoButton.Show();
 					break;
 				case eHUDElement_Countdown:
 					m_kCountdown.Show(); 
@@ -194,7 +237,33 @@ simulated function OnInit()
 	super.OnInit();
 	
 	if( Movie.IsMouseActive() )
+	{
 		m_kMouseControls = Spawn(class'UITacticalHUD_MouseControls', self).InitMouseControls();
+	}
+	else
+	{
+		if (!`XENGINE.IsMultiplayerGame())
+		{
+			SkyrangerButton = Spawn(class'UIButton', self);
+			SkyrangerButton.InitButton('SkyrangerButton', m_strEvac,, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+			SkyrangerButton.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RSCLICK_R3);
+			SkyrangerButton.SetFontSize(26);
+			SkyrangerButton.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
+			SkyrangerButton.SetPosition(-195, 15);
+			SkyrangerButton.OnSizeRealized = OnSkyrangerButtonSizeRealized;
+			SkyrangerButton.Hide();
+			UpdateSkyrangerButton();
+		}
+
+		CharInfoButton = Spawn(class'UIButton', self);
+		CharInfoButton.InitButton('CharInfo', m_strNavHelpCharShow,,eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+		CharInfoButton.SetTextShadow(true);
+		CharInfoButton.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_LSCLICK_L3);
+		CharInfoButton.SetPosition(30, 980);
+
+		//NavHelp = Spawn(class'UINavigationHelp', self).InitNavHelp();
+		//NavHelp.SetY(NavHelp.Y - 65); //NavHelp's default location overlaps with the static character info, so we're offsetting it here
+	}
 
 	LowerTargetSystem();
 
@@ -208,6 +277,10 @@ simulated function OnInit()
 	Update();
 
 	Movie.UpdateHighestDepthScreens();
+}
+simulated function OnSkyrangerButtonSizeRealized()
+{
+	SkyrangerButton.SetPosition(-45 - SkyrangerButton.Width, 15);
 }
 
 // Delays call to OnInit until this function returns true
@@ -341,6 +414,63 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 //	callbackTarget = args[args.Length - 1];
 }
 
+simulated function UpdateSkyrangerButton()
+{
+	local int i;
+	local AvailableAction AvailableActionInfo;
+	local XComGameState_Ability AbilityState;
+	local X2AbilityTemplate AbilityTemplate;
+	local bool bButtonVisible;
+
+	for (i = 0; i < m_kAbilityHUD.m_arrAbilities.Length; i++)
+	{
+		AvailableActionInfo = m_kAbilityHUD.m_arrAbilities[i];
+		AbilityState = XComGameState_Ability(`XCOMHISTORY.GetGameStateForObjectID(m_kAbilityHUD.m_arrAbilities[i].AbilityObjectRef.ObjectID));
+		AbilityTemplate = AbilityState.GetMyTemplate();
+
+		if (AbilityTemplate.DataName == 'PlaceEvacZone')
+		{
+			bButtonVisible = AvailableActionInfo.AvailableCode == 'AA_Success' &&
+				(!`REPLAY.bInTutorial || `TUTORIAL.IsNextAbility(AbilityTemplate.DataName));
+			break;
+		}
+	}
+
+	if (bButtonVisible)
+	{
+		SkyrangerButton.Show();
+	}
+	else
+	{
+		SkyrangerButton.Hide();
+	}
+}
+simulated function TargetHighestHitChanceEnemy()
+{
+	local AvailableAction AvailableActionInfo;
+	local int HighestHitChanceIndex;
+	local float HighestHitChance;
+	local array<Availabletarget> Targets;	
+	local float HitChance;
+	local int i;
+	
+	AvailableActionInfo = m_kAbilityHUD.GetSelectedAction();
+	//AvailableActionInfo.AvailableTargets = m_kAbilityHUD.SortTargets(AvailableActionInfo.AvailableTargets);
+
+	Targets = AvailableActionInfo.AvailableTargets;
+	for (i = 0; i < Targets.Length; i++)
+	{
+		HitChance = m_kEnemyTargets.GetHitChanceForObjectRef(Targets[i].PrimaryTarget);
+		if (HitChance > HighestHitChance)
+		{
+			HighestHitChance = HitChance;
+			HighestHitChanceIndex = i;
+		}
+	}
+
+	m_kAbilityHUD.GetTargetingMethod().DirectSetTarget(HighestHitChanceIndex);
+	TargetEnemy(HighestHitChanceIndex);
+}
 simulated function RaiseTargetSystem()
 {
 	local XGUnit kUnit;
@@ -348,6 +478,8 @@ simulated function RaiseTargetSystem()
 	local X2GameRuleset Ruleset;
 	local GameRulesCache_Unit UnitInfoCache;
 
+	m_kAbilityHUD.m_iPreviousIndexForSecondaryMovement = -1;
+	m_bIsHidingShotHUDForSecondaryMovement = false;
 	Ruleset = `XCOMGAME.GameRuleset;	
 	Ruleset.GetGameRulesCache_Unit(XComTacticalController(PC).GetActiveUnitStateRef(), UnitInfoCache);
 
@@ -358,26 +490,89 @@ simulated function RaiseTargetSystem()
 		return;
 	}
 
+	m_kAbilityHUD.SetAlpha(1.0);
 	m_bForceOverheadView = false;
 	m_isMenuRaised = true;
 	XComTacticalController(PC).m_bInputInShotHUD = true;
 
 	// attempt to target the default guy (will open shot hud even without enemy, this should be cleaned up)
-	TargetEnemy(0);
+	//TargetEnemy(0);
+	TargetHighestHitChanceEnemy();
 
 	if( m_kMouseControls != none )
 		m_kMouseControls.UpdateControls();
 
+	UpdateSkyrangerButton();
 	XComPresentationLayer(Movie.Pres).m_kUnitFlagManager.ActivateExtensionForTargetedUnit(  m_kEnemyTargets.GetSelectedEnemyStateObjectRef() );
 
 	m_kObjectivesControl.Hide();
 	m_kShotInfoWings.Show();
+	CharInfoButton.Show();
 
+	if (m_kEnemyTargets.GetEnemyCount() > 0)
+	{
+		m_kEnemyTargets.Show();
+	}
 	`PRES.m_kWorldMessageManager.NotifyShotHudRaised();
 
 	// This is for making it so the targeting unit can still animate when off screen enabling the unit 
 	// to keep facing the cursor position.  See function definition for more info.  mdomowicz 2015_09_03
 	GetTargetingMethod().EnableShooterSkelUpdatesWhenNotRendered(true);
+	if(m_bEnemyInfoVisible)
+	{
+		SimulateEnemyMouseOver(true);
+	}
+}
+simulated function HideAwayTargetSystemCosmetic()
+{
+	local XGUnit kUnit;
+
+	kUnit = XComTacticalController(GetALocalPlayerController()).GetActiveUnit();
+	if (kUnit != none)
+		kUnit.RemoveRangesOnSquad(kUnit.GetSquad());
+
+	Invoke("ShowNonShotMode");
+	m_kAbilityHUD.m_iPreviousIndexForSecondaryMovement = m_kAbilityHUD.m_iCurrentIndex;
+	m_kAbilityHUD.NotifyCanceled();
+
+	//<workshop> SCI 2016/1/11
+	//INS:
+	if (`XPROFILESETTINGS.Data.m_bAbilityGrid)
+	{
+		m_kAbilityHUD.SetAlpha(0.36);
+	}
+	else
+	{
+		m_kAbilityHUD.SetAlpha(0.58);
+	}
+	//</workshop>
+
+	XComPresentationLayer(Owner).m_kUnitFlagManager.ClearAbilityDamagePreview();
+
+	m_isMenuRaised = false;
+	XComTacticalController(PC).m_bInputInShotHUD = false;
+
+	XComPresentationLayer(Owner).m_kUnitFlagManager.RealizeTargetedStates();
+
+	if( m_kMouseControls != none )
+		m_kMouseControls.UpdateControls();
+
+	//<workshop> SCI 2016/5/17
+	//INS:
+	UpdateSkyrangerButton();
+	//</workshop>
+
+	m_kShotHUD.ResetDamageBreakdown(true);
+	m_kEnemyTargets.RealizeTargets(-1);
+	m_kShotInfoWings.Hide();
+
+	XComPresentationLayer(Movie.Pres).m_kUnitFlagManager.DeactivateExtensionForTargetedUnit();
+	GetTargetingMethod().EnableShooterSkelUpdatesWhenNotRendered(false);
+
+	//<workshop> ENEMY_INFO_HANDLING - JTA 2016/1/6
+	//INS:
+	SimulateEnemyMouseOver(false);
+	//</workshop>
 }
 
 simulated function LowerTargetSystem()
@@ -391,6 +586,7 @@ simulated function LowerTargetSystem()
 
 	Invoke("ShowNonShotMode");
 	m_kAbilityHUD.NotifyCanceled();
+	m_kAbilityHUD.m_iPreviousIndexForSecondaryMovement = -1;
 	m_kTargetReticle.SetTarget();
 
 	XComPresentationLayer(Owner).m_kUnitFlagManager.ClearAbilityDamagePreview();
@@ -402,7 +598,9 @@ simulated function LowerTargetSystem()
 
 	if( m_kMouseControls != none )
 		m_kMouseControls.UpdateControls();
+	UpdateSkyrangerButton();
 	
+	m_kShotHUD.ResetDamageBreakdown(true);
 	m_kShotHUD.LowerShotHUD();
 	m_kEnemyTargets.RealizeTargets(-1);
 	m_kShotInfoWings.Hide();
@@ -411,6 +609,155 @@ simulated function LowerTargetSystem()
 	TargetingMethod = GetTargetingMethod();
 	if (TargetingMethod != none)
 		TargetingMethod.EnableShooterSkelUpdatesWhenNotRendered(false);
+	if( `ISCONTROLLERACTIVE )
+		SimulateEnemyMouseOver(false);
+}
+
+simulated function UpdateNavHelp()
+{
+	local PlayerInput InputController; //used to detect the state
+	local String LabelForInfoHelp; //pulls up info about the character/enemy
+	
+	if(!`ISCONTROLLERACTIVE)
+		return;	
+
+	//determine what type of info is displayed, if any
+	InputController = `LEVEL.GetALocalPlayerController().PlayerInput; //using Input class because that is where the handling is located for the character info
+	if(InputController != None && InputController.IsInState('ActiveUnit_Moving'))
+	{
+		LabelForInfoHelp = m_strNavHelpCharShow;
+	}
+	else if(m_isMenuRaised && m_bEnemyInfoVisible)
+	{
+		LabelForInfoHelp = m_strNavHelpEnemyHide;
+	}
+	//checks to see if there is an active enemy
+	else if(m_isMenuRaised && !m_bEnemyInfoVisible && m_kEnemyTargets != none)
+	{
+		//checks to see if the target-able enemy has any info to show
+		if(m_kEnemyTargets.TargetEnemyHasEffectsToDisplay() || ShotBreakdownIsAvailable())
+		{
+			LabelForInfoHelp = m_strNavHelpEnemyShow;
+		}
+	}
+			
+	//Sometimes the player can focus on 'enemies' that have extra info (explosive canisters)
+	if(m_isMenuRaised && !(ShotBreakdownIsAvailable() || TargetEnemyHasEffectsToDisplay()))
+	{
+		LabelForInfoHelp = "";
+	}
+
+	//If the label was set, show the help icon
+	if(LabelForInfoHelp != "")
+	{
+		CharInfoButton.SetText(LabelForInfoHelp);
+	}	
+}
+
+
+//Simulates the mouse event that occurs when a player hovers their mouse over the enemy targets
+//Purpose is to manually show the tooltips that are triggered bia button press when a mouse isn't available
+//bIsHovering - simulate a MOUSE_IN command if 'true'
+//returns 'true' if it attempts to simulate a mouse hover (can abort the process if there are no enemy targets to simulate)
+simulated function bool SimulateEnemyMouseOver(bool bIsHovering)
+{
+	local UITooltipMgr Mgr;
+	local String ActiveEnemyPath;
+	local int MouseCommand;
+
+	if(bIsHovering)
+	{		
+		//checks to see if current enemy has any information to display
+		if(m_kEnemyTargets != None && m_kEnemyTargets.TargetEnemyHasEffectsToDisplay())
+		{
+			MouseCommand = class'UIUtilities_Input'.const.FXS_L_MOUSE_IN;
+			m_bEnemyInfoVisible = true;
+		}
+		else //if enemy does not have any effects to display, do not simulate a mouse-hover
+		{
+			//This used to simply "return false;", leaving the tooltip in its current state.
+			//We need to handle the case where the user switches directly between enemies with LB/RB, though.
+			//They may toggle away from an enemy that had buffs, and land on an enemy with no buffs.
+			//Hide the tooltip in this case. -BET 2016-05-31
+			MouseCommand = class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT;
+		}
+	}		
+	else
+	{
+		MouseCommand = class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT;
+		m_bEnemyInfoVisible = false;
+	}		
+
+	//UITacticalHUD_BuffsTooltip uses the path to determine the enemy type, pulling directly from the 6th parsed section, after "icon" (this happens in 'RefreshData')
+	//It will look something like this: "_level0.theInterfaceMgr.UITacticalHUD_0.theTacticalHUD.enemyTargets.Icon0"
+	ActiveEnemyPath = string(m_kEnemyTargets.MCPath) $ ".icon" $ m_kEnemyTargets.GetCurrentTargetIndex();
+
+	Mgr = Movie.Pres.m_kTooltipMgr;
+	Mgr.OnMouse("", MouseCommand, ActiveEnemyPath); //The Tooltip Manager uses the 'arg' parameter to set the path instead of the 'path' parameter
+	
+	UpdateNavHelp();
+
+	return true;
+}
+//Sets a "show details" boolean that will persist when switching view modes, switching targets, etc
+simulated function ToggleEnemyInfo()
+{
+	local bool bShotBreakdownAvailable;
+
+	bShotBreakdownAvailable = ShotBreakdownIsAvailable();
+
+	if (!m_isMenuRaised || (bShotBreakdownAvailable || TargetEnemyHasEffectsToDisplay()))
+	{
+		m_bEnemyInfoVisible = !m_bEnemyInfoVisible;
+
+		if (bShotBreakdownAvailable)
+		{
+			ShowShotWings(m_bEnemyInfoVisible);
+		}
+
+		SimulateEnemyMouseOver(m_bEnemyInfoVisible);
+	}
+}
+
+//Grabs the 'shot breakdown' and returns true if there is added info available in the shot wings (UITacticalHUD_ShotWings)
+simulated function bool ShotBreakdownIsAvailable()
+{
+	local ShotBreakdown Breakdown;
+	local XComGameState_Ability AbilityState;
+
+	AbilityState = m_kAbilityHUD.GetCurrentSelectedAbility();
+	if(AbilityState != None)
+	{
+		AbilityState.LookupShotBreakdown(AbilityState.OwnerStateObject, m_kEnemyTargets.GetSelectedEnemyStateObjectRef(), AbilityState.GetReference(), Breakdown);
+		return !Breakdown.HideShotBreakdown;
+	}
+
+	return false;
+}
+
+simulated function bool TargetEnemyHasEffectsToDisplay()
+{
+	if (m_kEnemyTargets != none)
+	{
+		return m_kEnemyTargets.TargetEnemyHasEffectsToDisplay();
+	}
+
+	return false;
+}
+
+//Handles visibility for UITacticalHUD_ShotWings.uc (simulates player pressing the show/hide buttons available on PC)
+simulated function ShowShotWings(bool bShow)
+{
+	if(m_kShotInfoWings != None)
+	{
+		//function called is a blind toggle, so this checks to make sure the desired effect is going to happen
+		if(	(bShow && !m_kShotInfoWings.bLeftWingOpen && !m_kShotInfoWings.bRightWingOpen) ||
+			(!bShow && m_kShotInfoWings.bLeftWingOpen && m_kShotInfoWings.bRightWingOpen))
+		{
+			m_kShotInfoWings.LeftWingMouseEvent(None, class'UIUtilities_Input'.const.FXS_L_MOUSE_UP);
+			m_kShotInfoWings.RightWingMouseEvent(None, class'UIUtilities_Input'.const.FXS_L_MOUSE_UP);
+		}
+	}
 }
 
 simulated function bool IsActionPathingWithTarget()
@@ -428,21 +775,37 @@ simulated function bool IsActionPathingWithTarget()
 	return false;
 }
 
+simulated function bool IsHidingForSecondaryMovement()
+{
+	return m_bIsHidingShotHUDForSecondaryMovement;
+}
+
+simulated function bool HideAwayTargetAction()
+{
+	HideAwayTargetSystemCosmetic();
+	m_bIsHidingShotHUDForSecondaryMovement = true;
+	return false;
+}
 simulated function bool CancelTargetingAction()
 {
 	LowerTargetSystem();
 	//XComPresentationLayer(Movie.Pres).m_kSightlineHUD.ClearSelectedEnemy();
 	PC.SetInputState('ActiveUnit_Moving');
-	return true;
+	return true; // controller: return false ? bsteiner 
 }
 
 simulated function TargetEnemy( int TargetIndex )
 {
 	m_kAbilityHUD.UpdateAbilitiesArray();
-	RealizeTargetingReticules( TargetIndex );
+	if(!IsHidingForSecondaryMovement())
+		RealizeTargetingReticules( TargetIndex );
 	m_kEnemyTargets.RefreshSelectedEnemy(true, true);
 	XComPresentationLayer(Movie.Pres).m_kUnitFlagManager.ActivateExtensionForTargetedUnit(  m_kEnemyTargets.GetSelectedEnemyStateObjectRef() );
 	m_kShotHUD.Update();
+
+
+	if( `ISCONTROLLERACTIVE )
+		SimulateEnemyMouseOver(m_bEnemyInfoVisible && ShotBreakdownIsAvailable());
 }
 
 simulated function RealizeTargetingReticules( optional int TargetIndex = 0 )
@@ -515,7 +878,8 @@ simulated function InternalUpdate(bool bForceUpdate, int HistoryIndex)
 
 		// Re-raise target system if an abilities update was requested.
 		if ( m_isMenuRaised )
-			TargetEnemy( 0 );
+			//TargetEnemy( 0 );
+			TargetHighestHitChanceEnemy();
 		
 		m_kAbilityHUD.UpdateAbilitiesArray();
 		m_kEnemyTargets.RefreshTargetHoverData();
@@ -610,6 +974,8 @@ simulated function OnFreeAimChange()
 {
 	//Update the reticles 
 	UpdateReticle( m_kAbilityHUD.GetSelectedAction(), 0 );
+	//Refresh the list of visible enemies (i.e. get rid of targeting icons for free-aiming abilities like grenades)
+	m_kEnemyTargets.UpdateVisibleEnemies(-1);
 }
 
 function UpdateReticle( AvailableAction kAbility, int TargetIndex )
@@ -679,6 +1045,7 @@ simulated function Show()
 
 	Pres = XComPresentationLayer(Movie.Pres);
 
+	CharInfoButton.Show();
 	if( !Pres.m_kTurnOverlay.IsShowingAlienTurn() 
 	   && !Pres.m_kTurnOverlay.IsShowingOtherTurn()
 	   && !Pres.m_kTurnOverlay.IsShowingReflexAction() 
@@ -747,8 +1114,6 @@ simulated function HideTutorialHelp()
 
 simulated function UpdateButtonHelp()
 {
-	NavHelp.Show();
-	NavHelp.ClearButtonHelp();
 }
 
 simulated function OnRemoved()
@@ -771,5 +1136,6 @@ defaultproperties
 	bHideOnLoseFocus = false;
 	bAnimateOnInit = false;
 
+	m_bIsHidingShotHUDForSecondaryMovement = false;
 	bProcessMouseEventsIfNotFocused = true;
 }

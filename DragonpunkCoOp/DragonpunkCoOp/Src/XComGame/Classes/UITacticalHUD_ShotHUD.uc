@@ -44,6 +44,9 @@ var localized string m_sDamageRangeLabel;
 var localized string m_sEndTurnTooltip;
 var localized string m_sRevealedTooltip;
 
+
+var localized string m_sRevealText;
+var localized string m_sEndTurnText;
 var int TooltipEndTurnID;
 var int TooltipRevealID;
 
@@ -55,6 +58,10 @@ simulated function UITacticalHUD_ShotHUD InitShotHUD()
 	InitPanel();
 
 	RefreshTooltips();
+	MC.BeginFunctionOp("SetIndicatorText");
+	MC.QueueString(m_sRevealText);
+	MC.QueueString(class'UIUtilities_Text'.static.AlignRight(m_sEndTurnText));
+	MC.EndOp();
 	return self;
 }
 
@@ -195,7 +202,19 @@ simulated function Update()
 		}
 		else
 		{
-			ShotDescription = class'X2AbilityTemplateManager'.static.GetDisplayStringForAvailabilityCode(SelectedUIAction.AvailableCode);
+			if (SelectedUIAction.AvailableCode == 'AA_AbilityUnavailable')
+			{
+				ShotDescription = SelectedAbilityState.GetMyHelpText();
+			}
+			else
+			{
+				ShotDescription = class'X2AbilityTemplateManager'.static.GetDisplayStringForAvailabilityCode(SelectedUIAction.AvailableCode);
+			}
+
+			if (ShotDescription == "") 
+			{
+				ShotDescription = "Missing 'LocHelpText' from ability template.";
+			}
 		}
 
 

@@ -97,6 +97,20 @@ simulated function OnReceiveFocus()
 	super.OnReceiveFocus();
 	UpdateNavHelp();
 	UpdateLobbyTypeSpinner();
+	UpdateGamepadFocus();
+}
+simulated function UpdateGamepadFocus()
+{
+	if(MenuList != None)
+	{		
+		Navigator.SetSelected(MenuList);
+		MenuList.SetSelectedIndex(0, true);
+	}	
+}
+
+simulated function OnFirstListItemInited(UIPanel Panel)
+{
+	UpdateGamepadFocus();
 }
 
 function UpdateNavHelp()
@@ -122,6 +136,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 			return true;
 	}
 
+	if (MenuList.GetSelectedItem().OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
 	return super.OnUnrealCommand(cmd, arg);
 }
 
@@ -196,6 +214,9 @@ function UpdateLobbyTypeSpinner()
 		LobbyTypeSpinner.UpdateDataSpinner(m_strLobbyTypeSpinnerText, m_kMPShellManager.m_arrLobbyTypeData[m_iSpinnerInt_LobbyType].strText, OnLobbyTypeSpinnerChangedCallback);
 		m_kMPShellManager.OnlineGame_SetNetworkType(m_kMPShellManager.m_arrLobbyTypeData[m_iSpinnerInt_LobbyType].iLobbyType);
 	}
+	// Waiting to give focus until first list item is ready (must wait for internal slider initialization)
+	if(LobbyTypeSpinner.Spinner != none)
+		LobbyTypeSpinner.Spinner.AddOnInitDelegate(OnFirstListItemInited);
 }
 
 

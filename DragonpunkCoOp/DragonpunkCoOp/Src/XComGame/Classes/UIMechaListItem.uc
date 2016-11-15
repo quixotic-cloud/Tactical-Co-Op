@@ -48,6 +48,7 @@ delegate OnButtonClickedCallback(UIButton ButtonSource);
 delegate OnDropdownSelectionChangedCallback(UIDropdown DropdownControl);
 delegate OnSliderChangedCallback(UISlider SliderControl);
 delegate OnCheckboxChangedCallback(UICheckbox CheckboxControl);
+delegate OnDisabledClickDelegate();
 
 simulated function UIMechaListItem InitListItem()
 {
@@ -80,6 +81,15 @@ simulated function UIMechaListItem InitListItem()
 	Spinner.SetX(width - 330);
 	Spinner.SetValueWidth(250, true);
 	Spinner.Hide();
+
+	Button = Spawn(class'UIButton', self);
+	Button.bAnimateOnInit = false;
+	Button.bIsNavigable = false;
+	Button.InitButton('ButtonMC', "", OnButtonClickDelegate);
+	Button.SetX(width - 150);
+	Button.SetHeight(34);
+	Button.MC.SetNum("textY", 2);
+	Button.Hide();
 
 	return self;
 }
@@ -146,27 +156,29 @@ simulated function UpdateDataSlider(string _Desc,
 
 simulated function bool HandleCustomControls(int cmd, int arg)
 {
-	if (Spinner != none && Spinner.bIsVisible)
+
+	if(Type == EUILineItemType_Spinner || 
+		Type == EUILineItemType_SpinnerAndButton && Spinner != none && Spinner.bIsVisible)
 	{
 		return Spinner.OnUnrealCommand(cmd, arg);
 	}
 
-	if (Dropdown != none && Dropdown.bIsVisible)
+	if(Type == EUILineItemType_Dropdown && Dropdown != none && Dropdown.bIsVisible)
 	{
 		return Dropdown.OnUnrealCommand(cmd, arg);
 	}
 
-	if (Button != none && Button.bIsVisible)
+	if(Type == EUILineItemType_Button && Button != none && Button.bIsVisible)
 	{
 		return Button.OnUnrealCommand(cmd, arg);
 	}
 
-	if (Checkbox != none && Checkbox.bIsVisible)
+	if(Type == EUILineItemType_Checkbox && Checkbox != none && Checkbox.bIsVisible)
 	{
 		return Checkbox.OnUnrealCommand(cmd, arg);
 	}
 
-	if (Slider != none && Slider.bIsVisible)
+	if(Type == EUILineItemType_Slider && Slider != none && Slider.bIsVisible)
 	{
 		return Slider.OnUnrealCommand(cmd, arg);
 	}
@@ -176,8 +188,12 @@ simulated function bool HandleCustomControls(int cmd, int arg)
 
 simulated function bool HandleClickableControls(int cmd, int arg)
 {
-	if ( ((Desc != none && Desc.bIsVisible) || (ColorChip != none && ColorChip.bIsVisible) || (Value != none && Value.bIsVisible)) && 
-		(cmd == class'UIUtilities_Input'.const.FXS_KEY_ENTER || cmd == class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR || cmd == class'UIUtilities_Input'.const.FXS_BUTTON_A))
+//	if ( ((Desc != none && Desc.bIsVisible) || (ColorChip != none && ColorChip.bIsVisible) || (Value != none && Value.bIsVisible)) && 
+//		(cmd == class'UIUtilities_Input'.const.FXS_KEY_ENTER || cmd == class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR || cmd == class'UIUtilities_Input'.const.FXS_BUTTON_A))
+	if ((Desc != none || ColorChip != none) && 
+		(cmd == class'UIUtilities_Input'.const.FXS_KEY_ENTER || 
+		cmd == class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR || 
+		cmd == class'UIUtilities_Input'.const.FXS_BUTTON_A))
 	{
 		Click();
 		return true;
@@ -198,6 +214,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 		if (HandleClickableControls(cmd, arg))
 			return true;
+	}
+	else if (OnDisabledClickDelegate != none && bDisabled && bIsVisible)
+	{
+		OnDisabledClickDelegate();
 	}
 
 	return super.OnUnrealCommand(cmd, arg);
@@ -282,17 +302,6 @@ simulated function UIMechaListItem UpdateDataButton(string _Desc,
 									 optional delegate<OnClickDelegate> _OnClickDelegate = none)
 {
 	SetWidgetType(EUILineItemType_Button);
-
-	if( Button == none )
-	{
-		Button = Spawn(class'UIButton', self);
-		Button.bAnimateOnInit = false;
-		Button.bIsNavigable = false;
-		Button.InitButton('ButtonMC', "", OnButtonClickDelegate);
-		Button.SetX(width - 150);
-		Button.SetHeight( 34 );
-		Button.MC.SetNum("textY", 2);
-	}
 
 	Button.SetText(_ButtonLabel);
 	RefreshButtonVisibility();
@@ -442,13 +451,13 @@ simulated function UIMechaListItem UpdateDataCheckbox(string _Desc,
 		Checkbox = Spawn(class'UICheckbox', self);
 		Checkbox.bAnimateOnInit = false;
 		Checkbox.bIsNavigable = false;
-		Checkbox.LibID = class'UICheckbox'.default.AlternateLibID; 
+		Checkbox.LibID = class'UICheckbox'.default.AlternateLibID;
 		Checkbox.InitCheckbox('CheckboxMC');
 		Checkbox.SetX(width - 34);
 		Desc.SetWidth(Width - 36);
-		Checkbox.OnMouseEventDelegate = CheckboxMouseEvent; 
+		Checkbox.OnMouseEventDelegate = CheckboxMouseEvent;
 	}
-	
+
 	OnClickDelegate = _OnClickDelegate;
 	Checkbox.onChangedDelegate = _OnCheckboxChangedCallback;
 
@@ -537,7 +546,7 @@ simulated function OnMouseEvent( int cmd, array<string> args )
 {
 	super.OnMouseEvent(cmd, args);
 
-	if( cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_UP || cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_DOUBLE_UP || cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_UP_DELAYED )
+	if( /*cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_UP ||*/ cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_DOUBLE_UP || cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_UP_DELAYED )
 		Click();
 	else if( cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT || cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_DRAG_OUT )
 		OnLoseFocus();
@@ -548,7 +557,10 @@ simulated function OnMouseEvent( int cmd, array<string> args )
 simulated function Click()
 {
 	if( OnClickDelegate != none && !bDisabled && bIsVisible )
+	{
+		Movie.Pres.PlayUISound(eSUISound_MenuSelect);
 		OnClickDelegate();
+	}
 }
 
 simulated function OnSpinnerChangeDelegate( UIListItemSpinner SpinnerPanel, int Direction )
@@ -575,6 +587,47 @@ simulated function RefreshButtonVisibility()
 		else if(Type == EUILineItemType_Button)
 			Button.Show();
 	}
+}
+
+
+simulated function OnReceiveFocus()
+{
+	//Defer receiving focus until the text is ready for it
+	if(Desc != None && !Desc.bIsInited)
+	{
+		Desc.AddOnInitDelegate(DescReceiveFocusOnInit);
+		return;
+	}
+
+	super.OnReceiveFocus();
+}
+
+simulated function DescReceiveFocusOnInit(UIPanel Panel)
+{
+	//Text (Panel) is ready - allow MechaListItem (Panel.ParentPanel) to gain focus
+	Panel.ParentPanel.OnReceiveFocus();
+}
+
+simulated function EnableNavigation()
+{
+	local UIList List; 	
+
+	bIsNavigable = true;
+
+	List = UIList(GetParent(class'UIList'));
+	if(List != none && List.Navigator.GetIndexOf(self) == -1 )
+		List.Navigator.AddControl(Self);
+}
+
+simulated function DisableNavigation()
+{
+	local UIList List; 	
+
+	bIsNavigable = false;
+
+	List = UIList(GetParent(class'UIList'));
+	if(List != none && List.Navigator.GetIndexOf(self) != -1 )
+		List.Navigator.RemoveControl(Self);
 }
 
 // -----------------------------------------------------------------

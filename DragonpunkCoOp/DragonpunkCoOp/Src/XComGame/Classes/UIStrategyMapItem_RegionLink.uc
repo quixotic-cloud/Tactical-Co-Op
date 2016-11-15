@@ -80,7 +80,8 @@ function UpdateLinkMesh()
 		MapItem3D.SetScale3D(NewScale);
 		SetLoc(RegionLinkState.Get2DLocation());
 		SetLocation(NewLocation);
-		MapItem3D.SetLocation(NewLocation);
+		if( `ISCONTROLLERACTIVE == false)
+			MapItem3D.SetLocation(NewLocation);
 		CurrentScale = NewScale;
 		CurrentLocation = NewLocation;
 		CurrentMaterialPath = DesiredPath;

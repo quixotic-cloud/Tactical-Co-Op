@@ -27,6 +27,7 @@ var public int CENTER_HELP_CONTAINER_PADDING;
 
 // SOME HELPER LOCALIZED STRINGS
 var localized string m_strBackButtonLabel;
+var localized string m_strGeoscapeLabel;
 
 //To find the geoscape for hotlinking. 
 var config name GeoscapeFacility;
@@ -40,6 +41,10 @@ var UIPanel RightContainer;
 var bool bBackButton;
 var bool bContinueButton;
 var bool bGeoscapeButton;
+
+var bool bShowSelectNavHelp;
+var bool bIsVerticalHelp;
+var int VerticalHelpCount;
 
 // DELEGATES
 var array< delegate<OnButtonClickedDelegate> >  m_arrButtonClickDelegates;
@@ -60,6 +65,7 @@ simulated function UINavigationHelp InitNavHelp(optional name InitName)
 	InitPanel(InitName);
 
 	// If we're linking with an existing Flash help bar, don't override position / padding
+	SetButtonType("");
 	if(InitName == '')
 	{
 		MC.FunctionVoid("AnchorToBottom");
@@ -93,7 +99,7 @@ public function UINavigationHelp AddBackButton( optional delegate<onButtonClicke
 			SetButtonType("XComButtonIconPC");
 			i = eButtonIconPC_Back; 
 			strIcon = string(i);
-			AddLeftHelp( strIcon, "", mouseCallback);
+			AddLeftHelp(strIcon, strIcon, mouseCallback);
 			SetButtonType("");
 		}
 		else
@@ -106,20 +112,56 @@ public function UINavigationHelp AddBackButton( optional delegate<onButtonClicke
 
 public function UINavigationHelp AddContinueButton(optional delegate<OnButtonClickedDelegate> ContinueButtonMouseCallback = none, optional name continueLibID = 'X2ContinueButton')
 {
+	local int iconYOffset;
 	bContinueButton = true;
 	if( ContinueButton == none )
 	{
 		// Spawn the continue button on the AvengerHUD screen, to avoid nested positioning
 		ContinueButton = Spawn(class'UILargeButton', Screen);
+		//<workshop> JTA - 2016/3/14
+		//'ContinueButton' is not yet formatted for NavHelp display, so using the LargeButton libID (default option)
+		//DEL:
 		ContinueButton.LibID = continueLibID;
+		//</workshop>
 		ContinueButton.bHideUntilRealized = true;
-		ContinueButton.InitLargeButton('ContinueButton', class'UIUtilities_Text'.default.m_strGenericContinue);
+		//<workshop> Added gamepad icon SCI 2015/10/21
+		//WAS: 
+		//ContinueButton.InitLargeButton('ContinueButton', class'UIUtilities_Text'.default.m_strGenericContinue);
+		if( GetLanguage() == "JPN" ) 
+		{
+			iconYOffset = -10;
+		}
+		else if( GetLanguage() == "KOR" )
+		{
+			iconYOffset = -20;
+		}
+		else
+		{
+			iconYOffset = -15;
+		}
+		if(`IsControllerActive)
+		{
+		ContinueButton.InitLargeButton('ContinueButton', 
+			class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.static.GetAdvanceButtonIcon(), 
+			28, 28, iconYOffset) @ class'UIUtilities_Text'.default.m_strGenericContinue);
+		}
+		else
+		{
+			ContinueButton.InitLargeButton('ContinueButton', class'UIUtilities_Text'.default.m_strGenericContinue);
+		}
+		ContinueButton.DisableNavigation();
+		//ContinueButton.SetTextShadow(true);
+		//</workshop>
+		//<workshop> HIDING_BG - JTA - 2016/2/8
+		//ContinueButton.SetAsNavHelpDisplay(true);
+		//</workshop>
 		ContinueButton.AnchorBottomCenter();
 		ContinueButton.OffsetY = -10;
 	}
 	ContinueButton.OnClickedDelegate = ContinueButtonClicked;
 	OnClickedContinueDelegate = ContinueButtonMouseCallback;
 	ContinueButton.Show();
+	ContinueButton.ShowBG(true);
 	return self;
 }
 
@@ -129,12 +171,33 @@ public function ContinueButtonClicked(UIButton Button)
 		OnClickedContinueDelegate();
 }
 
+//<workshop> Adding single function to handle 'Select' NavHelp - JTA 2016/2/19
+public function AddSelectNavHelp(optional String altLabel = "", optional bool bCenterHelp = false)
+{
+	local String sLabel;
+
+	//would never be used in a game where a mouse is active, because 'select' simulates a mouse-click
+	if(bShowSelectNavHelp && !Movie.IsMouseActive())
+	{
+		sLabel = altLabel != "" ? altLabel : class'UIUtilities_Text'.default.m_strGenericSelect;
+
+		if(!bCenterHelp)
+			AddLeftHelp(sLabel, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+		else
+			AddCenterHelp(sLabel, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+	}
+}
+
 public function UINavigationHelp AddLeftHelp( string label, optional string gamepadIcon, 
 											  optional delegate<onButtonClickedDelegate> mouseCallback = none,
 											  optional bool isDisabled = false, 
 											  optional string tooltipHTML = "",
 											  optional int tooltipAnchor = class'UIUtilities'.const.ANCHOR_BOTTOM_LEFT )
 {
+	if (bIsVerticalHelp)
+	{
+		return AddLeftStackHelp(label, gamepadIcon, mouseCallback, isDisabled, tooltipHTML, tooltipAnchor);
+	}
 	GenerateTooltip( tooltipHTML, "left", m_arrButtonClickDelegates.Length, tooltipAnchor );
 	ButtonOp( "AddLeftButtonHelp", m_arrButtonClickDelegates.Length, label, gamepadIcon, isDisabled );
 	m_arrButtonClickDelegates.AddItem(mouseCallback);
@@ -147,6 +210,10 @@ public function UINavigationHelp AddRightHelp( string label, optional string gam
 											   optional string tooltipHTML = "",
 											   optional int tooltipAnchor = class'UIUtilities'.const.ANCHOR_BOTTOM_LEFT )
 {
+	if (bIsVerticalHelp)
+	{
+		return AddRightStackHelp(label, gamepadIcon, mouseCallback, isDisabled, tooltipHTML, tooltipAnchor);
+	}
 	GenerateTooltip( tooltipHTML, "right", m_arrButtonClickDelegates.Length, tooltipAnchor );
 	ButtonOp( "AddRightButtonHelp", m_arrButtonClickDelegates.Length, label, gamepadIcon, isDisabled );
 	m_arrButtonClickDelegates.AddItem(mouseCallback);
@@ -162,6 +229,33 @@ public function UINavigationHelp AddRoomHelp( string label, optional string game
 	GenerateTooltip( tooltipHTML, "right", m_arrButtonClickDelegates.Length, tooltipAnchor );
 	ButtonOp( "AddRightStackButtonHelp", m_arrButtonClickDelegates.Length, label, gamepadIcon, isDisabled );
 	m_arrButtonClickDelegates.AddItem(mouseCallback);
+	return self;
+}
+public function UINavigationHelp AddLeftStackHelp(string label, optional string gamepadIcon,
+	optional delegate<onButtonClickedDelegate> mouseCallback = none,
+	optional bool isDisabled = false, 
+	optional string tooltipHTML = "",
+	optional int tooltipAnchor = class'UIUtilities'.const.ANCHOR_BOTTOM_LEFT)
+{
+	GenerateTooltip(tooltipHTML, "left", m_arrButtonClickDelegates.Length, tooltipAnchor);
+	ButtonOp("AddLeftStackButtonHelp", m_arrButtonClickDelegates.Length, label, gamepadIcon, isDisabled);
+	m_arrButtonClickDelegates.AddItem(mouseCallback);
+
+	VerticalHelpCount++;
+
+	return self;
+}
+
+public function UINavigationHelp AddRightStackHelp(string label, optional string gamepadIcon,
+	optional delegate<onButtonClickedDelegate> mouseCallback = none,
+	optional bool isDisabled = false, 
+	optional string tooltipHTML = "",
+	optional int tooltipAnchor = class'UIUtilities'.const.ANCHOR_BOTTOM_RIGHT)
+{
+	GenerateTooltip(tooltipHTML, "right", m_arrButtonClickDelegates.Length, tooltipAnchor);
+	ButtonOp("AddRightStackButtonHelp", m_arrButtonClickDelegates.Length, label, gamepadIcon, isDisabled);
+	m_arrButtonClickDelegates.AddItem(mouseCallback);
+
 	return self;
 }
 
@@ -233,6 +327,7 @@ public function UINavigationHelp ClearButtonHelp()
 	if(ContinueButton != none)
 	{
 		ContinueButton.Hide();
+		ContinueButton.bHideUntilRealized = false; 
 		ContinueButton.OnClickedDelegate = none;
 	}
 	OnClickedContinueDelegate = none;
@@ -240,6 +335,8 @@ public function UINavigationHelp ClearButtonHelp()
 	bBackButton = false;
 	bGeoscapeButton = false;
 	bContinueButton = false;
+	bIsVerticalHelp = false;
+	VerticalHelpCount = 0;
 	return self;
 }
 
@@ -308,6 +405,10 @@ simulated function ButtonOp( string func, int id, string label, string icon, boo
 	mc.QueueString(icon);      // add icon parameter
 	mc.QueueBoolean(disabled); // add disabled parameter
 	mc.EndOp();                // add delimiter and process command
+}
+simulated function SetCenterHelpPaddingValue(int newValue)
+{
+	mc.FunctionNum("SetCenterHelpPadding", newValue);
 }
 
 //==============================================================================
@@ -381,11 +482,16 @@ public function UINavigationHelp AddGeoscapeButton(optional delegate<onButtonCli
 		SetButtonType("XComButtonIconPC");
 		i = eButtonIconPC_Hologlobe;
 		strIcon = string(i);
-		AddLeftHelp(strIcon, "", HotlinkToGeoscape, false, GetGeoscapeTooltip());
+		AddLeftHelp(strIcon, strIcon, HotlinkToGeoscape, false, GetGeoscapeTooltip());
 		SetButtonType("");
 		
 		//Store this delegate to call back after we make the hotlink jump.
 		OnGeoscapeClickedDelegate = mouseCallback; 
+		bGeoscapeButton = true;
+	}
+	else
+	{
+		AddLeftHelp(m_strGeoscapeLabel, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE, HotlinkToGeoscape);
 		bGeoscapeButton = true;
 	}
 	/*else
@@ -414,6 +520,26 @@ function string GetGeoscapeTooltip()
 	return TooltipDesc;
 }
 
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	switch (cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
+		if (bGeoscapeButton && !Movie.Pres.IsDialogBoxShown() && !`SCREENSTACK.HasInstanceOf(class'UISoldierIntroCinematic')) // JTA 2016/5/17
+		{
+			HotlinkToGeoscape();
+			ClearButtonHelp();
+			return true;
+		}
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
 simulated function HotlinkToGeoscape()
 {
 	local XComGameStateHistory History;
@@ -429,12 +555,21 @@ simulated function HotlinkToGeoscape()
 		{
 			if(!FacilityState.bTutorialLocked)
 			{
+				//<workshop> SCI 2016/3/25
+				//INS:
+				`HQPRES.m_kFacilityGrid.SelectGeoscape();
+				//</workshop>
+				//<BSG> TTP_6064_FIXED_SHORTCUT_HIGHLIGHTS_NOT_CLEARING JHitlon 07.03.2016
+				//INS:
+				`HQPRES.m_kFacilityGrid.UnHighlightAvengerShortcuts();
+				//</BSG>
 				FacilityState.GetMyTemplate().SelectFacilityFn(FacilityState.GetReference());
 				if(OnGeoscapeClickedDelegate != none)
 					OnGeoscapeClickedDelegate();
-				break;
 
-				HighlightGeoscape(false);
+				`HQPRES.m_kAvengerHUD.ToDoWidget.Hide();
+				ClearButtonHelp();
+				break;
 			}
 		}
 	}
@@ -458,12 +593,17 @@ simulated function RefreshGeoscapeHighlight()
 
 simulated function HighlightGeoscape(bool bShouldHighlight)
 {
+	local int GeoscapeIndex;
+
+	GeoscapeIndex = m_arrButtonClickDelegates.Find(HotlinkToGeoscape);
 	if( bShouldHighlight && AttentionPulse == none )
 	{
 		AttentionPulse = Spawn(class'UIPanel', self);
 		AttentionPulse.InitPanel('NavHelpAttentionPulse', class'UIUtilities_Controls'.const.MC_AttentionPulse);
 		AttentionPulse.AnchorBottomLeft();
-		AttentionPulse.SetPosition(48, -48);
+
+		//AttentionPulse.SetPosition(48, -48);
+		AttentionPulse.SetPosition(26, -25 + GeoscapeIndex * -46);
 	}
 	else if( AttentionPulse != none )
 	{
@@ -495,6 +635,8 @@ defaultproperties
 	bCascadeFocus = false;
 	bProcessesMouseEvents = true;
 
+
+	bShowSelectNavHelp = true;
 	LEFT_HELP_CONTAINER_PADDING = 20;
 	RIGHT_HELP_CONTAINER_PADDING = 20;
 	CENTER_HELP_CONTAINER_PADDING = 60;

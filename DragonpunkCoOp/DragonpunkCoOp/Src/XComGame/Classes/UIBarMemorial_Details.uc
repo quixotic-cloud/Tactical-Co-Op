@@ -61,6 +61,7 @@ var localized string m_strExploding;
 var localized string m_strPoolButtonText;
 var localized string m_strPoolConfirmTitle;
 var localized string m_strPoolConfirmBody;
+var localized string m_strAddEpitaph;
 
 simulated function InitMemorial(StateObjectReference UnitRef)
 {
@@ -116,8 +117,17 @@ simulated function InitMemorial(StateObjectReference UnitRef)
 	
 	EpitaphButton = Spawn(class'UIButton', self).InitButton('EpitaphButton', m_strEpitaphButton, OnSetEpitaph);
 	EpitaphButton.SetPosition((Width - EpitaphButton.Width) / 2, ((BGBox.Y + BGBox.Height) - EpitaphButton.Height) - PADDING_BOTTOM - 10);
+	
 	PoolButton = Spawn(class'UIButton', self).InitButton('PoolButton', m_strPoolButtonText, OnPoolButton);
 	PoolButton.SetPosition(23 + PADDING_LEFT, EpitaphButton.Y);
+
+	if (`ISCONTROLLERACTIVE) 
+	{
+		EpitaphButton.Hide();
+		EpitaphButton.DisableNavigation();
+		PoolButton.Hide();
+		PoolButton.DisableNavigation();
+	}
 
 	DeadIdx = XComHQ.DeadCrew.Find('ObjectID', UnitReference.ObjectID);
 	`assert(DeadIdx != -1);
@@ -157,19 +167,44 @@ simulated function OnSetEpitaph(UIButton Button)
 {
 	local TInputDialogData kData;
 
-	kData.strTitle = m_strSoldierEpitaph;
-	kData.strInputBoxText = GetEpitaphText();
-	kData.fnCallbackAccepted = OnNewEpitaphSet;
-	kData.DialogType = eDialogType_MultiLine;
-	kData.iMaxChars = 256;
+//	if(!WorldInfo.IsConsoleBuild() || `ISCONTROLLERACTIVE )
+//	{
+		kData.strTitle = m_strSoldierEpitaph;
+		kData.strInputBoxText = GetEpitaphText();
+		kData.fnCallbackAccepted = OnNewEpitaphSet;
+		kData.DialogType = eDialogType_MultiLine;
+		kData.iMaxChars = 256;
 
-	HQPres.UIInputDialog(kData);
+		HQPres.UIInputDialog(kData);
+/*	}
+	else
+	{
+		HQPres.UIKeyboard( m_strSoldierEpitaph, 
+			GetEpitaphText(), 
+			VirtualKeyboard_OnNewEpitaphAccepted, 
+			VirtualKeyboard_OnNewEpitaphCancelled,
+			false, 
+			256
+		);
+	}*/
 }
 
 simulated function OnNewEpitaphSet(string newText)
 {
 	SetEpitaphText(newText);
 	PopulateEpitaphText();
+}
+function VirtualKeyboard_OnNewEpitaphAccepted(string text, bool bWasSuccessful)
+{
+	if(bWasSuccessful)
+	{
+		OnNewEpitaphSet(text);
+	}
+}
+
+function VirtualKeyboard_OnNewEpitaphCancelled()
+{
+	
 }
 
 simulated function OnPoolButton(UIButton Button)
@@ -295,7 +330,7 @@ static simulated function string FormatCauseOfDeath( XComGameState_Unit DeadUnit
 
 	if (Killer != none)
 	{
-		if (Killer.IsASoldier( ))
+		if (Killer.IsSoldier( ))
 		{
 			CauseOfDeath = Killer.GetName( eNameType_FullNick );
 		}
@@ -366,6 +401,9 @@ simulated function PopulateEpitaphText()
 	{
 		MC.FunctionString("setEpitaph", UnitEpitaph);
 	}
+	if(EpitaphTitle != None)
+		EpitaphTitle.SetVisible(UnitEpitaph != "");
+	UpdateNavHelp();
 }
 
 simulated function OnReceiveFocus()
@@ -399,23 +437,30 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local bool bHandled;
 
-	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
 		return false;
 
-	switch( cmd )
+	switch (cmd)
 	{
-		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
-		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
-		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
-		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
-		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
-			bHandled = true;
-			OnClose();
-			break;
-		default:
-			bHandled = false;
-			break;
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A :
+	case class'UIUtilities_Input'.const.FXS_KEY_ENTER :
+	case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR :
+	case class'UIUtilities_Input'.const.FXS_BUTTON_B :
+	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE :
+	case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN :
+		bHandled = true;
+		OnClose();
+		break;
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X :
+		bHandled = true;
+		OnSetEpitaph(None);
+	case class'UIUtilities_Input'.const.FXS_BUTTON_Y :
+		bHandled = true;
+		OnPoolButton(None);
+		break;
+	default:
+		bHandled = false;
+		break;
 	}
 
 	return bHandled || super.OnUnrealCommand(cmd, arg);
@@ -423,9 +468,31 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 simulated function UpdateNavHelp()
 {
-	HQPres.m_kAvengerHUD.NavHelp.ClearButtonHelp();
-	HQPres.m_kAvengerHUD.NavHelp.AddBackButton(OnClose);
+	local UINavigationHelp NavHelp;
+	local string strAddEpitaphHelpLabel;
+
+	NavHelp = HQPres.m_kAvengerHUD.NavHelp;
+
+	NavHelp.ClearButtonHelp();
+	NavHelp.AddBackButton(OnClose);
+	if (`ISCONTROLLERACTIVE)
+	{
+		if (GetEpitaphText() == "")
+			strAddEpitaphHelpLabel = m_strAddEpitaph;
+		else
+			strAddEpitaphHelpLabel = m_strEpitaphButton;
+
+		NavHelp.AddLeftHelp(strAddEpitaphHelpLabel, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
+		NavHelp.AddLeftHelp(m_strPoolButtonText, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+	}
 }
+
+simulated function OnLoseFocus()
+{
+	super.OnLoseFocus();
+	HQPres.m_kAvengerHUD.NavHelp.ClearButtonHelp();
+}
+
 
 simulated function OnClose()
 {

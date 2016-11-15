@@ -24,6 +24,7 @@ var UISoldierHeader Header;
 var UINavigationHelp NavHelp;
 var StateObjectReference UnitReference;
 var XComGameState CheckGameState;
+var UIAbilityInfoScreen AbilityInfoScreen;
 
 var name DisplayEvent;
 var name SoldierSpawnEvent;
@@ -36,6 +37,9 @@ var config name DisableWeaponLightingEvent;
 
 var localized string PrevSoldierKey;
 var localized string NextSoldierKey;
+var localized string m_strTabNavHelp;
+var localized string m_strRotateNavHelp;
+var bool m_bAllowAbilityToCycle;
 
 delegate static bool IsSoldierEligible(XComGameState_Unit Soldier);
 
@@ -114,6 +118,11 @@ event OnRemoteEvent(name RemoteEventName)
 // override for custom behavior
 simulated function PopulateData();
 
+simulated function bool CanCancel()
+{
+
+	return class'XComGameState_HeadquartersXCom'.static.IsObjectiveCompleted('T0_M2_WelcomeToArmory');
+}
 simulated function UpdateNavHelp()
 {
 	local int i;
@@ -123,7 +132,11 @@ simulated function UpdateNavHelp()
 	if(bUseNavHelp)
 	{
 		NavHelp.ClearButtonHelp();
-		NavHelp.AddBackButton(OnCancel);
+
+		if (CanCancel())
+		{
+			NavHelp.AddBackButton(OnCancel);
+		}
 		
 		if(XComHQPresentationLayer(Movie.Pres) != none)
 		{
@@ -151,6 +164,22 @@ simulated function UpdateNavHelp()
 			}
 		}
 
+		NavHelp.AddSelectNavHelp();
+
+		if (`ISCONTROLLERACTIVE && 
+			XComHQPresentationLayer(Movie.Pres) != none && IsAllowedToCycleSoldiers() && 
+			class'UIUtilities_Strategy'.static.HasSoldiersToCycleThrough(UnitReference, CanCycleTo) &&
+			//<bsg> 5435, ENABLE_NAVHELP_DURING_TUTORIAL, DCRUZ, 2016/06/23
+			//INS:
+			class'XComGameState_HeadquartersXCom'.static.IsObjectiveCompleted('T0_M2_WelcomeToArmory'))
+			//</bsg>
+		{
+			NavHelp.AddLeftHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%LB %RB" @ m_strTabNavHelp));
+		}
+		
+		if( `ISCONTROLLERACTIVE )
+			NavHelp.AddLeftHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%RS" @ m_strRotateNavHelp));
+
 		NavHelp.Show();
 	}
 }
@@ -177,7 +206,7 @@ simulated function NextSoldier()
 
 simulated static function bool CanCycleTo(XComGameState_Unit Unit)
 {
-	return Unit.IsASoldier() && !Unit.IsDead();
+	return Unit.IsSoldier() && !Unit.IsDead();
 }
 
 simulated static function CycleToSoldier(StateObjectReference NewRef)
@@ -350,6 +379,13 @@ simulated function PointInSpace GetPlacementActor()
 	return PlacementActor;
 }
 
+simulated function ShowAbilityInfoScreen()
+{
+	AbilityInfoScreen = Spawn(class'UIAbilityInfoScreen', Movie.Pres.ScreenStack.GetCurrentScreen());
+	AbilityInfoScreen.InitAbilityInfoScreen(XComPlayerController(Movie.Pres.Owner), Movie);
+	AbilityInfoScreen.SetGameStateUnit(GetUnit());
+	Movie.Pres.ScreenStack.Push(AbilityInfoScreen);
+}
 //==============================================================================
 
 // override for custom behavior
@@ -374,6 +410,13 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local bool bHandled;
 
+	if (AbilityInfoScreen != none && Movie.Pres.ScreenStack.IsInStack(class'UIAbilityInfoScreen'))
+	{
+		if (AbilityInfoScreen.OnUnrealCommand(cmd, arg))
+		{
+			return true;
+		}
+	}
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
 
@@ -386,13 +429,16 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
 			if(class'UIUtilities_Strategy'.static.GetXComHQ(true) != none)
 			{
-				if (class'UIUtilities_Strategy'.static.GetXComHQ().IsObjectiveCompleted('T0_M2_WelcomeToArmory'))
+				if( m_bAllowAbilityToCycle )
 				{
-					if (class'UIUtilities_Strategy'.static.HasSoldiersToCycleThrough(UnitReference, CanCycleTo))
-						NextSoldier();
+					if (class'UIUtilities_Strategy'.static.GetXComHQ().IsObjectiveCompleted('T0_M2_WelcomeToArmory'))
+					{
+						if (class'UIUtilities_Strategy'.static.HasSoldiersToCycleThrough(UnitReference, CanCycleTo))
+							NextSoldier();
+					}
+					else
+						Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
 				}
-				else
-					Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
 			}
 			break;
 		case class'UIUtilities_Input'.const.FXS_MOUSE_4:
@@ -400,13 +446,16 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
 			if(class'UIUtilities_Strategy'.static.GetXComHQ(true) != none)
 			{
-				if (class'UIUtilities_Strategy'.static.GetXComHQ().IsObjectiveCompleted('T0_M2_WelcomeToArmory'))
+				if( m_bAllowAbilityToCycle )
 				{
-					if (class'UIUtilities_Strategy'.static.HasSoldiersToCycleThrough(UnitReference, CanCycleTo))
-						PrevSoldier();
+					if (class'UIUtilities_Strategy'.static.GetXComHQ().IsObjectiveCompleted('T0_M2_WelcomeToArmory'))
+					{
+						if (class'UIUtilities_Strategy'.static.HasSoldiersToCycleThrough(UnitReference, CanCycleTo))
+							PrevSoldier();
+					}
+					else
+						Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
 				}
-				else
-					Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
 			}
 			break;
 		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
@@ -457,6 +506,7 @@ simulated function Show()
 {
 	super.Show();
 	NavHelp.Show();
+	class'UIUtilities'.static.DisplayUI3D(DisplayTag, name(CameraTag), `HQINTERPTIME);
 }
 
 simulated function Hide()
@@ -476,6 +526,10 @@ simulated function OnReceiveFocus()
 simulated function OnLoseFocus()
 {
 	super.OnLoseFocus();
+	if(bUseNavHelp)
+	{
+		NavHelp.ClearButtonHelp();
+	}
 	// Immediately process commands to prevent 1 frame delay of screens hiding when navigating the armory
 	Movie.ProcessQueuedCommands();
 }
@@ -486,7 +540,7 @@ simulated function OnRemoved()
 	
 	// Only destroy the pawn when all UIArmory screens are closed
 	if(ActorPawn != none)
-	{
+	{		
 		if(bIsIn3D) Movie.Pres.Get3DMovie().HideDisplay(DisplayTag);
 		ReleasePawn();
 	}
@@ -508,4 +562,5 @@ defaultproperties
 
 	bConsumeMouseEvents = true;
 	MouseGuardClass = class'UIMouseGuard_RotatePawn';
+	m_bAllowAbilityToCycle = true;
 }

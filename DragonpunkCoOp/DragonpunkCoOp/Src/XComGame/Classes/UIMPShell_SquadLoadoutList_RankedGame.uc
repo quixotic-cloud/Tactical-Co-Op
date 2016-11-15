@@ -46,11 +46,14 @@ function EditSquadClickedButtonCallback(UIButton Button)
 simulated function UpdateNavHelp()
 {
 	super.UpdateNavHelp();
+	if( `ISCONTROLLERACTIVE ) return; 
+	
 
 	if(EditSquadButton == none)
 	{
-		EditSquadButton = IntegratedNavHelp.AddCenterButton(m_strEditSquad,, EditSquadButtonCallback, m_kSquadLoadout == none);
+		EditSquadButton = IntegratedNavHelp.AddCenterButton(m_strEditSquad,, EditSquadButtonCallback, m_kSquadLoadout == none, , class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
 		EditSquadButton.OnClickedDelegate = EditSquadClickedButtonCallback;
+		EditSquadButton.SetFontSize(22);
 		Navigator.AddControl(EditSquadButton);
 	}
 
@@ -60,7 +63,8 @@ simulated function UpdateNavHelp()
 simulated function UpdateNavHelpState()
 {
 	super.UpdateNavHelpState();
-	EditSquadButton.SetDisabled(m_kSquadLoadout == none);	
+	if(EditSquadButton != none)
+		EditSquadButton.SetDisabled(m_kSquadLoadout == none);	
 }
 
 defaultproperties

@@ -13,6 +13,7 @@ var X2_Actor_InviteButtonManager IBM;
 var bool Once,bHistoryLoaded;
 var XComCo_Op_ConnectionSetup ConnectionSetupActor;
 var bool AlreadyInvitedFriend;
+var bool PlayingCoop;
 var array<StateObjectReference> SavedSquad;
 var array<StateObjectReference> ServerSquad,ClientSquad;
 var bool Launched;
@@ -30,6 +31,10 @@ event OnInit(UIScreen Screen)
 			ConnectionSetupActor.Destroy();
 			ConnectionSetupActor=none;
 		}
+	}
+	else if(PlayingCoop && Screen.IsA('UITacticalHUD'))
+	{
+		SetTimersStart();
 	}
 }
 
@@ -141,7 +146,9 @@ event OnReceiveFocus(UIScreen Screen)
 		UISS=UISquadSelect(Screen);
 		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);	
 		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(Screen).m_kSlotList.SetX(listX); //change the list X-position to the right place.
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
 		if(UIDialogueBox(UISquadSelect(Screen).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).ShowingDialog())
 			UIDialogueBox(UISquadSelect(Screen).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).RemoveDialog();
 		if(`XCOMNETMANAGER.HasClientConnection())
@@ -155,6 +162,38 @@ event OnReceiveFocus(UIScreen Screen)
 	}
 	
 }
+
+function SetTimersStart()
+{
+	local SeqVar_Int TimerVariable;
+	local WorldInfo wInfo;
+	local Sequence mainSequence;
+	local array<SequenceObject> SeqObjs;
+	local int i,k;
+	wInfo = `XWORLDINFO;
+	mainSequence = wInfo.GetGameSequence();
+	if (mainSequence != None)
+	{
+		`Log("Game sequence found: " $ mainSequence);
+		mainSequence.FindSeqObjectsByClass( class'SequenceVariable', true, SeqObjs);
+		if(SeqObjs.Length != 0)
+		{
+			`Log("Kismet variables found");
+			for(i = 0; i < SeqObjs.Length; i++)
+			{
+				if(InStr(string(SequenceVariable(SeqObjs[i]).VarName), "DefaultTurns") != -1)
+				{
+					`Log("Variable found: " $ SequenceVariable(SeqObjs[i]).VarName);
+					`Log("IntValue = " $ SeqVar_Int(SeqObjs[i]).IntValue);
+					TimerVariable = SeqVar_Int(SeqObjs[i]);
+					TimerVariable.IntValue = TimerVariable.IntValue*3;
+					`Log("Timer set to: " $ TimerVariable.IntValue);
+				}	
+			}
+		}
+	}
+}
+
 
 
 event OnLoseFocus(UIScreen Screen)
@@ -198,6 +237,7 @@ simulated function OnInviteFriend(UIButton button)
 	ConnectionSetupActor.SavedSquad=XComHQ.Squad;
 	ConnectionSetupActor.ServerSquad=XComHQ.Squad;
 	ConnectionSetupActor.CreateOnlineGame();
+	PlayingCoop=true;
 }
 
 function OnNotifyConnectionClosed(int ConnectionIdx)
@@ -223,7 +263,7 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 	local float listWidth,listX;
 	local XComGameState_HeadquartersXCom XComHQ;
 	local UISquadSelect UISS;
-
+	local XComGameState FullGameState;
 
 	if(!bHistoryLoaded)
 	{
@@ -231,17 +271,26 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 		`log(`location,,'XCom_Online');
 		`log(`location @"Dragonpunk Recieved History",,'Team Dragonpunk Co Op');
 		bHistoryLoaded = true;
+		PlayingCoop=true;
 		SendRemoteCommand("RecievedHistory");
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
 		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(listX); //fixes the x position of the list on the screen
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay(); //That's what getting everything updated for the player		SavedSquad=XComHQ.Squad;
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
+		RefreshDisplay();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay(); //That's what getting everything updated for the player		SavedSquad=XComHQ.Squad;
 		ServerSquad=XComHQ.Squad;
 		ConnectionSetupActor.SavedSquad=XComHQ.Squad;
 		ConnectionSetupActor.ServerSquad=XComHQ.Squad;		
+		FullGameState = `XCOMHISTORY.GetGameStateFromHistory(-1, eReturnType_Copy, false);
+		`XCOMVISUALIZATIONMGR.SetCurrentHistoryFrame(FullGameState.HistoryIndex);
+		`XCOMVISUALIZATIONMGR.EnableBuildVisualization();		
+		`XCOMVISUALIZATIONMGR.OnJumpForwardInHistory();
+		`XCOMVISUALIZATIONMGR.BuildVisualization(FullGameState.HistoryIndex, true);
 		//SendRemoteCommand("ClientJoined");
 	}
 	else 
@@ -333,8 +382,11 @@ function ReceiveMergeGameState(XComGameState InGameState) //Used when getting th
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
 		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(listX); //fixes the x position of the list on the screen
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay(); //That's what getting everything updated for the player
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
+		RefreshDisplay();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay(); //That's what getting everything updated for the player
 		GetNewSquadChanges(SavedSquad,XComHQ.Squad);
 		SavedSquad=XComHQ.Squad;
 		ConnectionSetupActor.ServerSquad=ServerSquad;
@@ -345,6 +397,28 @@ function ReceiveMergeGameState(XComGameState InGameState) //Used when getting th
 	}
 	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).LaunchButton.OnClickedDelegate=ConnectionSetupActor.LoadTacticalMapDelegate;
 	
+}
+
+simulated function RefreshDisplay()
+{
+	local int SlotIndex, SquadIndex;
+	local UISquadSelect_ListItem ListItem; 
+	local UISquadSelect SS; 
+	
+	SS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
+
+	for( SlotIndex = 0; SlotIndex < SS.SlotListOrder.Length; ++SlotIndex )
+	{
+		SquadIndex = SS.SlotListOrder[SlotIndex];
+
+		// The slot list may contain more information/slots than available soldiers, so skip if we're reading outside the current soldier availability. 
+		if( SquadIndex >= SS.SoldierSlotCount )
+			continue;
+
+		//We want the slots to match the visual order of the pawns in the slot list. 
+		ListItem = UISquadSelect_ListItem(SS.m_kSlotList.GetItem(SlotIndex));
+		ListItem.UpdateData(SquadIndex);
+	}
 }
 
 function GetNewSquadChanges(array<StateObjectReference> AOldSquad, array<StateObjectReference> ANewSquad)

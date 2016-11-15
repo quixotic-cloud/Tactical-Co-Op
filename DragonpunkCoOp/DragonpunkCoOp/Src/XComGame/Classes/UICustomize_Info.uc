@@ -105,19 +105,41 @@ simulated function OpenBiographyInputBox()
 {
 	local TInputDialogData kData;
 
-	kData.strTitle = m_strEditBiography;
-	kData.iMaxChars = MAX_CHARACTERS_BIO;
-	kData.strInputBoxText = Unit.GetBackground();
-	kData.fnCallback = OnBackgroundInputBoxClosed;
-	kData.DialogType = eDialogType_MultiLine;
+//	if(!`GAMECORE.WorldInfo.IsConsoleBuild() || `ISCONTROLLERACTIVE )
+//	{
+		kData.strTitle = m_strEditBiography;
+		kData.iMaxChars = MAX_CHARACTERS_BIO;
+		kData.strInputBoxText = Unit.GetBackground();
+		kData.fnCallback = OnBackgroundInputBoxClosed;
+		kData.DialogType = eDialogType_MultiLine;
 
-	Movie.Pres.UIInputDialog(kData);
+		Movie.Pres.UIInputDialog(kData);
+/*	}
+	else
+	{
+		Movie.Pres.UIKeyboard( m_strEditBiography, 
+			Unit.GetBackground(), 
+			VirtualKeyboard_OnBackgroundInputBoxAccepted, 
+			VirtualKeyboard_OnBackgroundInputBoxCancelled,
+			false, 
+			MAX_CHARACTERS_BIO
+		);
+	}*/
 }
 
 function OnBackgroundInputBoxClosed(string text)
 {
 	CustomizeManager.UpdatedUnitState.SetBackground(text);
 	AS_SetCharacterBio(m_strBiographyLabel, text);
+}
+function VirtualKeyboard_OnBackgroundInputBoxAccepted(string text, bool bWasSuccessful)
+{
+	OnBackgroundInputBoxClosed(bWasSuccessful ? text : "");
+}
+
+function VirtualKeyboard_OnBackgroundInputBoxCancelled()
+{
+	OnBackgroundInputBoxClosed("");
 }
 
 // --------------------------------------------------------------------------

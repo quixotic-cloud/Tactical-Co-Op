@@ -76,7 +76,10 @@ simulated function OnInit()
 
 	BuildMenu();
 
-	UpdateNavHelp();
+	if(bIsFocused)
+	{
+		UpdateNavHelp();
+	}
 	UpdateConnectivityDependentButtons();
 
 	// If there is a pending invite, open the screen
@@ -103,10 +106,21 @@ simulated function bool OpenInviteLoadout()
 	return false;
 }
 
+simulated function bool OpenCustomGame()
+{
+	m_kMPShellManager.OnlineGame_SetNetworkType(eMPNetworkType_Private);
+	if( `SCREENSTACK.GetScreen(class'UIMPShell_SquadLoadoutList_CustomGameCreate') == none )
+	{
+		`SCREENSTACK.Push(Spawn(class'UIMPShell_SquadLoadoutList_CustomGameCreate', Movie.Pres));
+		return true;
+	}
+	return false;
+}
 simulated function UpdateNavHelp()
 {
 	NavHelp.ClearButtonHelp();
 	NavHelp.AddBackButton(BackButtonCallback);
+	if( `ISCONTROLLERACTIVE ) NavHelp.AddSelectNavHelp();
 }
 
 simulated function BuildMenu()
@@ -140,6 +154,7 @@ simulated function BuildMenu()
 	MAX_OPTIONS = iCurrent;
 
 	MC.FunctionVoid("AnimateIn");
+	Navigator.SelectFirstAvailable();
 }
 
 simulated function bool OnUnrealCommand(int ucmd, int ActionMask)
@@ -153,8 +168,10 @@ simulated function bool OnUnrealCommand(int ucmd, int ActionMask)
 		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
 		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-			OnChildClicked(List, m_iCurrentSelection);
-			break;
+			//OnChildClicked(List, m_iCurrentSelection);
+			OnChildClicked(List, List.SelectedIndex); //set to use the actual highlighted index index of the stored selected - JTA 2015/12/10
+
+			return true; //fixing a never-ending loop that happened when selecting with the gamepad - JTA 2015/11/18
 
 		case class'UIUtilities_Input'.const.FXS_DPAD_UP:
 		case class'UIUtilities_Input'.const.FXS_ARROW_UP:
@@ -403,6 +420,14 @@ simulated function OnReceiveFocus()
 	UpdateConnectivityDependentButtons();
 }
 
+simulated function OnLoseFocus()
+{
+	if(NavHelp != none)
+	{
+		NavHelp.ClearButtonHelp();
+	}
+	super.OnLoseFocus();
+}
 function UpdateConnectivityDependentButtons()
 {
 	UIListItemString(List.GetItem(m_optRanked)).EnableListItem();

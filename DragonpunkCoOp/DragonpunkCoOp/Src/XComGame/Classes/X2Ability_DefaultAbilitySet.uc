@@ -2374,6 +2374,7 @@ static function X2AbilityTemplate AddMedikitHeal(name AbilityName, int HealAmoun
 	UnitPropertyCondition.ExcludeHostileToSource = true;
 	UnitPropertyCondition.ExcludeFriendlyToSource = false;
 	UnitPropertyCondition.ExcludeFullHealth = true;
+	UnitPropertyCondition.ExcludeRobotic = true;
 	Template.AbilityTargetConditions.AddItem(UnitPropertyCondition);
 
 	MedikitHeal = new class'X2Effect_ApplyMedikitHeal';

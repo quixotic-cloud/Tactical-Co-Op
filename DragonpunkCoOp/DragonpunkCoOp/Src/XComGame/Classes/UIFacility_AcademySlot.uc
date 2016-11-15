@@ -97,12 +97,52 @@ simulated function TrainRookieDialogCallback(eUIAction eAction, UICallbackData x
 	}
 }
 
+simulated function UpdateData()
+{
+	super.UpdateData();
+	SetDisabled(!IsUnitAvailableForThisSlot());
+}
+
 simulated function RefreshTooltip( UITooltip Tooltip )
 {
 	if( IsUnitAvailableForThisSlot() )
 		UITextTooltip(Tooltip).SetText(m_strRookiesAvailableTooltip);
 	else
 		UITextTooltip(Tooltip).SetText(m_strNoRookiesTooltip);
+}
+
+simulated function bool IsUnitAvailableForThisSlot()
+{
+	local int i;
+	local XComGameStateHistory History;
+	local XComGameState_Unit Unit; 
+	local XComGameState_StaffSlot SlotState;
+	local StaffUnitInfo UnitInfo;
+	local XComGameState_HeadquartersXCom HQState;
+		
+	History = `XCOMHISTORY;
+	SlotState = XComGameState_StaffSlot(History.GetGameStateForObjectID(StaffSlotRef.ObjectID));
+		
+	if (SlotState.IsSlotFilled())
+	{
+		return true; 
+	}
+	
+	HQState = class'UIUtilities_Strategy'.static.GetXComHQ();
+	for(i = 0; i < HQState.Crew.Length; i++)
+	{
+		Unit = XComGameState_Unit(History.GetGameStateForObjectID(HQState.Crew[i].ObjectID));
+
+		UnitInfo.UnitRef = Unit.GetReference();
+		UnitInfo.bGhostUnit = false;
+		UnitInfo.GhostLocation.ObjectID = 0;
+
+		if (SlotState.ValidUnitForSlot(UnitInfo))
+		{
+			return true;
+		}
+	}
+	return false; 
 }
 
 //==============================================================================

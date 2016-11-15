@@ -17,6 +17,8 @@ var config float ZoomLevel;
 
 var int idNum;
 
+var bool bFocused;
+var bool bMoveCamera;
 simulated function UIStrategyMap_MissionIcon InitMissionIcon( optional int iD)
 {
 	local name IconInitName;
@@ -92,27 +94,42 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 	switch(cmd)
 	{
 	case class'UIUtilities_Input'.const.FXS_L_MOUSE_IN:
-		XComHQPresentationLayer(Movie.Pres).CAMSaveCurrentLocation();
+		if (bMoveCamera || `ISCONTROLLERACTIVE == false)
+		{
+			XComHQPresentationLayer(Movie.Pres).CAMSaveCurrentLocation();
+		}
 		MapItem.OnMouseIn();
 		if(ScanSite != none)
 		{
 			ScanSite = XComGameState_ScanningSite(`XCOMHISTORY.GetGameStateForObjectID(ScanSite.ObjectID)); // Force an update of Scan Site game state
 			SetMissionIconTooltip(ScanSite.GetUIButtonTooltipTitle(), ScanSite.GetUIButtonTooltipBody());
-			XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(ScanSite.Get2DLocation(), ZoomLevel);	
+			if (bMoveCamera || `ISCONTROLLERACTIVE == false)
+			{
+				XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(ScanSite.Get2DLocation(), ZoomLevel);
+			}
 		}
 		else if( MissionSite != none )
 		{
 			SetMissionIconTooltip(MissionSite.GetUIButtonTooltipTitle(), MissionSite.GetUIButtonTooltipBody());
-			XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(MissionSite.Get2DLocation(), ZoomLevel);
+			if (bMoveCamera || `ISCONTROLLERACTIVE == false)
+			{
+				XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(MissionSite.Get2DLocation(), ZoomLevel);
+			}
 		}
 		else
 		{
-			XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(MissionSite.Get2DLocation(), ZoomLevel);	
+			if (bMoveCamera || `ISCONTROLLERACTIVE == false)
+			{
+				XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(MissionSite.Get2DLocation(), ZoomLevel);
+			}
 		}
 		break;
 	case class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT:
 		MapItem.OnMouseOut();
-		XComHQPresentationLayer(Movie.Pres).CAMRestoreSavedLocation();
+		if (bMoveCamera || `ISCONTROLLERACTIVE == false)
+		{
+			XComHQPresentationLayer(Movie.Pres).CAMRestoreSavedLocation();
+		}
 		break;
 	};
 }
@@ -145,6 +162,75 @@ simulated function SetMissionIconTooltip(string Title, string Body)
 	{
 		Tooltip.SetText(Title, Body);
 	}
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	local array<string> EmptyArray;
+
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return true;
+	}
+
+	switch(cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		if (`HQPRES.StrategyMap2D.XComHQ().GetCurrentScanningSite().ObjectID == ScanSite.ObjectID &&
+			ScanSite.CanBeScanned())
+		{
+			`HQPRES.StrategyMap2D.ToggleScan();
+		}
+		else
+		{
+			EmptyArray.Length = 0;
+			OnMouseEvent(class'UIUtilities_Input'.const.FXS_L_MOUSE_UP, EmptyArray);
+		}
+
+		return true;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function OnReceiveFocus()
+{
+	local array<string> EmptyArray;
+	EmptyArray.Length = 0;
+
+	if (Movie.IsMouseActive())
+	{
+		return;
+	}
+
+	if (bFocused)
+	{
+		return;
+	}
+
+	bFocused = true;
+
+	OnMouseEvent(class'UIUtilities_Input'.const.FXS_L_MOUSE_IN, EmptyArray);
+}
+
+simulated function OnLoseFocus()
+{
+	local array<string> EmptyArray;
+	EmptyArray.Length = 0;
+
+	if (Movie.IsMouseActive())
+	{
+		return;
+	}
+
+	if (!bFocused)
+	{
+		return;
+	}
+	
+	bFocused = false;
+
+	OnMouseEvent(class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT, EmptyArray);
 }
 
 simulated function AS_SetLock(bool isLocked)

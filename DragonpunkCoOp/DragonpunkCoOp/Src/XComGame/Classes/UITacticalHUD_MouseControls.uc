@@ -154,7 +154,7 @@ simulated function SetButtonState(int index, EUIState uistate)
 simulated function OnMouseEvent(int cmd, array<string> args)
 {
 	local string sButtonId;
-	local int requestID; 
+	local int RequestID; 
 
 	switch( cmd )
 	{
@@ -177,8 +177,8 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 		case class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT:
 			sButtonId = args[args.Length - 2];
 			sButtonId -= "btn";
-			requestID = int(sButtonId);
-			if( m_iCurrentSelection == requestID )
+			RequestID = int(sButtonId);
+			if( m_iCurrentSelection == RequestID )
 				AS_SetHoverHelp("");
 			break;
 	}
@@ -234,9 +234,15 @@ simulated function bool OnAccept()
 			}
 			break;
 		case m_optRotateCameraLeft:
+		if( `ISCONTROLLERACTIVE ) 
+			XComTacticalInput(kInput).DPad_Left(class'UIUtilities_Input'.const.FXS_ACTION_RELEASE);
+		else
 			XComTacticalInput(kInput).Key_E(class'UIUtilities_Input'.const.FXS_ACTION_RELEASE);
 			break;
 		case m_optRotateCameraRight:
+		if( `ISCONTROLLERACTIVE ) 
+			XComTacticalInput(kInput).DPad_Right(class'UIUtilities_Input'.const.FXS_ACTION_RELEASE);
+		else
 			XComTacticalInput(kInput).Key_Q(class'UIUtilities_Input'.const.FXS_ACTION_RELEASE);
 			break;
 		default:			

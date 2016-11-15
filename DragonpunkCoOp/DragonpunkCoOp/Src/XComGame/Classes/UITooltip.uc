@@ -39,12 +39,18 @@ var UITooltipMgr TooltipMgr;
 delegate del_OnMouseIn( UIToolTip refToThisTooltip ); 
 delegate del_OnMouseOut( UIToolTip refToThisTooltip ); 
 
+delegate OnSizeRealized();
 simulated function UIPanel InitPanel(optional name InitName, optional name InitLibID)
 {
 	super.InitPanel(InitName, InitLibID);
 	TooltipMgr = Movie.Pres.m_kTooltipMgr;
 	UpdateData();
 	Hide();
+	if(!Movie.IsMouseActive())
+	{
+		//A delay is not necessary in mouseless-mode when a hover is being simulated
+		tDelay = 0;
+	}
 	return self;
 }
 
@@ -127,6 +133,20 @@ simulated event Removed()
 	}
 }
 
+simulated function OnCommand(string cmd, string arg)
+{
+	local array<string> sizeData;
+	if (cmd == "RealizeSize")
+	{
+		sizeData = SplitString(arg, ",");
+		Width = float(sizeData[0]);
+		Height = float(sizeData[1]);
+		if (OnSizeRealized != none)
+		{
+			OnSizeRealized();
+		}
+	}
+}
 //Defaults: ------------------------------------------------------------------------------
 defaultproperties
 {

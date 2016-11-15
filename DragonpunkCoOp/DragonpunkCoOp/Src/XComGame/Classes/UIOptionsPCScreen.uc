@@ -12,7 +12,7 @@ class UIOptionsPCScreen extends UIScreen
 	native(UI)
 	dependson(UIDialogueBox);
 
-//Stores the video settings at the time the screen initializes, fo ruse when exiting without changes. 
+//Stores the video settings at the time the screen initializes, for use when exiting without changes. 
 struct native TUIOptionsInitVideoSettings
 {
 	var bool bMouseLock;
@@ -56,7 +56,6 @@ var localized string m_strResetAllSettings;
 var localized string m_strIgnoreChangesDialogue;
 var localized string m_strIgnoreChangesConfirm;
 var localized string m_strIgnoreChangesCancel;
-var localized string m_strWantToResetToDefaults; 
 var localized string m_strSoldiersLanguageHint;
 
 var localized string m_strTabVideo; 
@@ -183,6 +182,15 @@ enum EUI_PCOptions_GraphicsSettings
 	eGraphicsSetting_BokehDOF
 };
 
+enum ConsoleOptionAttentionType
+{
+	COAT_CATEGORIES,
+	COAT_DETAILS,
+};
+var ConsoleOptionAttentionType AttentionType;
+var transient int PrevMechaListItemType; //EUILineItemType (enum found in UIMechaListItem.uc) used to determine if the NavHelp needs to be refreshed
+
+
 struct native TUIGraphicsOptionSettingConfig
 {
 	var string Label;
@@ -273,10 +281,13 @@ var localized string m_strInterfaceLabel_ShowHealthBars;
 var localized string m_strInterfaceLabel_ShowSubtitles;
 var localized string m_strInterfaceLabel_EdgescrollSpeed;
 var localized string m_strInterfaceLabel_InputDevice;
+var localized string m_strInterfaceLabel_InputDevice_Labels[EControllerIconType]  <BoundEnum = EControllerIconType>;
 var localized string m_strInterfaceLabel_Controller;
 var localized string m_strInterfaceLabel_Mouse;
 var localized string m_strInterfaceLabel_KeyBindings;
 var localized string m_strInterfaceLabel_BindingsButton;
+var localized string m_strInterfaceLabel_AbilityGrid;
+var localized string m_strInterfaceLabel_GeoscapeSpeed;
 
 var localized string m_strVideoLabel_Mode_Desc;
 var localized string m_strVideoLabel_Fullscreen_Desc;
@@ -331,10 +342,14 @@ var localized string m_strInterfaceLabel_ShowHealthBars_Desc;
 var localized string m_strInterfaceLabel_ShowSubtitles_Desc;
 var localized string m_strInterfaceLabel_EdgescrollSpeed_Desc;
 var localized string m_strInterfaceLabel_InputDevice_Desc;
+var localized string m_strInterfaceLabel_InputDevice_ChangeInShell;
 var localized string m_strInterfaceLabel_Controller_Desc;
 var localized string m_strInterfaceLabel_Mouse_Desc;
 var localized string m_strInterfaceLabel_KeyBindings_Desc;
 var localized string m_strInterfaceLabel_BindingsButton_Desc;
+var localized string m_strInterfaceLabel_AbilityGrid_Desc;
+var localized string m_strInterfaceLabel_AbilityGridDisabled_Desc;
+var localized string m_strInterfaceLabel_GeoscapeSpeed_Desc;
 
 var localized string m_strSavingOptionsFailed;
 var localized string m_strSavingOptionsFailed360;
@@ -355,11 +370,17 @@ var bool m_bGammaChanged;
 var bool m_bSavingInProgress;
 var bool m_bApplyingPreset;
 
+var EControllerIconType CurrentIconType;
+var bool bInitialMouseState; //capture if your mose it active when you arrived, so that we can reset if you change and bail. 
+
 var XComOnlineProfileSettings m_kProfileSettings;
 var UIButton	GPUAutoDetectButton;
+
+var UITextTooltip ActiveTooltip;
 var UIButton	SaveAndExitButton;
 var UIButton	ExitWitoutChangesButton;
 var UIButton	CreditsButton;
+var UIButton	ExitButton; 
 
 enum EUI_PCOptions_Tabs
 {
@@ -402,14 +423,18 @@ enum EUI_PCOptions_Gameplay
 	ePCTabGameplay_ShowEnemyHealth,
 //	ePCTabGameplay_UnitMoveSpeed,
 	ePCTabGameplay_EnableZipMode,
+
+	ePCTabGameplay_MAX, // This should always be the last item of the enum.
 };
 enum EUI_PCOptions_Interface
 {
-	//ePCTabInterface_InputDevice,
 	ePCTabInterface_KeyBindings,
 	//ePCTabInterface_HealthBars,
 	ePCTabInterface_Subtitles,
 	ePCTabInterface_EdgeScroll,
+	ePCTabInterface_InputDevice,
+	//ePCTabInterface_AbilityGrid,
+	ePCTabInterface_GeoscapeSpeed,
 };
 
 var config array<int> MaxVisibleCrewConfig;
@@ -866,10 +891,16 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_bAllowCredits = WorldInfo.GRI.GameClass.name == 'XComShell';
 
 	List = Spawn(class'UIList', self);
+	List.bSelectFirstAvailable = false;
 	List.InitList('listMC');
+	List.SetSelectedIndex(-1);
+	List.OnSelectionChanged = OnSelectionChanged;
 
-	RefreshHelp();
+	UpdateNavHelp();
 	Show();
+	AttentionType = COAT_CATEGORIES;
+
+	AllowAllInput(true);
 }
 
 //----------------------------------------------------------------------------
@@ -879,33 +910,53 @@ simulated function OnInit()
 {
 	local int i;
 	local UIMechaListItem ListItem;
+	local GFxObject TabMC;
+	local ASValue GeneralASValue;
+	local Array<ASValue> AsParamArray;
 	bInputReceived = false;
 	
 	super.OnInit();		
-		
-	RefreshHelp();
 
 	NavHelp = PC.Pres.GetNavHelp();
 	if(NavHelp == none)
 		NavHelp = Spawn(class'UINavigationHelp',self).InitNavHelp();
-	NavHelp.ClearButtonHelp();
-	NavHelp.AddBackButton(IgnoreChangesAndExit);
-
+	
 	// list needs to be created backwards for depth sorting
-	for(i= NUM_LISTITEMS - 1; i >= 0; i--) 
+	if( `ISCONTROLLERACTIVE )
 	{
-		ListItem = Spawn( class'UIMechaListItem', List.itemContainer );
-		ListItem.bAnimateOnInit = false;
-		ListItem.InitListItem();
-		ListItem.SetY(i * class'UIMechaListItem'.default.Height);
-		m_arrMechaItems.InsertItem(0, ListItem);
+	//Note the order of creation. Can we merge this? TODO bsteiner 
+		for(i=0; i < NUM_LISTITEMS; ++i)
+		{
+			ListItem = Spawn(class'UIMechaListItem', List.ItemContainer );	
+			ListItem.bAnimateOnInit = false;
+			ListItem.InitListItem();
+			ListItem.SetY(i * class'UIMechaListItem'.default.Height);
+			ListItem.OnMouseEventDelegate = DetailItemMouseEvent;
+			m_arrMechaItems.AddItem(ListItem);
+		}
 	}
-
+	else
+	{
+		for(i= NUM_LISTITEMS - 1; i >= 0; i--) 
+		{
+			ListItem = Spawn( class'UIMechaListItem', List.itemContainer );
+			ListItem.bAnimateOnInit = false;
+			ListItem.InitListItem();
+			ListItem.SetY(i * class'UIMechaListItem'.default.Height);
+			ListItem.OnMouseEventDelegate = DetailItemMouseEvent;
+			m_arrMechaItems.InsertItem(0, ListItem);
+		}
+	}
+	
 	m_kProfileSettings = `XPROFILESETTINGS;
 
 	InitialMaxVisibleCrew = m_kProfileSettings.Data.MaxVisibleCrew;
 	// Save profile settings so they can be restored if the user cancels
 	SavePreviousProfileSettingsToBuffer();
+
+	CurrentIconType = m_kProfileSettings.Data.m_eControllerIconType;
+	bInitialMouseState = m_kProfileSettings.Data.IsMouseActive(); 
+	UpdateNavHelp(true);
 
 	m_bAnyValueChanged = false;
 	m_GEngineValueChanged = false;
@@ -915,6 +966,35 @@ simulated function OnInit()
 
 	RefreshData();
 	SetSelectedTab(ePCTab_Audio); // audio tab on creation
+
+	GeneralASValue.Type = AS_Number;
+	i = eUIButtonStyle_SELECTED_SHOWS_HOTLINK;
+	GeneralASValue.n = i;
+	AsParamArray.AddItem( GeneralASValue );
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab0");
+	if(TabMC != none)
+		TabMC.Invoke("setStyle", AsParamArray);
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab1");
+	if(TabMC != none)
+		TabMC.Invoke("setStyle", AsParamArray);
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab2");
+	if(TabMC != none)
+		TabMC.Invoke("setStyle", AsParamArray);
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab3");
+	if(TabMC != none)
+		TabMC.Invoke("setStyle", AsParamArray);
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab4");
+	if(TabMC != none)
+		TabMC.Invoke("setStyle", AsParamArray);
+
+	//DisableNavigation();
+	//UnSelectTabByIndex(ePCTab_Video);
+
 
 	InitNewSysSettings();
 	StoreInitGraphicsSettings();
@@ -926,6 +1006,14 @@ simulated function OnInit()
 		Show();
 
 	SetTimer(0.1, true, 'WatchForChanges');
+}
+
+function DetailItemMouseEvent(UIPanel Panel, int Cmd)
+{
+	if(Cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_IN)
+		AttentionType = COAT_DETAILS;
+	else if(Cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT)
+		AttentionType = COAT_CATEGORIES;
 }
 
 // This is a replacement for the Tick(), specifically because the Tick needs to pause and control the countdown timer 
@@ -947,16 +1035,156 @@ function WatchForChanges()
 	}
 }
 
-simulated public function RefreshHelp()
+simulated function OnSelectionChanged(UIList ContainerList, int ItemIndex)
 {
+	local UIMechaListItem ListItem;
+	
+	UpdateMechItemNavHelp(ItemIndex); //INS: - JTA 2016/3/18
+
+	if (ActiveTooltip != none)
+	{
+		if (`PRES.m_eUIMode != eUIMode_Shell)
+		{
+			ActiveTooltip.HideTooltip();
+		}
+
+		XComPresentationLayerBase(Owner).m_kTooltipMgr.DeactivateTooltip(ActiveTooltip, true);
+		ActiveTooltip = none;
+	}
+
+	ListItem = UIMechaListItem(ContainerList.GetSelectedItem());
+	if (ListItem != none)
+	{
+		if (ListItem.BG.bHasTooltip)
+		{
+			ActiveTooltip = UITextTooltip(XComPresentationLayerBase(Owner).m_kTooltipMgr.GetTooltipByID(ListItem.BG.CachedTooltipId));
+			if (ActiveTooltip != none)
+			{
+				ActiveTooltip.SetFollowMouse(false);
+				ActiveTooltip.SetTooltipPosition(950.0, 200.0);
+				if (`PRES.m_eUIMode == eUIMode_Shell)
+				{
+					ActiveTooltip.SetDelay(0.6);
+				}
+				else
+				{
+					ActiveTooltip.SetDelay(0.0);
+					ActiveTooltip.ShowTooltip();
+				}
+
+				XComPresentationLayerBase(Owner).m_kTooltipMgr.ActivateTooltip(ActiveTooltip);
+			}
+		}
+	}
+}
+
+//Determines if a change is necessary in the Navhelp
+simulated function UpdateMechItemNavHelp(int Index)
+{
+	local UIMechaListItem MechaListItem;
+	local int NewMechaListItemType; //enum EUILineItemType found in UIMechaListItem;
+
+	if(Index < 0) //SelectedIndex on the List is set to -1 when it loses focus, using this to trigger NavHelp change on the category view
+	{
+		UpdateNavHelp(); //focus is being moved to categories
+		PrevMechaListItemType = 0; //sets to the default so when the list gains focus again it will detect a change
+		return;
+	}
+
+	//Checks to see if the selected list item is the same as the previously selected list item (to determine if we need to refresh the navhelp)
+	MechaListItem = UIMechaListItem(List.GetSelectedItem());
+	if(MechaListItem != None)
+	{
+		NewMechaListItemType = int(MechaListItem.Type);
+		if(NewMechaListItemType != PrevMechaListItemType)
+		{
+			PrevMechaListItemType = NewMechaListItemType;
+			UpdateNavHelp();
+		}
+	}
+}
+
+simulated function UpdateNavHelp( bool bWipeButtons = false )
+{
+	local UIMechaListItem ListItem;
 	local string strGameClassName;
 	local bool bInShell; 
+	local bool bIsControllerSelectedOnSpinner; 
 
-	if( GPUAutoDetectButton == none )
+	bIsControllerSelectedOnSpinner = (CurrentIconType != eControllerIconType_Mouse); 
+
+	if( bWipeButtons )
+	{
+		if( GPUAutoDetectButton != none )
+			GPUAutoDetectButton.Remove();
+		GPUAutoDetectButton = none;
+
+		if( CreditsButton != none )
+			CreditsButton.Remove();
+		CreditsButton = none;
+		
+		if( SaveAndExitButton != none )
+			SaveAndExitButton.Remove();
+		SaveAndExitButton = none;
+
+		if( ExitWitoutChangesButton != none )
+			ExitWitoutChangesButton.Remove();
+		ExitWitoutChangesButton = none;
+
+		if( ExitButton != none )
+			ExitButton.Remove();
+		ExitButton = none;
+	}
+
+	NavHelp.ClearButtonHelp();
+
+	if (bIsControllerSelectedOnSpinner)
+	{
+		//NavHelp.AddBackButton();
+
+		//determines if focus is on the RIGHT column
+		if (AttentionType == COAT_DETAILS)
+		{
+			ListItem = UIMechaListItem(List.GetSelectedItem());
+			if (ListItem.Type == EUILineItemType_Slider) //SLIDER
+				NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericAdjust, class'UIUtilities_Input'.const.ICON_DPAD_HORIZONTAL);
+			else if (ListItem.Type == EUILineItemType_Checkbox)//CHECKBOX
+				// <workshop> ORBIS_DEFAULT_BUTTON adsmith 2016-03-28
+				// WAS:
+				//NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericToggle, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+				NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericToggle, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+			// </workshop>
+		}
+		else //COAT_CATEGORIES
+			NavHelp.AddSelectNavHelp();
+	}
+	
+	if( ExitButton == none && bIsControllerSelectedOnSpinner == false )
+	{
+		ExitButton = Spawn(class'UIButton', self);
+		ExitButton.bAnimateOnInit = false;
+		ExitButton.InitButton(, m_strRestoreSettings, IgnoreChangesAndExitPCButton);
+		ExitButton.SetPosition(100, 820);
+		ExitButton.DisableNavigation();
+	}
+
+
+	if( GPUAutoDetectButton == none && m_iCurrentTab == ePCTab_Graphics )
 	{
 		GPUAutoDetectButton = Spawn(class'UIButton', self);
-		GPUAutoDetectButton.InitButton(, m_strGPUAutoDetect, RunGPUAutoDetectFromOptions);
-		GPUAutoDetectButton.SetPosition(100, 800);
+		GPUAutoDetectButton.bAnimateOnInit = false;
+		if (bIsControllerSelectedOnSpinner)
+		{
+			GPUAutoDetectButton.InitButton(, m_strGPUAutoDetect, RunGPUAutoDetectFromOptions, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+			GPUAutoDetectButton.SetGamepadIcon(class 'UIUtilities_Input'.const.ICON_RSCLICK_R3);
+
+		}
+		else
+		{
+			GPUAutoDetectButton.InitButton(, m_strGPUAutoDetect, RunGPUAutoDetectFromOptions);
+		}
+		GPUAutoDetectButton.SetPosition(100, 790);
+		GPUAutoDetectButton.DisableNavigation();
 	}
 
 	strGameClassName = String(WorldInfo.GRI.GameClass.name);
@@ -964,21 +1192,54 @@ simulated public function RefreshHelp()
 	if( CreditsButton == none  && bInShell )
 	{
 		CreditsButton = Spawn(class'UIButton', self);
-		CreditsButton.InitButton(, m_strCreditsLink, ViewCredits);
+		CreditsButton.bAnimateOnInit = false;
+		if(bIsControllerSelectedOnSpinner)
+		{
+			CreditsButton.InitButton(, m_strCreditsLink, , eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+			CreditsButton.SetGamepadIcon(class 'UIUtilities_Input'.const.ICON_LSCLICK_L3);
+		}
+		else
+		{
+			CreditsButton.InitButton(, m_strCreditsLink, ViewCredits);
+		}
 		CreditsButton.SetPosition(100, 750); //Relative to this screen panel
+		CreditsButton.DisableNavigation();
 	}
+
 	if( SaveAndExitButton == none )
 	{
 		SaveAndExitButton = Spawn(class'UIButton', self);
-		SaveAndExitButton.InitButton(, m_strSaveAndExit, SaveAndExit);
-		SaveAndExitButton.SetPosition(690, 850); //Relative to this screen panel
+		SaveAndExitButton.bAnimateOnInit = false;
+		if (bIsControllerSelectedOnSpinner)
+		{
+			SaveAndExitButton.InitButton(, m_strSaveAndExit, SaveAndExit, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+			SaveAndExitButton.SetGamepadIcon(class 'UIUtilities_Input'.const.ICON_X_SQUARE);
+		}
+		else
+		{
+			SaveAndExitButton.InitButton(, m_strSaveAndExit, SaveAndExit);
+		}
+		SaveAndExitButton.DisableNavigation();
+		SaveAndExitButton.SetPosition(760, 850); //Relative to this screen panel
 	}
-	if( ExitWitoutChangesButton == none )
+
+	if (ExitWitoutChangesButton == none )
 	{
 		ExitWitoutChangesButton = Spawn(class'UIButton', self);
-		ExitWitoutChangesButton.InitButton(, m_strRestoreSettings, RestoreInitGraphicsSettings);
-		ExitWitoutChangesButton.SetPosition(100, 850); //Relative to this screen panel
+		ExitWitoutChangesButton.bAnimateOnInit = false;
+		if (bIsControllerSelectedOnSpinner)
+		{
+			ExitWitoutChangesButton.InitButton(, m_strRestoreSettings, RestoreInitGraphicsSettings, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+			ExitWitoutChangesButton.SetGamepadIcon(class 'UIUtilities_Input'.static.GetBackButtonIcon());
+		}
+		ExitWitoutChangesButton.SetPosition(100, 820);
+		ExitWitoutChangesButton.DisableNavigation();
 	}
+}
+
+simulated function RefreshCurrentTab()
+{
+	SetSelectedTab(m_iCurrentTab, true);
 }
 
 simulated function SavePreviousProfileSettingsToBuffer()
@@ -1004,6 +1265,10 @@ simulated function RestorePreviousProfileSettings()
 		
 		// Video options are system-level and not in the profile.
 		ResetInitVideoSettings();
+
+		CurrentIconType = bInitialMouseState ? eControllerIconType_Mouse : eControllerIconType_XBOX; 
+		UpdateInputDevice_CycleSpinner(none, 0);
+		SaveInputType();
 	}
 }
 
@@ -1018,6 +1283,8 @@ simulated event ModifyHearSoundComponent(AudioComponent AC)
 
 simulated function bool OnUnrealCommand(int cmd, int ActionMask)
 {
+	local bool bHandled;
+
 	if( !bIsInited || m_bSavingInProgress ) return true; 
 
 	bInputReceived = true;
@@ -1025,65 +1292,132 @@ simulated function bool OnUnrealCommand(int cmd, int ActionMask)
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, ActionMask) )
 		return true; // Consume All Input!
 
-	switch(cmd)
+	
+	switch( cmd )
 	{
-		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
-			SaveAndExit(none);
-			break;
+	case class'UIUtilities_Input'.const.FXS_KEY_ENTER :
+	case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR :
+		//<workshop> UI_FIXES_FOR_OPTIONS_ON_CONSOLE kmartinez 2015-10-15
+		// WAS:
+		////OnUAccept();
+		if( OnAdvanceButtonPressed() )
+			return true;
+		//</workshop>
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE :
+		GoBack();
+		return true;
+		break;
+	case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN :
+		IgnoreChangesAndExit();
+		break;
+
+
+	case class'UIUtilities_Input'.const.FXS_ARROW_UP :
+	case class'UIUtilities_Input'.const.FXS_DPAD_UP :
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP :
+		bHandled = OnUDPadUp();
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_ARROW_DOWN :
+	case class'UIUtilities_Input'.const.FXS_DPAD_DOWN :
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN :
+		bHandled = OnUDPadDown();
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_KEY_PAGEUP :
+		SetSelectedTab(m_iCurrentTab - 1);
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_KEY_PAGEDN :
+		if( (m_iCurrentTab + 1) < ePCTab_MAX )
+		{
+			SetSelectedTab(m_iCurrentTab + 1);
+		}
+		else
+		{
+			Navigator.SetSelected(SaveAndExitButton);
+		}
+														break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X :
+		SaveAndExit(none);
+		break;
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A :
+		//<workshop> UI_FIXES_FOR_OPTIONS_ON_CONSOLE kmartinez 2015-10-15
+		// WAS:
+		////OnUAccept();
+		if( OnAdvanceButtonPressed() )
+			return true;
+		//</workshop>
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_B :
+		GoBack();
+		return true;
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_L3 :
+		if( m_bAllowCredits && Movie.Pres.ScreenStack.GetFirstInstanceOf(class'UICredits') == none )
+			Movie.Pres.UICredits(false);
+		return true;
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_R3 :
+		if( GPUAutoDetectButton != none )
+			GPUAutoDetectButton.Click();
+		return true;
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_DPAD_UP :
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP :
+	case class'UIUtilities_Input'.const.FXS_ARROW_UP :
+		bHandled = OnUDPadUp();
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_DPAD_DOWN :
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN :
+	case class'UIUtilities_Input'.const.FXS_ARROW_DOWN :
+		bHandled = OnUDPadDown();
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT :
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT :
+	case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT :
+		bHandled = OnUDPadRight();
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_DPAD_LEFT :
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT :
+	case class'UIUtilities_Input'.const.FXS_ARROW_LEFT :
+		bHandled = OnUDPadLeft();
+		break;
+
+	default:
+		// Do not reset handled, consume input since this
+		// is the options menu which stops any other systems.
+		bHandled = false;
+		break;
 		
-		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
-		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
-		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
-			IgnoreChangesAndExit();
-			break;
-
-		case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
-			ResetToDefaults();
-			break; 		
-
-		case class'UIUtilities_Input'.const.FXS_BUTTON_RTRIGGER:	
-			if( m_bAllowCredits )
-				Movie.Pres.UICredits( false );
-			break;
-
-		case class'UIUtilities_Input'.const.FXS_DPAD_UP:
-		case class'UIUtilities_Input'.const.FXS_ARROW_UP:
-		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP:
-			OnUDPadUp();
-			break;
-
-		case class'UIUtilities_Input'.const.FXS_DPAD_DOWN:
-		case class'UIUtilities_Input'.const.FXS_ARROW_DOWN:
-		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN:
-			OnUDPadDown();
-			break;
-
-		case class'UIUtilities_Input'.const.FXS_KEY_PAGEUP:
-		case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
-			SetSelectedTab( m_iCurrentTab - 1);
-			break;
-
-		case class'UIUtilities_Input'.const.FXS_KEY_PAGEDN:
-		case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
-			if ((m_iCurrentTab + 1) < ePCTab_MAX)
-			{
-				SetSelectedTab( m_iCurrentTab + 1 ); 
-			}
-			else
-			{
-				Navigator.SetSelected(SaveAndExitButton);
-			}
-			break;
-
-		default:
-			// Do not reset handled, consume input since this
-			// is the options menu which stops any other systems.
-			break;			
 	}
 
+	if (!bHandled && List.GetSelectedItem() != none && List.GetSelectedItem().OnUnrealCommand(cmd, ActionMask))
+	{
+		return true;
+	}
+	
 	// Assume input is handled unless told otherwise (unlikely
 	// because this is the options menu; it handles alllllllll.)
-	return super.OnUnrealCommand(cmd, ActionMask);
+	return bHandled || super.OnUnrealCommand(cmd, ActionMask);
+}
+
+simulated function AllowAllInput(bool bAllow)
+{
+	local XComInputBase InputBase; 
+
+	InputBase = XComInputBase(PC.PlayerInput);
+	InputBase.bAllowAllInput = bAllow;
 }
 
 simulated native function bool GetCurrentMouseLock();
@@ -1112,8 +1446,14 @@ simulated function RefreshData()
 
 function SetVideoTabSelected()
 {
+	local GFxObject VideoTabMC;
+//	local int i;
 	ResetMechaListItems();
 
+	VideoTabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab1");
+	if(VideoTabMC != none)
+		VideoTabMC.ActionScriptVoid("select");
+		
 	// NOTE: Keeping the actual widgets of removed settings so that the remaining
 	//		 ones are still operational - KD
 	// Mode: --------------------------------------------
@@ -1140,10 +1480,18 @@ function SetVideoTabSelected()
 	m_arrMechaItems[ePCTabVideo_VSync].UpdateDataCheckbox(m_strVideoLabel_VSyncToggle, "", m_kInitGraphicsSettings.bVSync, UpdateVSync);
 	m_arrMechaItems[ePCTabVideo_VSync].BG.SetTooltipText(m_strVideoLabel_VSyncToggle_Desc, , , 10, , , , 0.0f);
 
+
+	//m_arrMechaItems[ePCTabVideo_Gamma].EnableNavigation();
+
 	// Frame Rate Smoothing toggle: --------------------------------
 	m_arrMechaItems[ePCTabVideo_FRSmoothing].UpdateDataCheckbox(m_strVideoLabel_FRSmoothingToggle, "", GetCurrentFRSmoothingToggle(), UpdateFRSmoothing);
 	m_arrMechaItems[ePCTabVideo_FRSmoothing].BG.SetTooltipText(m_strVideoLabel_FRSmoothingToggle_Desc, , , 10, , , , 0.0f);
 	
+	/*for( i = ePCTabVideo_Max; i < NUM_LISTITEMS; i++)
+	{
+		m_arrMechaItems[i].Hide();
+		m_arrMechaItems[i].DisableNavigation();
+	}*/
 	RenableMechaListItems(ePCTabVideo_Max);
 }
 
@@ -1254,6 +1602,11 @@ public function CheckboxUpdated(UICheckbox checkboxControl)
 function SetGraphicsTabSelected()
 {
 	local int i;
+	local GFxObject GraphicsTabMC;
+
+	GraphicsTabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab2");
+	if(GraphicsTabMC != none)
+		GraphicsTabMC.ActionScriptVoid("select");
 	m_bApplyingPreset = true;
 
 	ResetMechaListItems();
@@ -1268,17 +1621,31 @@ function SetGraphicsTabSelected()
 		{
 			m_arrMechaItems[GraphicsOptions[i].Order].UpdateDataCheckbox(GraphicsOptions[i].Label, "", bool(GraphicsVals[i]), CheckboxUpdated);
 		}
+
+		//m_arrMechaItems[i].EnableNavigation();
 	}
 
 	SetPresetState();
 	ApplyPresetState(true);
 
+	/*for( i = ePCGraphics_Max; i < NUM_LISTITEMS; i++)
+	{
+		m_arrMechaItems[i].Hide();
+		m_arrMechaItems[i].DisableNavigation();
+	}*/
 	RenableMechaListItems(ePCGraphics_Max);
 }
 
 function SetAudioTabSelected()
 {
-	ResetMechaListItems();
+	local GFxObject AudioTabMC;
+//	local int i;
+
+	AudioTabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab0");
+	if(AudioTabMC != none)
+		AudioTabMC.ActionScriptVoid("select");
+		
+	//ResetMechaListItems();
 
 	// Master Volume: --------------------------------------------
 	m_arrMechaItems[ePCTabAudio_MasterVolume].UpdateDataSlider(m_strAudioLabel_MasterVolume, "", m_kProfileSettings.Data.m_iMasterVolume, , UpdateMasterVolume);
@@ -1317,7 +1684,21 @@ function SetAudioTabSelected()
 	m_arrMechaItems[ePCTabAudio_EnableAmbientVO].UpdateDataCheckbox(m_strAudioLabel_AmbientVO, "", m_kProfileSettings.Data.m_bAmbientVO, UpdateAmbientVO);
 	m_arrMechaItems[ePCTabAudio_EnableAmbientVO].BG.SetTooltipText(m_strAudioLabel_AmbientVO_Desc, , , 10, , , , 0.0f);
 	
-	RenableMechaListItems(ePCTabAudio_Max);
+	/*m_arrMechaItems[ePCTabAudio_MasterVolume].EnableNavigation();
+	m_arrMechaItems[ePCTabAudio_VoiceVolume].EnableNavigation();
+	m_arrMechaItems[ePCTabAudio_SoundEffectsVolume].EnableNavigation();
+	m_arrMechaItems[ePCTabAudio_MusicVolume].EnableNavigation();
+	m_arrMechaItems[ePCTabAudio_VOIPVolume].EnableNavigation();
+	m_arrMechaItems[ePCTabAudio_VOIPPushToTalk].EnableNavigation();
+	m_arrMechaItems[ePCTabAudio_EnableSoldierSpeech].EnableNavigation();
+	m_arrMechaItems[ePCTabAudio_ForeignLanguages].EnableNavigation();
+	m_arrMechaItems[ePCTabAudio_EnableAmbientVO].EnableNavigation();
+	for( i = ePCTabAudio_Max; i < NUM_LISTITEMS; i++)
+	{
+		m_arrMechaItems[i].Hide();
+		m_arrMechaItems[i].DisableNavigation();
+	}*/
+	RenableMechaListItems(ePCTabAudio_Max); 
 }
 
 function SetGameplayTabSelected()
@@ -1333,7 +1714,13 @@ function SetGameplayTabSelected()
 	local string Tooltip;
 	local array<X2DownloadableContentInfo> DLCInfos;
 	local int DLCInfoIndex;
+	local GFxObject GameplayTabMC;
+	
 	ResetMechaListItems();
+	
+	GameplayTabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab3");
+	if(GameplayTabMC != none)
+		GameplayTabMC.ActionScriptVoid("select");
 
 	// Glam Cam: --------------------------------------------
 	m_arrMechaItems[ePCTabGameplay_GlamCam].UpdateDataCheckbox(m_strGameplayLabel_GlamCam,"",  m_kProfileSettings.Data.m_bGlamCam, UpdateGlamCam);
@@ -1380,7 +1767,7 @@ function SetGameplayTabSelected()
 			}
 		}
 
-		MechaItemIndex = ePCTabGameplay_EnableZipMode + Index;
+		MechaItemIndex = ePCTabGameplay_Max + Index - 1;
 		m_arrMechaItems[MechaItemIndex].UpdateDataSlider(Label, "", int(m_kProfileSettings.Data.PartPackPresets[PartPackPresetIndex].ChanceToSelect * 100.0f), , UpdatePartChance);
 		m_arrMechaItems[MechaItemIndex].BG.SetTooltipText(Tooltip, , , 10, , , , 0.0f);
 		if( Label == "" )
@@ -1396,13 +1783,60 @@ function SetGameplayTabSelected()
 
 }
 
+public function UnSelectTabByIndex(int Index)
+{
+	local GFxObject TabMC;
+	local String TabNumberStr;
+
+	if( (Index < 0) || (Index >= ePCTab_MAX))
+		return;
+
+	TabNumberStr = Chr(48+Index);
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab"$TabNumberStr);
+	if(TabMC != none)
+		TabMC.ActionScriptVoid("deselect");
+}
+
+public function UnSelectAllTabsVisually()
+{
+	local GFxObject TabMC;
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab0");
+	if(TabMC != none)
+		TabMC.ActionScriptVoid("deselect");
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab1");
+	if(TabMC != none)
+		TabMC.ActionScriptVoid("deselect");
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab2");
+	if(TabMC != none)
+		TabMC.ActionScriptVoid("deselect");
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab3");
+	if(TabMC != none)
+		TabMC.ActionScriptVoid("deselect");
+
+	TabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab4");
+	if(TabMC != none)
+		TabMC.ActionScriptVoid("deselect");
+
+}
 function SetInterfaceTabSelected()
 {
-	ResetMechaListItems();
+	local GFxObject InterfaceTabMC;
+	//	local int i;
+	local string strGameClassName;
+	local bool bInShell;
 
-	// Input Device: --------------------------------------------
-	//m_arrMechaItems[ePCTabInterface_InputDevice].UpdateDataSpinner(m_strInterfaceLabel_InputDevice,"",  UpdateInputDevice_ToggleMouse);
-	//m_arrMechaItems[].BG.SetTooltipText(_Desc, , , 10, , , , 0.0f);
+	strGameClassName = String(WorldInfo.GRI.GameClass.name);
+	bInShell = (strGameClassName == "XComShell");
+
+	InterfaceTabMC = Movie.GetVariableObject(MCPath$".TabGroup.Tab4");
+	if(InterfaceTabMC != none)
+		InterfaceTabMC.ActionScriptVoid("select");
+		
+	ResetMechaListItems();
 
 	// Key Bindings screen
 	m_arrMechaItems[ePCTabInterface_KeyBindings].UpdateDataButton(m_strInterfaceLabel_KeyBindings, m_strInterfaceLabel_BindingsButton, OpenKeyBindingsScreen);
@@ -1412,15 +1846,50 @@ function SetInterfaceTabSelected()
 	// Subtitles: -------------------------------------------
 	m_arrMechaItems[ePCTabInterface_Subtitles].UpdateDataCheckbox(m_strInterfaceLabel_ShowSubtitles, "", m_kProfileSettings.Data.m_bSubtitles, UpdateSubtitles);
 	m_arrMechaItems[ePCTabInterface_Subtitles].BG.SetTooltipText(m_strInterfaceLabel_ShowSubtitles_Desc, , , 10, , , , 0.0f);
+
+	/* //TODO: enable these once integrated from controller. bsteiner 
+	m_arrMechaItems[ePCTabInterface_AbilityGrid].UpdateDataCheckbox(m_strInterfaceLabel_AbilityGrid, "", m_kProfileSettings.Data.m_bAbilityGrid, UpdateAbilityGrid);
+	m_arrMechaItems[ePCTabInterface_AbilityGrid].BG.SetTooltipText(m_strInterfaceLabel_AbilityGrid_Desc,,, 10,,,, 0.0f);
+	if (`PRES.m_eUIMode == eUIMode_Tactical)
+	{
+		m_arrMechaItems[ePCTabInterface_AbilityGrid].SetDisabled(true);
+		m_arrMechaItems[ePCTabInterface_AbilityGrid].BG.SetTooltipText(m_strInterfaceLabel_AbilityGridDisabled_Desc,,, 10,,,, 0.0f);
+	}
+*/
+	m_arrMechaItems[ePCTabInterface_GeoscapeSpeed].UpdateDataSlider(m_strInterfaceLabel_GeoscapeSpeed, "", m_kProfileSettings.Data.m_GeoscapeSpeed,, UpdateGeoscapeSpeed);
+	m_arrMechaItems[ePCTabInterface_GeoscapeSpeed].BG.SetTooltipText(m_strInterfaceLabel_GeoscapeSpeed_Desc,,, 10,,,, 0.0f);
+
 	
 	// Edge scrolling: -------------------------------------
 	m_arrMechaItems[ePCTabInterface_EdgeScroll].UpdateDataSlider(m_strInterfaceLabel_EdgescrollSpeed, "", m_kProfileSettings.Data.m_fScrollSpeed, , UpdateEdgeScroll);
 	m_arrMechaItems[ePCTabInterface_EdgeScroll].BG.SetTooltipText(m_strInterfaceLabel_EdgescrollSpeed_Desc, , , 10, , , , 0.0f);
 	m_arrMechaItems[ePCTabInterface_EdgeScroll].SetDisabled(WorldInfo.IsConsoleBuild());
 
+	// Input Device: --------------------------------------------
+	m_arrMechaItems[ePCTabInterface_InputDevice].UpdateDataSpinner(m_strInterfaceLabel_InputDevice, GetInputDeviceLabel(),  UpdateInputDevice_CycleSpinner);
+	m_arrMechaItems[ePCTabInterface_InputDevice].BG.SetTooltipText(m_strInterfaceLabel_InputDevice_Desc, , , 10, , , , 0.0f);
+	RefreshConnectedControllers();
+
 	//-------------------------------------------------------
 
+/*	m_arrMechaItems[ePCTabInterface_KeyBindings].EnableNavigation();
+	m_arrMechaItems[ePCTabInterface_Subtitles].EnableNavigation();
+	m_arrMechaItems[ePCTabInterface_AbilityGrid].EnableNavigation();
+	m_arrMechaItems[ePCTabInterface_GeoscapeSpeed].EnableNavigation();
+	m_arrMechaItems[ePCTabInterface_EdgeScroll].EnableNavigation();
+	m_arrMechaItems[ePCTabInterface_InputDevice].EnableNavigation();
+
+
+	for( i = ePCTabInterface_Max; i < NUM_LISTITEMS; i++)
+	{
+		m_arrMechaItems[i].Hide();
+		m_arrMechaItems[i].DisableNavigation();
+	}*/
+
 	RenableMechaListItems(ePCTabInterface_Max);
+
+	if( !bInShell  ) 
+		m_arrMechaItems[ePCTabInterface_InputDevice].SetDisabled(!bInShell, m_strInterfaceLabel_InputDevice_ChangeInShell);
 }
 //-------------------------------------------------------
 
@@ -1682,7 +2151,6 @@ public function UpdateAmbientVO(UICheckbox CheckboxControl)
 // DATA HOOKS - GAMEPLAY - TAB 3
 // ========================================================
 
-
 public function UpdateGlamCam(UICheckbox CheckboxControl)
 {	
 	m_kProfileSettings.Data.m_bGlamCam = CheckboxControl.bChecked; 
@@ -1740,6 +2208,10 @@ public function UpdatePartChance(UISlider SliderControl)
 
 public function OpenKeyBindingsScreen(UIButton ButtonSource)
 {
+	SaveInputType();
+
+	if (!m_kProfileSettings.Data.IsMouseActive()) return; 
+
 	if( `XENGINE.m_SteamControllerManager.IsSteamControllerActive() )
 		`XENGINE.m_SteamControllerManager.ShowSteamControllerBindings();
 	else 
@@ -1755,6 +2227,20 @@ public function UpdateSubtitles(UICheckbox CheckboxControl)
 	Movie.Pres.PlayUISound(eSUISound_MenuSelect);
 	m_bAnyValueChanged = true;
 }
+public function UpdateAbilityGrid(UICheckbox CheckboxControl)
+{
+	m_kProfileSettings.Data.m_bAbilityGrid = CheckboxControl.bChecked;
+	Movie.Pres.PlayUISound(eSUISound_MenuSelect);
+	m_bAnyValueChanged = true;
+}
+
+public function UpdateGeoscapeSpeed(UISlider SliderControl)
+{
+	m_kProfileSettings.Data.m_GeoscapeSpeed = SliderControl.percent;
+	Movie.Pres.PlayUISound(eSUISound_MenuSelect);
+	m_bAnyValueChanged = true;
+}
+
 public function UpdateEdgeScroll(UISlider SliderControl)
 {
 	m_kProfileSettings.Data.m_fScrollSpeed = SliderControl.percent;
@@ -1762,38 +2248,86 @@ public function UpdateEdgeScroll(UISlider SliderControl)
 	m_bAnyValueChanged = true;
 }
 
-function UpdateInputDevice_ToggleMouse(UIListItemSpinner SpinnerControl, int Direction)
+function string GetInputDeviceLabel()
 {
-	XComInputBase(PC.PlayerInput).ClearAllRepeatTimers();
+	return m_strInterfaceLabel_InputDevice_Labels[CurrentIconType];
+}
 
-	if( m_kProfileSettings.Data.IsMouseActive() )
-	{
-		m_kProfileSettings.Data.ActivateMouse(false);
-		`ONLINEEVENTMGR.EnumGamepads_PC(); // Detect gamepads that have been connected since the game launched
-	}
+function UpdateInputDevice_ToggleMouse(UIListItemSpinner SpinnerControl, int Direction){} //deprecated - bsteiner 
+function UpdateInputDevice_CycleSpinner(UIListItemSpinner SpinnerControl, int Direction)
+{
+	local int IconType; 
+
+	IconType = CurrentIconType + Direction;
+
+	if (IconType < 0)
+		CurrentIconType = EControllerIconType(eControllerIconType_MAX - 1);
+	else if (IconType >= eControllerIconType_MAX)
+		CurrentIconType = EControllerIconType(0);
 	else
-	{
-		m_kProfileSettings.Data.ActivateMouse(true);
-	}
+		CurrentIconType = EControllerIconType(IconType);
 	
-	RefreshInputDevice();
-	RefreshHelp();
+	`ONLINEEVENTMGR.EnumGamepads_PC(); // Detect gamepads that have been connected since the game launched
+	
+	//Safety check 
+	if (`ONLINEEVENTMGR.GamepadConnected_PC() == false)
+		IconType = eControllerIconType_Mouse;
+
+	m_kProfileSettings.Data.SetControllerIconType(CurrentIconType);
+
+	//Notify flash environment that device changed.
+	Movie.Pres.Get2DMovie().SetMouseActive(CurrentIconType == eControllerIconType_Mouse);
+	Movie.Pres.Get3DMovie().SetMouseActive(CurrentIconType == eControllerIconType_Mouse);
+	Movie.Pres.GetModalMovie().SetMouseActive(CurrentIconType == eControllerIconType_Mouse);
+
+	Movie.Pres.Get2DMovie().SetPlatformIcons(CurrentIconType);
+	Movie.Pres.Get3DMovie().SetPlatformIcons(CurrentIconType);
+	Movie.Pres.GetModalMovie().SetPlatformIcons(CurrentIconType);
+
+	UpdateNavHelp(true);
+	SpinnerControl.SetValue(GetInputDeviceLabel());
 
 	Movie.Pres.PlayUISound(eSUISound_MenuSelect);
 	m_bAnyValueChanged = true;
 }
+
+simulated function RefreshConnectedControllers()
+{
+	local bool bInShell;
+	local string strGameClassName;
+
+	strGameClassName = String(WorldInfo.GRI.GameClass.name);
+	bInShell = (strGameClassName == "XComShell");
+
+	`ONLINEEVENTMGR.EnumGamepads_PC(); // Detect gamepads that have been connected since the game launched
+
+	if (m_iCurrentTab == ePCTab_Interface)
+	{
+		if(!bInShell)
+			m_arrMechaItems[ePCTabInterface_InputDevice].SetDisabled(true);
+		else
+			m_arrMechaItems[ePCTabInterface_InputDevice].SetDisabled(`ONLINEEVENTMGR.GamepadConnected_PC() == false);
+	}
+}
+
 function RefreshInputDevice()
 {
+	local bool bInShell;
+	local string strGameClassName;
+
+	strGameClassName = String(WorldInfo.GRI.GameClass.name);
+	bInShell = (strGameClassName == "XComShell");
+
 	OnInputDeviceChange();
 	if(m_iCurrentTab == ePCTab_Interface)
 	{
 		m_arrMechaItems[ePCTabInterface_KeyBindings].SetDisabled(!m_kProfileSettings.Data.IsMouseActive());
+		
+		if( !bInShell )
+			m_arrMechaItems[ePCTabInterface_InputDevice].SetDisabled(!bInShell, m_strInterfaceLabel_InputDevice_ChangeInShell);
+			
+		RefreshConnectedControllers();
 	}
-
-	if ( m_kProfileSettings.Data.IsMouseActive() )
-		Movie.ActivateMouse();
-	else
-		Movie.DeactivateMouse();
 }
 //-------------------------------------------------------
 // Added by Scott B. I need a way to identify this change and clear the movement borders.
@@ -1839,25 +2373,6 @@ simulated function SetSupportedResolutions()
 	SetResolutionDropdown();
 }
 
-
-function ResetToDefaults()
-{
-	local TDialogueBoxData kDialogData;
-	kDialogData.strText = m_strWantToResetToDefaults;
-	kDialogData.fnCallback = ConfirmUserWantsToResetToDefault; 
-	kDialogData.strCancel = class'UIDialogueBox'.default.m_strDefaultCancelLabel;
-	kDialogData.strAccept = class'UIDialogueBox'.default.m_strDefaultAcceptLabel;
-
-	XComPresentationLayerBase(Owner).UIRaiseDialog(kDialogData);
-}
-public function ConfirmUserWantsToResetToDefault(eUIAction eAction)
-{
-	if( eAction == eUIAction_Accept )
-	{
-		ResetProfileSettings();
-	}
-}
-
 simulated function ResetProfileSettings()
 {
 	local bool bInShell;
@@ -1865,11 +2380,13 @@ simulated function ResetProfileSettings()
 
 	if( m_kProfileSettings != none )
 	{		
+		ResetToMouse();
+
 		// Create a new data blob with default settings.
 		//m_kProfileSettings.Data = new(m_kProfileSettings) class'XComOnlineProfileSettingsDataBlob'; 
 		strGameClassName = String(WorldInfo.GRI.GameClass.name);
 		bInShell = (strGameClassName == "XComShell"); 
-		m_kProfileSettings.Options_ResetToDefaults(bInShell);
+		m_kProfileSettings.Options_ResetToDefaults(bInShell);		
 		
 		UpdateMouseLockNative(true);
 		UpdateFRSmoothingNative(true);
@@ -1880,8 +2397,14 @@ simulated function ResetProfileSettings()
 		m_kProfileSettings.ApplyOptionsSettings();
 		RefreshData();
 		RefreshInputDevice();
-		RefreshHelp();
+		UpdateNavHelp();
+		RefreshCurrentTab();
 	}
+}
+simulated function ResetToMouse()
+{
+	CurrentIconType = eControllerIconType_Mouse; 
+	UpdateInputDevice_CycleSpinner(none, 0);
 }
 
 simulated function StoreInitVideoSettings()
@@ -2091,9 +2614,11 @@ simulated function OnReceiveFocus()
 		//XComHUD(WorldInfo.GetALocalPlayerController().myHUD).SetGammaLogoDrawing(true);
 
 	Show(); 
-	
-	NavHelp.ClearButtonHelp();
-	NavHelp.AddBackButton(IgnoreChangesAndExit);
+	if( !`ISCONTROLLERACTIVE )
+	{
+		NavHelp.ClearButtonHelp();
+		NavHelp.AddBackButton(IgnoreChangesAndExit);
+	}
 }	
 simulated function OnLoseFocus()    
 {
@@ -2136,6 +2661,10 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 
 simulated native function SaveGEngineConfig();
 
+simulated function IgnoreChangesAndExitPCButton( UIButton IgnoreButton )
+{
+	IgnoreChangesAndExit();
+}
 simulated function IgnoreChangesAndExit()
 {	
 	local TDialogueBoxData kDialogData;
@@ -2234,6 +2763,15 @@ simulated public function SaveAndExitFinal()
 	}
 	
 	XComHUD(WorldInfo.GetALocalPlayerController().myHUD).SetGammaLogoDrawing(false);
+
+	RefreshInputDevice();
+	SaveInputType();
+}
+function SaveInputType()
+{
+	Movie.Pres.Get2DMovie().SetMouseActive(CurrentIconType == eControllerIconType_Mouse);
+	Movie.Pres.Get3DMovie().SetMouseActive(CurrentIconType == eControllerIconType_Mouse);
+	Movie.Pres.GetModalMovie().SetMouseActive(CurrentIconType == eControllerIconType_Mouse);
 }
 simulated public function SaveComplete(bool bWasSuccessful)
 {
@@ -2249,10 +2787,12 @@ simulated public function SaveComplete(bool bWasSuccessful)
 	ExitScreen();
 }
 simulated function ExitScreen()
-{	
+{
+	XComInputBase(PC.PlayerInput).ClearAllRepeatTimers();
 	`XENGINE.ForceEndGPUAutoDetect();
 
 	NavHelp.ClearButtonHelp();
+	AllowAllInput(false);
 
 	if( m_iCurrentTab == ePCTab_Video )
 		XComHUD(WorldInfo.GetALocalPlayerController().myHUD).SetGammaLogoDrawing(false);
@@ -2270,31 +2810,132 @@ simulated public function SaveProfileFailedDialog()
 	XComPresentationLayerBase(Owner).UIRaiseDialog(kDialogData);
 }
 
-simulated public function OnUDPadUp()
+function GoBack()
 {
-	PlaySound( SoundCue'SoundUI.MenuScrollCue', true );
-}
-
-
-simulated public function OnUDPadDown()
-{
-	PlaySound( SoundCue'SoundUI.MenuScrollCue', true );
-}
-
-// -----------------------------------------------------------------
-simulated function SetSelectedTab( int iSelect )
-{
-	// hack no graphics on PC
-	if ( WorldInfo.IsConsoleBuild() )
+	switch(AttentionType)
 	{
-		if ( iSelect == 1 && m_iCurrentTab == 0 )
-			iSelect = 2;
-		else if ( iSelect == 1 && m_iCurrentTab == 2 )
-			iSelect = 0;
+	case COAT_CATEGORIES:
+		IgnoreChangesAndExit();
+		break;
+
+	case COAT_DETAILS:
+		AttentionType = COAT_CATEGORIES;
+		List.GetSelectedItem().OnLoseFocus();
+		//doing this to clear the variable.
+		List.SetSelectedIndex(-1);
+		//DisableNavigation();
+		break;
+	}
+}
+
+function bool OnAdvanceButtonPressed()
+{
+	local bool shouldConsume;
+	shouldConsume = false;
+	switch(AttentionType)
+	{
+	case COAT_CATEGORIES:
+		AttentionType = COAT_DETAILS;
+		Navigator.SetSelected(List);
+		if(!m_kProfileSettings.Data.IsMouseActive())
+			List.SetSelectedIndex(0);
+		shouldConsume = true;
+		break;
+
+	case COAT_DETAILS:
+		break;
+	}
+	return shouldConsume;
+}
+simulated public function OnUAccept()
+{
+	switch(AttentionType)
+	{
+	case COAT_CATEGORIES:
+		AttentionType = COAT_DETAILS;
+		Navigator.AddControl(self);
+		List.SetSelectedNavigation();
+		break;
+
+	case COAT_DETAILS:
+		break;
+	}
+}
+
+simulated public function bool OnUDPadUp()
+{
+	local bool bHandled;
+	switch(AttentionType)
+	{
+	case COAT_CATEGORIES:
+		SetSelectedTab( m_iCurrentTab - 1 );
+		bHandled = true;
+		break;
+
+	case COAT_DETAILS:
+		PlaySound( SoundCue'SoundUI.MenuScrollCue', true );
+		break;
+	}
+	return bHandled;
+}
+
+
+simulated public function bool OnUDPadDown()
+{
+	local bool bHandled;
+	switch(AttentionType)
+	{
+	case COAT_CATEGORIES:
+		SetSelectedTab( m_iCurrentTab + 1 );
+		bHandled = true;
+		break;
+
+	case COAT_DETAILS:
+		PlaySound( SoundCue'SoundUI.MenuScrollCue', true );
+		break;
+	}
+	return bHandled;
+}
+function bool OnUDpadLeft()
+{
+	return false; 
+}
+
+function bool OnUDPadRight()
+{
+	local bool bConsumed; 
+	bConsumed = false;
+	switch( AttentionType )
+	{
+	case COAT_CATEGORIES:
+		//AttentionType = COAT_DETAILS;
+		//Navigator.SetSelected(List);
+		bConsumed = true; 
+		break;
+
+	case COAT_DETAILS:
+		break;
 	}
 
+	return bConsumed;
+}
+// -----------------------------------------------------------------
+
+simulated function SetSelectedTab( int iSelect, bool bForce = false )
+{
+	// hack no graphics on PC
+	local int i, PreviousTabValue;
+	PreviousTabValue = m_iCurrentTab;
+	//if ( WorldInfo.IsConsoleBuild() )
+	//{
+	//	if ( iSelect == 1 && m_iCurrentTab == 0 )
+	//		iSelect = 2;
+	//	else if ( iSelect == 1 && m_iCurrentTab == 2 )
+	//		iSelect = 0;
+	//}
+
 	//dont go to the same tab youve already selected
-	if(m_iCurrentTab == iSelect)
+	if(m_iCurrentTab == iSelect && !bForce)
 	{
 		Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
 		return;
@@ -2319,6 +2960,8 @@ simulated function SetSelectedTab( int iSelect )
 	//Clear the tooltips when switching tabs, else the previous tab tooltips may leak as cached data over on to the new tooltips. 
 	Movie.Pres.m_kTooltipMgr.RemoveTooltipByTarget(string(MCPath), true);
 
+	if(PreviousTabValue != m_iCurrentTab)
+		UnSelectTabByIndex(PreviousTabValue);
 	GPUAutoDetectButton.Hide();
 	switch(m_iCurrentTab)
 	{
@@ -2327,6 +2970,7 @@ simulated function SetSelectedTab( int iSelect )
 		break;
 	case ePCTab_Graphics:
 		SetGraphicsTabSelected();
+		UpdateNavHelp(true);
 		GPUAutoDetectButton.Show();
 		break;
 	case ePCTab_Audio:
@@ -2340,7 +2984,8 @@ simulated function SetSelectedTab( int iSelect )
 		break;
 	}
 
-	List.Navigator.SetSelected(m_arrMechaItems[0]);
+	for(i = 0; i < List.ItemCount; ++i)
+		List.GetItem(i).OnLoseFocus();
 
 	MC.FunctionNum("SetSelectedTab", m_iCurrentTab);
 
@@ -2348,6 +2993,8 @@ simulated function SetSelectedTab( int iSelect )
 	{
 		Movie.Pres.PlayUISound(eSUISound_MenuSelect);
 	}
+
+	AttentionType = COAT_CATEGORIES;
 }
 
 // -----------------------------------------------------------------
@@ -2367,11 +3014,13 @@ function ResetMechaListItems()
 	local int i;
 	for( i = 0; i < NUM_LISTITEMS; i++ )
 	{
+		m_arrMechaItems[i].SetDisabled(false);
 		m_arrMechaItems[i].OnLoseFocus();
 		m_arrMechaItems[i].Hide();
 		m_arrMechaItems[i].BG.RemoveTooltip();
 		m_arrMechaItems[i].DisableNavigation();
 	}
+	List.SetSelectedIndex(-1);
 }
 
 function RenableMechaListItems(int maxItems)
@@ -2379,9 +3028,19 @@ function RenableMechaListItems(int maxItems)
 	local int i;
 	for( i = 0; i < maxItems; i++)
 	{
+		m_arrMechaItems[i].SetDisabled(false); //This will be reset in the tab info update for each mechalistitem.
 		m_arrMechaItems[i].Show();
 		m_arrMechaItems[i].EnableNavigation();
 	}
+	for( i = maxItems; i < NUM_LISTITEMS; i++ )
+	{
+		m_arrMechaItems[i].SetDisabled(false);
+		m_arrMechaItems[i].OnLoseFocus();
+		m_arrMechaItems[i].Hide();
+		m_arrMechaItems[i].BG.RemoveTooltip();
+		m_arrMechaItems[i].DisableNavigation();
+	}
+	Navigator.SetSelected(List);
 }
 
 //==============================================================================

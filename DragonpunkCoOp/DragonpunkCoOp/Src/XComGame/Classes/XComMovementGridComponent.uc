@@ -88,6 +88,7 @@ cpptext
 
 	void StartUpdateTask(AXGUnitNativeBase* Unit, UBOOL bIsUsingMouse, FLOAT PCMinUnits, FLOAT PCMaxUnits, UBOOL bGrappleMove);
 	void MainUpdate(UBOOL bIsUsingMouse, FLOAT PCMinUnits, FLOAT PCMaxUnits, UBOOL bGrappleMove);
+	void SpecialMovementUpdate(const TArray<FTTile> TargetTiles);
 	
 	void UpdateBorderSceneProxy();
 	void UpdateBorderData(UBOOL bIsUsingMouse, UBOOL bGrappleMove);

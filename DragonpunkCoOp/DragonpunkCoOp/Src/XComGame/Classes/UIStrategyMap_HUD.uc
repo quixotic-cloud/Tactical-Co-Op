@@ -317,11 +317,13 @@ simulated function SetEventLog( string log )
 simulated function ShowDoomCounter()
 {
 	MC.FunctionVoid("ShowDoomCounter");
+	bDoomCounterVisible = true;
 }
 
 simulated function HideDoomCounter()
 {
 	MC.FunctionVoid("HideDoomCounter");
+	bDoomCounterVisible = false;
 }
 
 simulated function StartDoomAddedEffect()

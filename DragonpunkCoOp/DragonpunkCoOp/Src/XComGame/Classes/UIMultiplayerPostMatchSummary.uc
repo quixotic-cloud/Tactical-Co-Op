@@ -59,7 +59,7 @@ simulated function OnInit()
 
 	strIconLabel = "";
 	if ( !Movie.IsMouseActive() )
-		strIconLabel = class'UIUtilities_Input'.const.ICON_Y_TRIANGLE;
+		strIconLabel = class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE;
 	else
 		strSystemSpecificPlayerlabel = strSystemSpecificPlayerLabel;
 

@@ -665,7 +665,8 @@ function bool CanUpgrade()
 {
 	local array<X2FacilityUpgradeTemplate> UpgradeTemplates;
 
-	if( GetRoom().UnderConstruction || IsBuildingUpgrade() )
+
+	if( GetRoom() == None || GetRoom().UnderConstruction || IsBuildingUpgrade() )
 	{
 		return false;
 	}

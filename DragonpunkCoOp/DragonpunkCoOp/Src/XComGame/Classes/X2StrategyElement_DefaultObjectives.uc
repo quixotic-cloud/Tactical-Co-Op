@@ -368,7 +368,11 @@ function SpawnFirstPOI()
 
 	History = `XCOMHISTORY;
 	ResistanceHQ = XComGameState_HeadquartersResistance(History.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersResistance'));
-	ResistanceHQ.AttemptSpawnRandomPOI();
+
+	if( !ResistanceHQ.bFirstPOISpawned )
+	{
+		ResistanceHQ.AttemptSpawnRandomPOI();
+	}
 }
 
 static function X2DataTemplate CreateN_GPCinematicsTemplate()

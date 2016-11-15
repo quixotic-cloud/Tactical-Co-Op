@@ -376,7 +376,7 @@ static function int GetNumEnemiesKilled(out int iOutTotal)
 			iKilled++;
 		}
 	}
-	
+
 	// add in any aliens from the transfer state
 	if(StaticBattleData.DirectTransferInfo.IsDirectMissionTransfer)
 	{

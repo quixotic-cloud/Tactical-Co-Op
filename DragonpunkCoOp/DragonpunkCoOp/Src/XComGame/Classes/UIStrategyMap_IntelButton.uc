@@ -19,6 +19,7 @@ simulated function UIStrategyMap_IntelButton InitIntelButton(optional name InitN
 {
 	InitButton(InitName, InitLabel, InitOnClicked);
 
+	MC.FunctionBool("SetHintIcon", class'UIUtilities_Input'.static.IsAdvanceButtonSwapActive());
 	AnimateButton(false, true);
 
 	return self;

@@ -8,7 +8,8 @@
 class XComTacticalController extends XComPlayerController
 	implements(X2VisualizationMgrObserverInterfaceNative)
 	dependson(XComPathData)
-	native(Core);
+	native(Core)
+	config(Game);
 
 // NOTE: make sure this stays in sync with XGAction_BeginMove::MAX_REPLICATED_PATH_POINTS -tsmith 
 const MAX_REPLICATED_PATH_POINTS = 128;
@@ -80,6 +81,22 @@ var bool bDebugMode;
 
 // Lets us know if we just manually switched units, in which case we may not want to focus the camera on the unit when the visualizer becomes idle
 var bool bManuallySwitchedUnitsWhileVisualizerBusy;
+var bool bJustSwitchedUnits;
+var privatewrite float m_fLastMagAnalogInput;
+var privatewrite int m_iNumFramesPressed;
+var privatewrite int m_iNumFramesReleased;
+var privatewrite TTile m_InitialCursorTile;
+var privatewrite TTile m_TargetCursorTile;
+var privatewrite bool m_bStartedWalking;
+var privatewrite bool m_bQuickInterpolate;
+var privatewrite bool m_bChangedUnitHasntMovedCursor; // If the Unit has changed (L1 or R1) but the cursor hasn't moved yet.  Hide the cursor until movement begins.
+var config float TacticalCursorInitialStepAmount;
+var config float TacticalCursorAccel;
+var config float TacticalCursorDeadzone;
+var config float TacticalCursorStickAccelPower;
+var config float TacticalCursorTileAlignBlendFast;
+var config float TacticalCursorTileAlignBlendSlow;
+var config int TacticalCursorFramesBeforeAccel;
 
 cpptext
 {
@@ -195,6 +212,9 @@ simulated function bool Visualizer_SelectUnit(XComGameState_Unit SelectedUnit)
 	if(!`TACTICALRULES.AllowVisualizerSelection())
 		return false;
 
+	if (ControllingUnit.ObjectID == SelectedUnit.ObjectID)
+		return true;
+
 	/* jbouscher - allow free form clicks to select units with no moves remaining
 	if( (`CHEATMGR == None || !`CHEATMGR.bAllowSelectAll) )
 	{
@@ -218,6 +238,7 @@ simulated function bool Visualizer_SelectUnit(XComGameState_Unit SelectedUnit)
 		ControllingUnitVisualizer.Deactivate();
 	}
 
+	bJustSwitchedUnits = true;
 	//Set our local cache variables for tracking what unit is selected
 	ControllingUnit = SelectedUnit.GetReference();
 	ControllingUnitVisualizer = XGUnit(SelectedUnit.GetVisualizer());
@@ -229,10 +250,11 @@ simulated function bool Visualizer_SelectUnit(XComGameState_Unit SelectedUnit)
 	PlayerVisualizer.SetActiveUnit( XGUnit(SelectedUnit.GetVisualizer()) );
 
 	//@TODO - rmcfall - the system here is twiddling the old game play code to make it behavior. Think about a better way to interact with the UI / Input.
-	SetInputState('ActiveUnit_Moving'); //Sets the state of XComTacticalInput, which maps mouse/kb/controller inputs to game engine methods		
+	SetInputState('ActiveUnit_Moving', true); //Sets the state of XComTacticalInput, which maps mouse/kb/controller inputs to game engine methods		
 	ControllingUnitVisualizer.GotoState('Active'); //The unit visualizer 'Active' state enables pathing ( adds an XGAction_Path ), displays cover icons, etc.	
 	kCursor = XCom3DCursor( Pawn );
 	kCursor.MoveToUnit( m_kActiveUnit.GetPawn() );
+	m_bChangedUnitHasntMovedCursor = true;
 	kCursor.SetPhysics( PHYS_Flying );
 	//kCursor.SetCollision( false, false );
 	kCursor.bCollideWorld = false;
@@ -434,7 +456,8 @@ event OnVisualizationIdle()
 			}
 
 			// Force the UI to update when a visualization block ends
-			`PRES.m_kTacticalHUD.Update();
+			if( `PRES.m_kTacticalHUD != none )
+				`PRES.m_kTacticalHUD.Update();
 		}
 	}
 
@@ -516,6 +539,10 @@ reliable client function ClientSetCursorLocation(Vector vLocation)
 	GetCursor().SetLocation(vLocation);
 }
 
+function bool IsControllerPressed()
+{
+	return m_iNumFramesPressed > 0;
+}
 // ---------------------------------------------------------------------
 // ---------------------------------------------------------------------
 simulated function ActiveUnitChanged()
@@ -532,9 +559,9 @@ simulated function ActiveUnitChanged()
 
 // ---------------------------------------------------------------------
 // ---------------------------------------------------------------------
-simulated function SetInputState( name nStateName )
+simulated function SetInputState( name nStateName, optional bool bForce )
 {
-	if (!`REPLAY.bInReplay || `REPLAY.bInTutorial)
+	if( bForce || !`REPLAY.bInReplay || `REPLAY.bInTutorial )
 	{
 		XComTacticalInput( PlayerInput ).GotoState( nStateName,, true );
 	}
@@ -1345,10 +1372,37 @@ ignores SeePlayer, HearNoise, Bump;
 		}
 	}
 
+	//INS:
+	event BeginState(Name PreviousStateName)
+	{
+		m_bStartedWalking = true;
+		
+		super.BeginState(PreviousStateName);
+	}
 	function PlayerMove( float DeltaTime )
 	{
-		local vector X,Y,Z, NewAccel, vOldVel;
+		local vector X,Y,Z, NewAccel;//, vOldVel;
 		local float fMagAnalogInput;
+		local XCom3DCursor kCursor;
+		local float StickPowerScale;
+		local vector JustPressedDir;
+		//local XComInputBase XComInput;
+		local float LSAxisX;
+		local float LSAxisY;
+		//local float fAngle;
+		local TTile CursorTile;
+		local vector CursorTileCenter;
+		local vector OffsetToCursorTileCenter;
+		local UITacticalHUD_AbilityContainer kHUD;
+		local bool bLog;
+		local bool bSmooth; // Smooth movement, versus snappy movement.
+		local Vector JustPressedDirNormalized;
+		local Vector Offset;
+
+		bLog = false;
+		bSmooth = true;
+		
+		kCursor = XCom3DCursor( Pawn );
 
 		if( Pawn == None )
 		{
@@ -1373,41 +1427,136 @@ ignores SeePlayer, HearNoise, Bump;
 			X = Normal(X);
 			Y = Normal(Y);
 
-			// MHU Code to utilize two different acceleration rates.
-			fMagAnalogInput = VSize2D(PlayerInput.aForward*X + PlayerInput.aStrafe*Y);
-			if (fMagAnalogInput != 0)
-			{
-				vOldVel = Pawn.Velocity;
-				Pawn.AccelRate = GetCursorAccel();
+		
+			// We were using aForward and aStrafe.  We now use raw input values for platform independence, but 
+			// correct for the amount the previous values were being scaled with 1.7573578512.
+			LSAxisX = PlayerInput.RawJoyUp * 1.7573578512;
+			LSAxisY = PlayerInput.RawJoyRight * 1.7573578512;
 
-				NewAccel = PlayerInput.aForward*X + PlayerInput.aStrafe*Y;
-				NewAccel.Z	= 0;
-				NewAccel = Pawn.AccelRate * Normal(NewAccel);
-				//`Log("Accel OVel" @ vOldVel @ "FVel" @ Pawn.Velocity);
+			JustPressedDir = LSAxisX*X + LSAxisY*Y;
+			JustPressedDir.Z = 0;
+			fMagAnalogInput = VSize(JustPressedDir);
+
+			//`log("XXX fMagAnalogInput =" @ fMagAnalogInput @ "LSAxisX =" @ LSAxisX @ "LSAxisY =" @ LSAxisY);			
+
+			CursorTile = `XWORLD.GetTileCoordinatesFromPosition(kCursor.Location);
+			
+			// Tally the number of frames the L-analog stick has been pressed.
+			if (fMagAnalogInput >= TacticalCursorDeadzone)
+			{
+				m_iNumFramesPressed++;
+				m_iNumFramesReleased = 0;
 			}
 			else
 			{
-				// Disable Unreal Acceleration Handling and implement time based damping.
-				Pawn.AccelRate = 0;
-					
-				vOldVel = Pawn.Velocity;
-				Pawn.Velocity = -GetCursorDecel() * Pawn.Velocity * DeltaTime + Pawn.Velocity;
-	
-				if (abs(Pawn.Velocity.X) > abs(vOldVel.X))
-					Pawn.Velocity.X = 0;
-				if (abs(Pawn.Velocity.Y) > abs(vOldVel.Y))
-					Pawn.Velocity.Y = 0;
-				if (abs(Pawn.Velocity.Z) > abs(vOldVel.Z))
-					Pawn.Velocity.Z = 0;
-
-				//`Log("Decel OVel" @ vOldVel @ "FVel" @ Pawn.Velocity);
-
-				NewAccel.X = 0;
-				NewAccel.Y = 0;
-				NewAccel.Z = 0;
+				m_iNumFramesPressed = 0;
+				m_iNumFramesReleased++;
 			}
 
-				//`Log("MHU" @ PlayerInput.aForward @ PlayerInput.aStrafe);
+			if (m_bStartedWalking)
+			{
+				if (bLog) `log("XXX PlayerWalking STARTED WALKING");
+
+				m_bStartedWalking = false;
+
+				m_TargetCursorTile = CursorTile;
+			}
+
+			//TODO(AMS): Move this to XComCursor.cpp
+
+			kHUD = `Pres.GetTacticalHUD() != none ? `Pres.GetTacticalHUD().m_kAbilityHUD : none;
+
+			// Use 'smooth' movement if bSmooth is true, or we're using a grenade.
+			if(bSmooth || (kHUD.GetTargetingMethod() != none && kHUD != none && kHUD.GetTargetingMethod().Action.bFreeAim))
+			{
+				if (fMagAnalogInput >= TacticalCursorDeadzone) // When L-analog stick is pressed in some direction.
+				{
+					// Normalize.
+					if( fMagAnalogInput != 0.0 )
+						JustPressedDirNormalized = JustPressedDir / fMagAnalogInput;
+
+					if (m_bChangedUnitHasntMovedCursor)
+					{
+						m_bChangedUnitHasntMovedCursor = false;
+						
+						// Move the cursor in the direction we just pressed.
+						Offset = JustPressedDirNormalized * TacticalCursorInitialStepAmount;
+
+						if(!`ISCONTROLLERACTIVE)
+						{
+							kCursor.MoveToUnitWithOffset( m_kActiveUnit.GetPawn(), Offset);
+						}
+
+						NewAccel.X = 0;
+						NewAccel.Y = 0;
+						NewAccel.Z = 0;
+						Pawn.AccelRate = 0;
+
+						Pawn.Velocity.X = 0;
+						Pawn.Velocity.Y = 0;
+						Pawn.Velocity.Z = 0;
+					}
+					else
+					{
+						// Correct for deadzone.
+						JustPressedDir = JustPressedDirNormalized * ((fMagAnalogInput - TacticalCursorDeadzone) / (1.0 - TacticalCursorDeadzone));
+						fMagAnalogInput = VSize(JustPressedDir);
+
+						Pawn.AccelRate = TacticalCursorAccel;
+
+						StickPowerScale = (abs(fMagAnalogInput) ** (TacticalCursorStickAccelPower - 1.0));
+
+						NewAccel = JustPressedDir * StickPowerScale;
+						NewAccel.Z = 0.0;
+						NewAccel = Pawn.AccelRate * NewAccel;
+					}
+				}
+				else // Slow when L-analog is released.
+				{
+					Pawn.AccelRate = 0;
+
+					Pawn.Velocity.X = 0;
+					Pawn.Velocity.Y = 0;
+					Pawn.Velocity.Z = 0;
+				}
+			}
+			else // Prototype the cursor smoothly returning to the center of the tile if analog stick is not pressed for one second.
+			{
+				if (fMagAnalogInput >= TacticalCursorDeadzone) // When L-analog stick is pressed in some direction.
+				{
+					// Correct for deadzone.
+					JustPressedDir = JustPressedDir / fMagAnalogInput;
+					JustPressedDir = JustPressedDir	* ((fMagAnalogInput - TacticalCursorDeadzone) / (1.0 - TacticalCursorDeadzone));
+					fMagAnalogInput = VSize(JustPressedDir);
+
+					Pawn.AccelRate = TacticalCursorAccel;
+
+					StickPowerScale = (abs(fMagAnalogInput) ** (TacticalCursorStickAccelPower - 1.0));
+
+					NewAccel = JustPressedDir * StickPowerScale;
+					NewAccel.Z = 0.0;
+					NewAccel = Pawn.AccelRate * NewAccel;
+				}
+				else // Slow when L-analog is released.
+				{
+					Pawn.AccelRate = 0;
+
+					Pawn.Velocity = Pawn.Velocity * (1.0 - GetCursorDecel() * DeltaTime);
+				}
+
+				if (m_iNumFramesReleased >= 30)
+				{
+					CursorTileCenter = `XWORLD.GetPositionFromTileCoordinates(CursorTile);
+					OffsetToCursorTileCenter = CursorTileCenter - kCursor.Location;
+
+					Pawn.Velocity.X = 0;
+					Pawn.Velocity.Y = 0;
+					Pawn.Velocity.Z = 0;
+					kCursor.m_vInitialCursorPressMovement = OffsetToCursorTileCenter * FMin(1.0, float(m_iNumFramesReleased - 30) * DeltaTime * TacticalCursorTileAlignBlendSlow);
+				}
+			}
+			m_fLastMagAnalogInput = fMagAnalogInput;
+
 
 			if( Role < ROLE_Authority ) // then save this move and replicate it
 			{
@@ -1769,6 +1918,10 @@ simulated function OnToggleHUDElements(SeqAct_ToggleHUDElements Action)
 	 GetPres().GetTacticalHUD().OnToggleHUDElements(Action);
 }
 
+simulated function HideInputButtonRelatedHUDElements(bool bHide)
+{
+	GetPres().GetTacticalHUD().HideInputButtonRelatedHUDElements(bHide);
+}
 /**
  * Looks at the current game state and uses that to set the
  * rich presence strings
@@ -2804,6 +2957,8 @@ defaultproperties
 	m_bHasCleanedUpGame=false
 	m_bIsCleaningUpGame=false
 	m_bHasEndedSession=false
+	m_bStartedWalking=true
+	m_bQuickInterpolate=true
 
 	//This needs to be true by default, so that the loot visuals can get updated and shown when loading a saved game.
 	//(Carries assumption that we won't start in cinematic mode.)

@@ -737,6 +737,12 @@ simulated function OnStreamedLevelLoaded(name LevelName, optional LevelStreaming
 
 simulated function StartFadeToBlack(optional float speed=0.5)
 {
+	`HQPRES.StartFadeToBlack(speed, self); // Adds fading to black to queue, which eventually calls DoStartFadeToBlack.
+}
+
+// Gets called by `HQPRES, as fading to black has to wait for the current camera swoop to finish.
+simulated function DoStartFadeToBlack(optional float speed=0.5)
+{
 	local PlayerController Controller;
 
 	Controller = XComPresentationLayerBase(Outer).GetALocalPlayerController();
@@ -831,12 +837,9 @@ simulated function ClearConversationQueueOfNonTentpoles()
 {
 	local int i;
 
-	if (bActivelyPlayingConversation)
-	{
-		if (m_arrConversations[0].NarrativeMoment.CanBeCanceled()) 
-			EndCurrentConversation(true);
-	}
-
+	// clear out all pending and current conversations, except for the one currently playing.
+	// when we stop the currently playing narrative, it will automatically start the next one in line
+	// if there is one, and we don't want that
 	for (i=0; i < PendingConversations.Length; i++)
 	{
 		if (PendingConversations[i].NarrativeMoment.CanBeCanceled())
@@ -846,17 +849,27 @@ simulated function ClearConversationQueueOfNonTentpoles()
 		}
 	}
 
-	for (i=0; i < m_arrConversations.Length; i++)
+	// start from index 1, index 0 is the currently playing narrative
+	for (i=1; i < m_arrConversations.Length; i++)
 	{
 		if (m_arrConversations[i].NarrativeMoment.CanBeCanceled())
 		{
 			// None of these should be playing, but they could still be loading
 			
 			// TODO - Remove async loads
-			m_arrConversations.Remove(i,1);
+			m_arrConversations.Remove(i, 1);
 			i--;
 
 		}
+	}
+
+	// cancel the currently playing narrative
+	if (m_arrConversations.Length > 0 && m_arrConversations[0].NarrativeMoment.CanBeCanceled())
+	{
+		if (bActivelyPlayingConversation) 
+			EndCurrentConversation(true);
+		else
+			m_arrConversations.Remove(0, 1);
 	}
 }
 
@@ -870,29 +883,29 @@ simulated function bool AddConversation(name nmConversation, delegate<OnNarrativ
 
 	CheatManager = XComCheatManager(`XCOMGRI.GetALocalPlayerController().CheatManager);
 	if( CheatManager != none && CheatManager.bNarrativeDisabled )
+	{
+		if( InNarrativeCompleteCallback != none )
 		{
-			if( InNarrativeCompleteCallback != none )
-			{
-				InNarrativeCompleteCallback();
-			}
-
-			return true;
+			InNarrativeCompleteCallback();
 		}
 
-		// jboswell: Detect scary cases and bitch/bail
-		// If this happens, more than likely someone needs to go in and re-associate the conversations with
-		// the narrative moment. Seems to happen when conversation sound cues get moved around.
-		// This can also happen when the NM is in a package that someone forgot to add to the cooking list/startup
-		if( NarrativeMoment == none || (nmConversation == 'None' && NarrativeMoment.arrConversations.Length > 0) )
-		{
-			`log("UINarrativeMgr: WARNING: No conversation found to load, but NarrativeMoment thinks it should have conversations:" @ NarrativeMoment @ "BAILING OUT!");
-			if( InNarrativeCompleteCallback != none )
-			{
-				InNarrativeCompleteCallback();
-			}
+		return true;
+	}
 
-			return true;
+	// jboswell: Detect scary cases and bitch/bail
+	// If this happens, more than likely someone needs to go in and re-associate the conversations with
+	// the narrative moment. Seems to happen when conversation sound cues get moved around.
+	// This can also happen when the NM is in a package that someone forgot to add to the cooking list/startup
+	if( NarrativeMoment == none || (nmConversation == 'None' && NarrativeMoment.arrConversations.Length > 0) )
+	{
+		`log("UINarrativeMgr: WARNING: No conversation found to load, but NarrativeMoment thinks it should have conversations:" @ NarrativeMoment @ "BAILING OUT!");
+		if( InNarrativeCompleteCallback != none )
+		{
+			InNarrativeCompleteCallback();
 		}
+
+		return true;
+	}
 
 	// If there is a conversation already being spoken,...
 	if( m_arrConversations.Length != 0 )
@@ -1098,7 +1111,7 @@ simulated function OnAudioComponentFinished(AudioComponent AC)
 simulated function BeginConversation(optional bool bMuffleVOOnly = true)
 {
 	local float fTimerDuration;
-	local int SoundID;
+	local int SoundID;	
 
 	if (m_arrConversations[0].NarrativeMoment.bUseCinematicSoundClass)
 	{
@@ -1142,6 +1155,10 @@ simulated function BeginConversation(optional bool bMuffleVOOnly = true)
 			class'Engine'.static.GetEngine().bDontSilenceGameAudioDuringBink = true;
 			SoundID = class'WorldInfo'.static.GetWorldInfo().PlayAkSound(string(m_arrConversations[0].NarrativeMoment.BinkAudioEvent.Name));
 		}
+		else if (m_arrConversations[0].NarrativeMoment.arrConversations.Length > 0) //Method for mods to play custom audio for binks
+		{
+			class'WorldInfo'.static.GetWorldInfo().PlaySound(SoundCue(DynamicLoadObject(string(m_arrConversations[0].NarrativeMoment.arrConversations[0]), class'SoundCue')), true);
+		}
 		XComPresentationLayerBase(Outer).UIPlayMovie(m_arrConversations[0].NarrativeMoment.strBink, !m_arrConversations[0].NarrativeMoment.PlayBinkOverGameplay);
 		
 		//Only stop the movie sound if the bink was blocking
@@ -1169,17 +1186,17 @@ simulated function BeginConversation(optional bool bMuffleVOOnly = true)
 	else
 	{
 		// start audio if there is not associated dialog anim. Otherwise let the anim cue the audio ( also passes through DialogTriggerAudio
-		if(!m_arrConversations[0].bNoAudio/*  && name(m_arrConversations[0].ResolvedCue.AkEventOverride.AnimName) == ''*/)
+		if (!m_arrConversations[0].bNoAudio/*  && name(m_arrConversations[0].ResolvedCue.AkEventOverride.AnimName) == ''*/)
 		{
 			DialogTriggerAudio();
 		}
 
 		m_ActiveNarrativeCompleteCallback = m_arrConversations[0].m_NarrativeCompleteCallback;
-		m_arrConversations[0].bFirstLineStarted=true;
+		m_arrConversations[0].bFirstLineStarted = true;
 
 		if (m_arrConversations[0].ActorToLookAt != none)
 		{
-			if( !IsInState( 'LookAtCursorCameraTransition' ) )
+			if (!IsInState('LookAtCursorCameraTransition'))
 				PushState('LookAtCursorCameraTransition');
 			else
 				`log("UINarrativeMgr has colliding look ats!");

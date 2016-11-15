@@ -50,6 +50,7 @@ struct ConfigurableSoldier
 	var name PrimaryWeaponTemplate;
 	var name SecondaryWeaponTemplate;
 	var name HeavyWeaponTemplate;
+	var name GrenadeSlotTemplate;
 	var name ArmorTemplate;
 	var name UtilityItem1Template;
 	var name UtilityItem2Template;
@@ -81,6 +82,7 @@ var XComGameState_BattleData    BattleDataState;
 var XComGameState_CampaignSettings    CampaignState;
 var XComGameState				ExistingStartState;
 
+var bool bMapListSelected;
 //----------------------------------------------------------------------------
 // MEMBERS
 
@@ -211,6 +213,23 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	// Populate map list
 	PopulateMapData();
+	Navigator.Clear();
+	Navigator.AddControl(m_kPlotType);
+	Navigator.AddControl(m_kBiomeType);
+	Navigator.AddControl(m_kMissionType);
+	Navigator.AddControl(m_kQuestItemType);
+	Navigator.AddControl(m_kLayerType);
+	Navigator.AddControl(m_kForceLevel);
+	Navigator.AddControl(m_kAlertLevel);
+	Navigator.AddControl(m_kEnvLighting);
+	Navigator.AddControl(m_kCivilians);
+	Navigator.AddControl(m_kSquad);
+	Navigator.AddControl(m_kDifficulty);
+	Navigator.AddControl(m_kPrecipitation);
+	
+	Navigator.SetSelected(m_kMapList);
+	m_kMapList.SetSelectedIndex(0);
+	bMapListSelected = true;
 }
 
 function OnMapItemClicked(UIList listControl, int itemIndex)
@@ -290,6 +309,7 @@ simulated private function SaveChanges()
 {
 	local XComGameState NewStartState;
 	local XComTacticalMissionManager MissionManager;
+	local int AlertLevel;
 	local int MissionIndex;
 
 	CampaignState.SetDifficulty(m_kDifficulty.SelectedItem);
@@ -321,10 +341,17 @@ simulated private function SaveChanges()
 
 	BattleDataState.m_nQuestItem = name(m_kQuestItemType.GetSelectedItemData());
 	BattleDataState.m_iLayer = m_kLayerType.selectedItem - 1;
-	BattleDataState.SetAlertLevel(Clamp(
-		int(m_kAlertLevel.GetSelectedItemText()), 
-		class'X2StrategyGameRulesetDataStructures'.default.MinMissionDifficulty, 
-		class'X2StrategyGameRulesetDataStructures'.default.MaxMissionDifficulty));
+
+	// start with the base alert level
+	AlertLevel = Clamp(int(m_kAlertLevel.GetSelectedItemText()), 
+						class'X2StrategyGameRulesetDataStructures'.default.MinMissionDifficulty, 
+						class'X2StrategyGameRulesetDataStructures'.default.MaxMissionDifficulty);
+
+	// then update with the campaign difficulty modifier
+	AlertLevel = Min(AlertLevel + class'X2StrategyGameRulesetDataStructures'.default.CampaignDiffModOnMissionDiff[m_kDifficulty.SelectedItem], 
+					 class'X2StrategyGameRulesetDataStructures'.default.CampaignDiffMaxDiff[m_kDifficulty.SelectedItem]);
+
+	BattleDataState.SetAlertLevel(AlertLevel);
 	BattleDataState.SetForceLevel(SelectedForceLevel);
 
 	// save environment map
@@ -365,13 +392,54 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 	bHandled = true;
 
+	if (bMapListSelected)
+	{
+		if (m_kMapList.OnUnrealCommand(cmd, arg))
+		{
+			return true;
+		}
+	}
+	else
+	{
+		if (Navigator.GetSelected().OnUnrealCommand(cmd, arg))
+		{
+			return true;
+		}
+	}
 	switch( cmd )
 	{
-		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
-		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
-		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-			OnButtonClicked(m_kAcceptButton);
+		//case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		//case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
+		//case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
+		//	OnButtonClicked(m_kAcceptButton);
+		//	break;
+	case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+		if (!bMapListSelected)
+		{
+			Navigator.SetSelected(m_kMapList);
+			m_kMapList.SetSelectedIndex(0);
+			m_kMapList.Scrollbar.ClearScroll();
+			bMapListSelected = true;
+		}
+
+		break;
+		
+	case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+		if (bMapListSelected)
+		{
+			Navigator.SetSelected(m_kPlotType);
+			m_kMapList.SetSelectedIndex(-1);
+			bMapListSelected = false;
+		}
+
+		break;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
+		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
+		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
+			Movie.Stack.Pop(self);
 			break;
+			
 		default:
 			bHandled = false;
 			break;
@@ -714,6 +782,7 @@ simulated function PopulateDifficultyDropdownData()
 
 simulated function PopulateAlertLevelDropdownData()
 {
+	local int AlertLevel;
 	local int Index;
 
 	m_kAlertLevel.Clear();
@@ -723,7 +792,12 @@ simulated function PopulateAlertLevelDropdownData()
 		m_kAlertLevel.AddItem(string(Index));
 	}
 
-	m_kAlertLevel.SetSelected(BattleDataState.GetAlertLevel() - class'X2StrategyGameRulesetDataStructures'.default.MinMissionDifficulty);
+	// the alert level in the battle data will have the difficulty mod applied to it, so remove that first
+	AlertLevel = BattleDataState.GetAlertLevel();
+	AlertLevel -= class'X2StrategyGameRulesetDataStructures'.default.CampaignDiffModOnMissionDiff[CampaignState.DifficultySetting];
+	AlertLevel = Clamp(AlertLevel - class'X2StrategyGameRulesetDataStructures'.default.MinMissionDifficulty, 0, m_kAlertLevel.Items.Length - 1);
+
+	m_kAlertLevel.SetSelected(AlertLevel);
 }
 
 simulated function PopulateForceLevelDropdownData()
@@ -1004,6 +1078,7 @@ simulated function AddFullInventory(int SoldierIndex, XComGameState GameState, X
 	AddItemToUnit(GameState, Unit, Soldiers[SoldierIndex].SecondaryWeaponTemplate);
 	AddItemToUnit(GameState, Unit, Soldiers[SoldierIndex].ArmorTemplate);
 	AddItemToUnit(GameState, Unit, Soldiers[SoldierIndex].HeavyWeaponTemplate);
+	AddItemToUnit(GameState, Unit, Soldiers[SoldierIndex].GrenadeSlotTemplate);
 	AddItemToUnit(GameState, Unit, Soldiers[SoldierIndex].UtilityItem1Template);
 	AddItemToUnit(GameState, Unit, Soldiers[SoldierIndex].UtilityItem2Template);
 }

@@ -24,6 +24,8 @@ var public int SelectedIndex;
 var public bool LoopSelection;
 var public bool LoopOnReceiveFocus;
 var public bool HorizontalNavigation;
+// If this is set to true we're going to avoid going through prev and next functions, because those are 2 different systems of navigation.
+var public bool OnlyUsesNavTargets;
 
 var array<UIPanel> NavigableControls;
 var array<UINavTarget> NavigationTargets;
@@ -120,30 +122,37 @@ simulated function bool OnUnrealCommand( int Cmd, int Arg )
 	bHandled = SendToNavigationTargets( Cmd, Arg ); 
 	if( bHandled ) return true; 
 
-	switch( Cmd )
+	if( !OnlyUsesNavTargets )
 	{
-		case class'UIUtilities_Input'.const.FXS_ARROW_UP:
-		case class'UIUtilities_Input'.const.FXS_DPAD_UP:
-			if( !HorizontalNavigation )
-				bHandled = Prev();
-			break;
-		case class'UIUtilities_Input'.const.FXS_ARROW_DOWN:
-		case class'UIUtilities_Input'.const.FXS_DPAD_DOWN:
-			if( !HorizontalNavigation )
-				bHandled = Next();
-			break;
-		case class'UIUtilities_Input'.const.FXS_ARROW_LEFT:
-		case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
-			if( HorizontalNavigation )
-				bHandled = Prev();
-			break;
-		case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
-		case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
-			if( HorizontalNavigation )
-				bHandled = Next();
-			break;
-	}
+		switch( Cmd )
+		{
+			case class'UIUtilities_Input'.const.FXS_ARROW_UP:
+			case class'UIUtilities_Input'.const.FXS_DPAD_UP:
+			case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP:
+				if( !HorizontalNavigation )
+					bHandled = Prev(,, Arg == class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+				break;
+			case class'UIUtilities_Input'.const.FXS_ARROW_DOWN:
+			case class'UIUtilities_Input'.const.FXS_DPAD_DOWN:
+			case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN:
+				if( !HorizontalNavigation )
+					bHandled = Next(,, Arg == class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+				break;
+			case class'UIUtilities_Input'.const.FXS_ARROW_LEFT:
+			case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+			case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT:
+				if( HorizontalNavigation )
+					bHandled = Prev(,, Arg == class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+				break;
+			case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
+			case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+			case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT:
+				if( HorizontalNavigation )
+					bHandled = Next(,, Arg == class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+				break;
+		}
 
+	}
 	if (!bHandled)
 	{
 		Selected = GetSelected();
@@ -184,11 +193,22 @@ simulated function bool SendToNavigationTargets( int Cmd, int Arg )
 				{
 					OnLoseFocus();
 					Target.Control.SetSelectedNavigation();
+					if (Target.Control.Navigator.GetSelected() == None)
+					{
+						OnLoseFocus();
+						Target.Control.ParentPanel.Navigator.SetSelected(Target.Control);
+						if(Target.Control.ParentPanel.Navigator.OnSelectedIndexChanged != none)
+							Target.Control.ParentPanel.Navigator.OnSelectedIndexChanged(Target.Control.ParentPanel.Navigator.SelectedIndex);
+					}
 				}
 			}
 		}
 	}
 	return bHandled; 
+}
+simulated function ClearAllNavigationTargets()
+{
+	NavigationTargets.Length = 0;
 }
 
 // Multiple panels may request the same command call; this will clear all for the specified cmd. 
@@ -235,35 +255,137 @@ simulated function AddNavTargetRight( UIPanel Control )
 {
 	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_ARROW_RIGHT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
 	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_DPAD_RIGHT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_ARROW_RIGHT, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_DPAD_RIGHT, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
 }
 simulated function AddNavTargetLeft( UIPanel Control )
 {
 	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_ARROW_LEFT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
 	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_DPAD_LEFT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_ARROW_LEFT, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_DPAD_LEFT, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
 }
 simulated function AddNavTargetUp( UIPanel Control )
 {
 	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_ARROW_UP, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
 	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_DPAD_UP, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_ARROW_UP, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_DPAD_UP, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
 }
 simulated function AddNavTargetDown( UIPanel Control )
 {
 	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_ARROW_DOWN, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
 	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_DPAD_DOWN, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_ARROW_DOWN, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_DPAD_DOWN, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN, class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT);
 }
 
+simulated function AddNavTargetDiagUpRight( UIPanel Control )
+{
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_UP_RIGHT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+}
+simulated function AddNavTargetDiagDownRight( UIPanel Control )
+{
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_DOWN_RIGHT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+}
+simulated function AddNavTargetDiagDownLeft( UIPanel Control )
+{
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_DOWN_LEFT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+}
+simulated function AddNavTargetDiagUpLeft( UIPanel Control )
+{
+	AddNavTarget(Control, class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_UP_LEFT, class'UIUtilities_Input'.const.FXS_ACTION_PRESS);
+}
+simulated function RemoveNavTargetRight()
+{
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_ARROW_RIGHT);
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_DPAD_RIGHT);
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT);
+}
+
+simulated function RemoveNavTargetLeft()
+{
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_ARROW_LEFT);
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_DPAD_LEFT);
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT);
+}
+
+simulated function RemoveNavTargetUp()
+{
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_ARROW_UP);
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_DPAD_UP);
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP);
+}
+
+simulated function RemoveNavTargetDown()
+{
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_ARROW_DOWN);
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_DPAD_DOWN);
+	RemoveNavTargetByCmd(class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN);
+}
+public function string PrintTabs(int NumTabs)
+{
+	local string Tabs;
+	local int i;
+	for (i = 0; i < NumTabs; i++)
+		Tabs = Tabs$"  ";
+	return Tabs;
+}
+
+public function PrintTree(optional int NumTabs=0, optional bool IsSelectedIndex=false)
+{
+	local int i;
+	local string descriptor;
+	local string joinedItems;
+	local UIButton button;
+	local UIDropdown dropdown;
+
+	if (NumTabs == 0)
+		`log("");
+
+	button = UIButton(self.OwnerControl);
+	dropdown = UIDropdown(self.OwnerControl);
+	if (button != none)
+	{
+		descriptor = button.Text;
+	}
+	else if (dropdown != none)
+	{
+		JoinArray(dropdown.Items, joinedItems, ", ");
+		descriptor = dropdown.Label$":" @ joinedItems;
+	}
+
+	`log(PrintTabs(NumTabs)$self.OwnerControl @ self.OwnerControl.MCName @ "("$descriptor$")"@ (IsSelectedIndex ? "<<< SELECTED" : "") @ (self.OwnerControl.bIsFocused ? "<<< FOCUSED" : ""));
+	for (i = 0; i < NavigableControls.length; i++)
+		NavigableControls[i].Navigator.PrintTree(NumTabs+1, i == SelectedIndex);
+}
 // FALSE means we've lost focus.
 // TRUE means we've handled this internally.
-public function bool Next( optional bool ReturningFromChild = false, optional bool bNewFocus = false )
+
+public function bool Next(optional bool ReturningFromChild = false, optional bool bNewFocus = false, optional bool IsRepeat = false)
 {
 	local bool HandledByChild; 
 	local bool HandledByOwner;
 	local int PrevSelectedIndex;
 	local UIPanel NavigableControl;
 	local UIPanel SelectedControl;
+	local int ChildIndex;
 
 	if(Size == 0)
 		return false;
+	ChildIndex = -1;
 
 	// If our Control was unfocused, then we need to force the direction that we are entering from,
 	// because we're in Next() so we know what the selection will need to be. 
@@ -278,13 +400,13 @@ public function bool Next( optional bool ReturningFromChild = false, optional bo
 
 		if(SelectedControl != none)
 		{
-			HandledByChild = SelectedControl.Navigator.Next();
+			HandledByChild = SelectedControl.Navigator.Next(,, IsRepeat);
 		}
 		else
 		{
 			foreach NavigableControls(NavigableControl)
 			{
-				if(NavigableControl.Navigator.Next())
+				if(NavigableControl.Navigator.Next(,, IsRepeat))
 				{
 					HandledByChild = true;
 					break;
@@ -295,23 +417,39 @@ public function bool Next( optional bool ReturningFromChild = false, optional bo
 
 	if(HandledByChild)
 	{
+		if(SelectedIndex < 0)
+		{
+			SelectedIndex = ChildIndex;
+			SelectedControl = GetSelected();
+			if(SelectedControl != none)
+				SelectedControl.OnReceiveFocus();
+		}
 		return true;
 	}
 	else
 	{
+		ChildIndex = -1;
 		//Do we need to LoopSelection? 
 		PrevSelectedIndex = SelectedIndex++;
 		if(SelectedIndex >= Size)
 		{
 			if(LoopSelection || (LoopOnReceiveFocus && bNewFocus))
 			{
+				//no loop when holding down
+				if (IsRepeat && !bNewFocus) //Added !bNewFocus condition - BET 2016-04-14
+				{
+					SelectedIndex--;
+					return true;
+				}
 				SelectedIndex = 0;
 			}
 			else
 			{
 				// We've hit an end cap of our local Control's items, so we need to report upwards to go to the next item if possible. 
 				if( OwnerControl.ParentPanel != none )
-					HandledByOwner = OwnerControl.ParentPanel.Navigator.Next(true);
+
+					HandledByOwner = OwnerControl.ParentPanel.Navigator.Next(true,, IsRepeat);
+
 
 				// Set to out of range endcap values, so we can see which way we left this object for debugging purposes. 
 				if( HandledByOwner )
@@ -319,6 +457,10 @@ public function bool Next( optional bool ReturningFromChild = false, optional bo
 				else
 					SelectedIndex--;
 			}
+		}
+		if(ReturningFromChild && size == 1 && OwnerControl.ParentPanel.Navigator.Size == 1)
+		{
+			return true;
 		}
 
 		// Always lose focus on the previously selected element, in case the Control UIPanel is losing focus 
@@ -333,13 +475,19 @@ public function bool Next( optional bool ReturningFromChild = false, optional bo
 			SelectedControl = GetSelected();
 			if(SelectedControl != none)
 			{
-				if (SelectedControl.Navigator.OwnerControl == none ||
-					SelectedControl.Navigator.OwnerControl.ParentPanel == none ||
-					SelectedControl.Navigator.OwnerControl.ParentPanel.Navigator != SelectedControl.Navigator)
-				{
-					SelectedControl.Navigator.Next(ReturningFromChild, true);
-					SelectedControl.OnReceiveFocus();
-				}
+				//TODO: BSTEINER: evaluate 
+				//<workshop> Unbreak the navigator SCI 2015/11/16
+				//WAS:
+				//if (SelectedControl.Navigator.OwnerControl == none ||
+				//	SelectedControl.Navigator.OwnerControl.ParentPanel == none ||
+				//	SelectedControl.Navigator.OwnerControl.ParentPanel.Navigator != SelectedControl.Navigator)
+				//{
+				//	SelectedControl.Navigator.Next(ReturningFromChild, true);
+				//	SelectedControl.OnReceiveFocus();
+				//}
+				SelectedControl.Navigator.Next(ReturningFromChild, true, IsRepeat);
+				SelectedControl.OnReceiveFocus();
+				//</workshop>
 			}
 
 			if(OnSelectedIndexChanged != none)
@@ -354,16 +502,18 @@ public function bool Next( optional bool ReturningFromChild = false, optional bo
 
 // FALSE means we've lost focus.
 // TRUE means we've handled this internally.
-public function bool Prev( optional bool ReturningFromChild = false, optional bool bNewFocus = false )
+public function bool Prev( optional bool ReturningFromChild = false, optional bool bNewFocus = false, optional bool IsRepeat = false)
 {
 	local bool HandledByChild; 
 	local bool HandledByOwner;
 	local int PrevSelectedIndex;
 	local UIPanel NavigableControl;
 	local UIPanel SelectedControl;
+	local int ChildIndex;
 
 	if(Size == 0)
 		return false;
+	ChildIndex = -1;
 
 	// If our Control was unfocused, then we need to force the direction that we are entering from, 
 	// because we're in Prev() so we know what the selection will need to be. 
@@ -377,13 +527,15 @@ public function bool Prev( optional bool ReturningFromChild = false, optional bo
 		SelectedControl = GetSelected();
 		if(SelectedControl != none)
 		{
-			HandledByChild = SelectedControl.Navigator.Prev();
+
+			HandledByChild = SelectedControl.Navigator.Prev(,, IsRepeat);
 		}
 		else
 		{
 			foreach NavigableControls(NavigableControl)
 			{
-				if(NavigableControl.Navigator.Prev())
+				ChildIndex++;
+				if(NavigableControl.Navigator.Prev(,, IsRepeat))
 				{
 					HandledByChild = true;
 					break;
@@ -394,23 +546,37 @@ public function bool Prev( optional bool ReturningFromChild = false, optional bo
 
 	if(HandledByChild)
 	{
+		if(SelectedIndex < 0)
+		{
+			SelectedIndex = ChildIndex;
+			SelectedControl = GetSelected();
+			if(SelectedControl != none)
+				SelectedControl.OnReceiveFocus();
+		}
 		return true;
 	}
 	else
 	{
+		ChildIndex = -1;
 		//Do we need to LoopSelection? 
 		PrevSelectedIndex = SelectedIndex--;
 		if(SelectedIndex < 0)
 		{
 			if(LoopSelection || (LoopOnReceiveFocus && bNewFocus))
 			{
+				//no loop when holding down
+				if (IsRepeat && !bNewFocus) //Added !bNewFocus condition - BET 2016-04-14
+				{
+					SelectedIndex++;
+					return true;
+				}
 				SelectedIndex = Size - 1;
 			}
 			else
 			{
 				// We've hit an end cap of our local Control's items, so we need to report upwards to go to the next item if possible. 
 				if( OwnerControl.ParentPanel != none )
-					HandledByOwner = OwnerControl.ParentPanel.Navigator.Prev(true);
+					HandledByOwner = OwnerControl.ParentPanel.Navigator.Prev(true,, IsRepeat);
 
 				// Set to out of range endcap values, so we can see which way we left this object for debugging purposes. 
 				if( HandledByOwner )
@@ -418,6 +584,10 @@ public function bool Prev( optional bool ReturningFromChild = false, optional bo
 				else
 					SelectedIndex++;
 			}
+		}
+		if(ReturningFromChild && size == 1 && OwnerControl.ParentPanel.Navigator.Size == 1)
+		{
+			return true;
 		}
 
 		// Always lose focus on the previously selected element, in case the Control UIPanel is losing focus 
@@ -432,13 +602,19 @@ public function bool Prev( optional bool ReturningFromChild = false, optional bo
 			SelectedControl = GetSelected();
 			if(SelectedControl != none)
 			{
-				if (SelectedControl.Navigator.OwnerControl == none ||
-					SelectedControl.Navigator.OwnerControl.ParentPanel == none ||
-					SelectedControl.Navigator.OwnerControl.ParentPanel.Navigator != SelectedControl.Navigator)
-				{
-					SelectedControl.Navigator.Prev(ReturningFromChild, true);
-					SelectedControl.OnReceiveFocus();
-				}
+				// TODO: bsteiner evaluate 
+				//<workshop> Unbreak the navigator SCI 2015/11/16
+				//WAS:
+				//if (SelectedControl.Navigator.OwnerControl == none ||
+				//	SelectedControl.Navigator.OwnerControl.ParentPanel == none ||
+				//	SelectedControl.Navigator.OwnerControl.ParentPanel.Navigator != SelectedControl.Navigator)
+				//{
+				//	SelectedControl.Navigator.Prev(ReturningFromChild, true);
+				//	SelectedControl.OnReceiveFocus();
+				//}
+				SelectedControl.Navigator.Prev(ReturningFromChild, true, IsRepeat);
+				SelectedControl.OnReceiveFocus();
+				//</workshop>
 			}
 
 			if(OnSelectedIndexChanged != none)
@@ -463,6 +639,18 @@ public function UIPanel GetSelected()
 {
 	if( IsValid(SelectedIndex) )
 		return NavigableControls[SelectedIndex];
+	//<workshop> SAFEGUARD_TO_PREVENT_FOCUS_LOSS - JTA 2016/2/22  /  WEAPON_UPGRADE_UI_FIXES, BET, 2016-03-23
+	//INS:
+	//Triggers if a UIList has a valid SelectedIndex, but its Navigator has an invalid (and different) SelectedIndex
+	//***This is a workaround for focus issues that manifested after the Feb2016 integration***
+	if( UIList(OwnerControl) != None && UIList(OwnerControl).SelectedIndex >= 0 && IsValid(UIList(OwnerControl).SelectedIndex) )
+	{
+		if(!UIList(OwnerControl).bPermitNavigatorToDefocus) //Compound hack, explicitly call out places where this was correct behavior -bet
+		{
+			SelectedIndex = UIList(OwnerControl).SelectedIndex;
+			return NavigableControls[SelectedIndex];
+		}
+	}
 	return none;
 }
 
@@ -492,6 +680,18 @@ public function SetSelected( optional UIPanel SelectedControl = none )
 	}
 }
 
+public function ClearSelectionHierarchy()
+{
+	local int i;
+
+	SelectedIndex = -1;
+	OnLoseFocus();
+	for( i = 0; i < NavigableControls.length; i++ )
+	{
+		NavigableControls[i].Navigator.ClearSelectionHierarchy();
+	}
+}
+
 public function bool SelectFirstAvailableIfNoCurrentSelection()
 {
 	local bool bHandledByChild;
@@ -507,6 +707,13 @@ public function bool SelectFirstAvailableIfNoCurrentSelection()
 
 			if( OnSelectedIndexChanged != none )
 				OnSelectedIndexChanged(SelectedIndex);
+		}
+		else
+		{
+			//the appropriate item has been handled by a child, let's 
+			//just ensure that the parent has the child selected as well.
+			if(SelectedIndex < 0)
+				SelectedIndex = 0;
 		}
 		return true; 
 	}
@@ -532,6 +739,10 @@ public function bool SelectFirstAvailable()
 
 			if( OnSelectedIndexChanged != none )
 				OnSelectedIndexChanged(SelectedIndex);
+		}
+		else
+		{
+			SelectedIndex = 0;
 		}
 		return true; 
 	}

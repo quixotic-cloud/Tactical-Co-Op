@@ -37,6 +37,8 @@ var UIShellStrategy DevStrategyShell;
 
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
 {
+	local UINavigationHelp NavHelp;
+
 	super.InitScreen(InitController, InitMovie, InitName);
 
 	
@@ -49,7 +51,13 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	m_CancelButton = Spawn(class'UIButton', self);
 	m_CancelButton.bIsNavigable = false;
-	m_CancelButton.InitButton('ironmanCancelButton', m_strIronmanCancel, OnButtonCancel);
+	m_CancelButton.InitButton('ironmanCancelButton').Hide();
+	
+	NavHelp = Movie.Pres.GetNavHelp();
+	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
+	NavHelp.AddBackButton(OnButtonCancel);
+	NavHelp.AddSelectNavHelp();
 
 	`XPROFILESETTINGS.Data.ClearGameplayOptions();
 }
@@ -90,9 +98,6 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 			}
 			return true;
 
-		case class'UIUtilities_Input'.const.FXS_BUTTON_START:
-			ConfirmIronman(m_StartButton);
-			return true;
 			
 		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
@@ -123,7 +128,7 @@ simulated public function OnUCancel()
 	}
 }
 
-simulated public function OnButtonCancel(UIButton ButtonControl)
+simulated public function OnButtonCancel()
 {
 	if( bIsInited )
 	{

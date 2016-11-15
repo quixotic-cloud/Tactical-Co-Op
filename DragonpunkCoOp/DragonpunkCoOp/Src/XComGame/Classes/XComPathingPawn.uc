@@ -13,6 +13,13 @@ class XComPathingPawn extends XComUnitPawnNativeBase
 
 const PATH_SEGMENT_DISTANCE = 64;
 
+var TTile LastCursorTile;
+var Vector LastEndPoint;
+var bool bMoved;
+var int iFramesSinceMoved;    // number of frames since the cursor moved
+var int iFramesSinceNotMoved; // number of frames since the cursor did not move
+var vector LastCursorLocation;
+var float fPuckMeshCircleOpacity; // opacity of the circular puck mesh
 struct native HazardMarker
 {
 	var TTile Tile;     // the tile the marker sits on
@@ -61,6 +68,9 @@ var private{private} native Map_Mirror ConcealmentCache{TMap<INT, FConcealmentBr
 
 // config values
 var private const config string PuckMeshName; // name of the default pathing puck mesh
+var private const config string PuckMeshCircleName; // name of the cursor mesh (blue)
+var private const config string HeightCylinderName; // name of the height cylinder mesh
+var private const config string PuckMeshCircleDashingName; // name of the cursor mesh, if it's in dashing range (yellow)
 var private const config string PuckMeshConfirmedName; // name of the mesh that animates out when a move is confirmed
 var private const config string PuckMeshDashingName; // name of the mesh that is swapped for the default when the unit will dash (or use their remaining action point)
 var private const config string PuckMeshConfirmedDashingName; // same as PuckMeshConfirmedName, but for the dashing case
@@ -106,7 +116,7 @@ var private bool ForceUpdateNextTick; // set to true if some operation requires 
 
 var privatewrite transient XComPath VisualPath; // the pulled path that traces the path tiles
 var privatewrite array<TTile> PathTiles;    // the actual tiles the unit will traverse if the move is confirmed
-var privatewrite transient TTile LastDestinationTile; // the last tile the path would end at. can be different from LastCursorTile if the cursor is on an invalid tile
+var protectedwrite transient TTile LastDestinationTile; // the last tile the path would end at. can be different from LastCursorTile if the cursor is on an invalid tile
 
 var privatewrite transient XComGameState_BaseObject LastTargetObject; // Last actor the cursor was over, allows us to path info on change in target
 var private				   bool					WasDashing;
@@ -118,6 +128,8 @@ var private InterpCurveVector kSplineInfo; // the spline used to smooth out the 
 
 // puck status meshs. see the config variables for each for a description
 var protected StaticMesh PuckMeshNormal; 
+var protected StaticMesh PuckMeshCircle;          // cursor mesh (blue)
+var protected StaticMesh PuckMeshCircleDashing;   // dashing cursor mesh (yellow)
 var protected StaticMesh PuckMeshDashing;
 var protected StaticMesh PuckMeshConfirmed;
 var protected StaticMesh PuckMeshConfirmedDashing;
@@ -143,6 +155,8 @@ var private X2FadingInstancedStaticMeshComponent ObjectiveTilesRenderingComponen
 
 // puck mesh components
 var protected X2FadingStaticMeshComponent PuckMeshComponent; // mesh that shows at LastDestinationTile, for the normal movement puck
+var protected X2FadingStaticMeshComponent PuckMeshCircleComponent; // cursor fading static mesh component
+var protected StaticMeshComponent UnitSelectMeshComponent; // animating mesh that appears when a new unit is selected and the cursor is still on that unit
 var protected X2FadingStaticMeshComponent SlashingMeshComponent; // mesh that shows when targeting a unit with the melee path targeting
 var protected StaticMeshComponent OutOfRangeMeshComponent; // mesh that shows when LastCursorTile does not match LastDestinationTile
 
@@ -175,7 +189,8 @@ native function protected UpdateRenderablePath(vector CameraLocation);
 
 native function DebugPathing();
 
-native function public UpdateTileCacheVisuals();
+native function public UpdateTileCacheVisuals(optional bool bGrappleMove = false);
+native function public UpdateSpecialTileCacheVisuals(array<TTile> TargetTiles);
 
 simulated function UpdateConcealmentTilesVisibility(optional bool ForceHidden = false)
 {
@@ -219,6 +234,25 @@ simulated function bool IsDashing()
 	}
 }
 
+// returns true if the current path will use more than two movement points (so is always out of range)
+simulated function bool IsOutOfRange(TTile Tile)
+{
+	local float pathCostToTile;
+	//local float mobility;
+
+	// check if the current
+	if(LastActiveUnit != none && ActiveCache != none)
+	{
+		pathCostToTile = ActiveCache.GetPathCostToTile(Tile);
+		//mobility = LastActiveUnit.GetMobility();
+		return pathCostToTile > 2 * LastActiveUnit.GetMobility() || // will require more than two moves
+			   pathCostToTile < 0; // invalid tile
+	}
+	else
+	{
+		return false;
+	}
+}
 simulated function UpdatePathTileData()
 {
 	if( LastActiveUnit != none )
@@ -262,6 +296,12 @@ simulated event PostBeginPlay()
 
 	// setup the puck and its various states
 	PuckMeshNormal = StaticMesh(DynamicLoadObject(PuckMeshName, class'StaticMesh'));
+
+	if(`ISCONTROLLERACTIVE)
+	{
+		PuckMeshCircle = StaticMesh(DynamicLoadObject(PuckMeshCircleName, class'StaticMesh'));
+		PuckMeshCircleDashing = StaticMesh(DynamicLoadObject(PuckMeshCircleDashingName, class'StaticMesh'));
+	}
 	PuckMeshDashing = StaticMesh(DynamicLoadObject(PuckMeshDashingName, class'StaticMesh'));
 	PuckMeshConfirmed = StaticMesh(DynamicLoadObject(PuckMeshConfirmedName, class'StaticMesh'));
 	PuckMeshConfirmedDashing = StaticMesh(DynamicLoadObject(PuckMeshConfirmedDashingName, class'StaticMesh'));
@@ -272,6 +312,13 @@ simulated event PostBeginPlay()
 	PuckMeshEnemySelect = StaticMesh(DynamicLoadObject(PuckMeshEnemySelectName, class'StaticMesh'));
 
 	PuckMeshComponent.SetStaticMeshes(PuckMeshNormal, PuckMeshConfirmed);
+	if(`ISCONTROLLERACTIVE)
+	{
+		PuckMeshCircleComponent.SetStaticMesh(PuckMeshCircle);
+		OutOfRangeMeshComponent.SetStaticMesh(PuckMeshOutOfRange);
+		UnitSelectMeshComponent.SetStaticMesh(PuckMeshUnitSelect);
+	}
+
 	SlashingMeshComponent.SetStaticMeshes(PuckMeshSlashing, PuckMeshConfirmedSlashing);
 
 	ConcealmentTilesVisibleMesh = StaticMesh(DynamicLoadObject(ConcealmentTilesVisibleMeshName, class'StaticMesh'));
@@ -343,6 +390,7 @@ simulated event SetActive(XGUnitNativeBase kActiveXGUnit, optional bool bCanDash
 		ForceResetConcealment = true;
 	else
 		ForceResetConcealment = false;
+
 
 	ForceUpdateNextTick = true;
 	LastActiveUnit = kActiveXGUnit;
@@ -463,10 +511,18 @@ private function XComGameState_Ability SelectMeleeMovePathDestination(XComGameSt
 	GroundPlane.Z = 1;
 	GroundPlane.W = TargetLocation dot vect(0, 0, 1);
 
-	// find where the mouse intersects the ground plane under the unit
-	if(!RayPlaneIntersection(Hud.CachedMouseWorldOrigin, Hud.CachedMouseWorldDirection, GroundPlane, GroundPlaneMouseIntersect))
+	if(`ISCONTROLLERACTIVE)
 	{
-		return none; // no intersection with the ground plane, can't select a destination
+		GroundPlaneMouseIntersect = `CURSOR.Location;
+		GroundPlaneMouseIntersect.Z = TargetLocation.Z;
+	}
+	else
+	{
+		// find where the mouse intersects the ground plane under the unit
+		if(!RayPlaneIntersection(Hud.CachedMouseWorldOrigin, Hud.CachedMouseWorldDirection, GroundPlane, GroundPlaneMouseIntersect))
+		{
+			return none; // no intersection with the ground plane, can't select a destination
+		}
 	}
 
 	// and then get the closest tile along the line from the center of the target unit's tile to the mouse intersect.
@@ -502,10 +558,42 @@ private function XComGameState_Ability SelectMeleeMovePathDestination(XComGameSt
 	return none;
 }
 
-// this is the overarching function that rebuilds all of the pathing information when the destination or active unit changes.
-// if you need to add some other information (markers, tiles, etc) that needs to be updated when the path does, you should add a 
-// call to that update function to this function.
-simulated protected function RebuildPathingInformation(TTile PathDestination, Actor TargetActor, X2AbilityTemplate MeleeAbilityTemplate)
+// Determines whether the cursor is on the same tiles as the current unit.
+simulated function bool CursorOnOriginalUnit()
+{
+	local Actor TargetActor;
+	local TTile CursorTile;
+	local vector CursorLocation;
+	local XComGameState_Unit ActiveUnitState;
+	local XComTacticalHUD Hud;
+	local XComUnitPawn TargetPawn;
+	local XComWorldData WorldData;	
+	
+	WorldData = `XWORLD;
+	CursorLocation = `CURSOR.Location;
+	if(!WorldData.GetFloorTileForPosition(CursorLocation, CursorTile))
+	{
+		CursorTile = WorldData.GetTileCoordinatesFromPosition(CursorLocation);
+	}
+
+	Hud = XComTacticalHUD(GetALocalPlayerController().myHUD);
+	TargetActor = Actor(Hud.CachedMouseInteractionInterface);
+	if (TargetActor == none)
+	{
+		TargetActor = WorldData.GetActorOnTile(CursorTile);
+		if (TargetActor != none && XGUnit(TargetActor) != none)
+		{
+			TargetActor = XGUnit(TargetActor).GetPawn();
+		}
+	}
+	TargetPawn = XComUnitPawn(TargetActor);
+
+	ActiveUnitState = XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(LastActiveUnit.ObjectID));
+
+	return TargetPawn != none && TargetPawn.GetGameUnit() != none && TargetPawn.GetGameUnit().ObjectID == ActiveUnitState.ObjectID;
+}
+
+simulated protected function RebuildOnlySplinepathingInformation(TTile PathDestination)
 {
 	local XComGameState_Unit ActiveUnitState;
 	local array<PathPoint> PathPoints;
@@ -513,6 +601,57 @@ simulated protected function RebuildPathingInformation(TTile PathDestination, Ac
 	local float OriginalOriginZ;
 
 	ActiveUnitState = XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(LastActiveUnit.ObjectID));
+	UpdatePath(PathDestination, PathTiles);
+
+	class'X2PathSolver'.static.GetPathPointsFromPath(ActiveUnitState, PathTiles, PathPoints);
+
+	OriginalOriginZ = PathPoints[0].Position.Z;
+	PathPoints[0].Position = LastActiveUnit.GetPawn().GetFeetLocation();
+	PathPoints[0].Position.Z = OriginalOriginZ;
+
+	if(PathTiles[PathTiles.Length - 1] == ActiveUnitState.TileLocation)
+	{
+		PathPoints[PathPoints.Length - 1].Position = PathPoints[0].Position;
+	}
+
+	GetWaypointTiles(WaypointTiles);
+	class'XComPath'.static.PerformStringPulling(LastActiveUnit, PathPoints, WaypointTiles);
+
+	VisualPath.SetPathPointsDirect(PathPoints);
+	BuildSpline();
+
+	UpdateConcealmentMarkers();
+	UpdateConcealmentBreakingMarkerInfo();
+	UpdateObjectiveTiles(ActiveUnitState);
+	UpdateHazardMarkerInfo(ActiveUnitState);
+	UpdateNoiseMarkerInfo(ActiveUnitState);
+	UpdatePathMarkers();
+
+	UpdateRenderablePath(`CAMERASTACK.GetCameraLocationAndOrientation().Location);
+}
+
+// this is the overarching function that rebuilds all of the pathing information when the destination or active unit changes.
+// if you need to add some other information (markers, tiles, etc) that needs to be updated when the path does, you should add a 
+// call to that update function to this function.
+
+simulated protected function RebuildPathingInformation(TTile PathDestination, Actor TargetActor, X2AbilityTemplate MeleeAbilityTemplate, TTile CursorTile)
+{
+	local XComWorldData WorldData;
+	local XComGameState_Unit ActiveUnitState;
+	local array<PathPoint> PathPoints;
+	local array<TTile> WaypointTiles;
+	local float OriginalOriginZ;
+	local XComCoverPoint CoverPoint;
+	local bool bCursorOnOriginalUnit;
+
+	if(LastActiveUnit == none)
+	{
+		`Redscreen("RebuildPathingInformation(): Unable to update, no unit was set with SetActive()");
+		return;
+	}
+
+	ActiveUnitState = XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(LastActiveUnit.ObjectID));
+	bCursorOnOriginalUnit = CursorOnOriginalUnit();
 
 	UpdatePath(PathDestination, PathTiles);
 
@@ -530,6 +669,20 @@ simulated protected function RebuildPathingInformation(TTile PathDestination, Ac
 	{
 		PathPoints[PathPoints.Length - 1].Position = PathPoints[0].Position;
 	}	
+	// If cursor is in bounds, and is not being snapped to a cover shield location,
+	// and the cursor is on a valid tile or on the current unit,
+	// the path should lead to the exact cursor position.
+	if (`ISCONTROLLERACTIVE && 
+		`XPROFILESETTINGS.Data.m_bSmoothCursor && 
+	    (CursorTile == PathDestination || bCursorOnOriginalUnit))
+	{
+		WorldData = `XWORLD;
+		if(!WorldData.GetCoverPoint(PathPoints[PathPoints.Length - 1].Position, CoverPoint))
+		{
+			PathPoints[PathPoints.Length - 1].Position.X = `CURSOR.Location.X;
+			PathPoints[PathPoints.Length - 1].Position.Y = `CURSOR.Location.Y;
+		}
+	}
 
 	// pull the points. This smooths the points and removes unneeded angles in the line that result
 	// from pathing through discrete tiles
@@ -548,13 +701,27 @@ simulated protected function RebuildPathingInformation(TTile PathDestination, Ac
 
 	UpdatePathTileData();		
 	UpdateRenderablePath(`CAMERASTACK.GetCameraLocationAndOrientation().Location);
+	if( `ISCONTROLLERACTIVE )
+	{
+		RenderablePath.SetHidden(bCursorOnOriginalUnit);
+	}
 
 	UpdateTileCacheVisuals();
 	UpdateBorderHideHeights();
 
-	UpdatePuckVisuals(ActiveUnitState, PathDestination, TargetActor, MeleeAbilityTemplate);
+	if( `ISCONTROLLERACTIVE == FALSE )
+		UpdatePuckVisuals(ActiveUnitState, PathDestination, TargetActor, MeleeAbilityTemplate);
 	UpdatePuckFlyovers(ActiveUnitState);
 	UpdatePuckAudio();
+}
+
+simulated protected function DoUpdatePuckVisuals(TTile PathDestination, Actor TargetActor, X2AbilityTemplate MeleeAbilityTemplate)
+{
+	local XComGameState_Unit ActiveUnitState;
+
+	ActiveUnitState = XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(LastActiveUnit.ObjectID));
+
+	UpdatePuckVisuals(ActiveUnitState, PathDestination, TargetActor, MeleeAbilityTemplate);
 }
 
 simulated function GetMaxTileZFromFloorLevel(XComBuildingVolume BuildingVolume, int FloorNum, out int MaxTileZ)
@@ -589,6 +756,8 @@ simulated event Tick(float DeltaTime)
 	local int TargetObjectId;
 	local XComGameState_BaseObject TargetObject;
 	local int MinZ, MaxZ;
+	local vector RoundedPos;
+	local TTile RoundedTile;
 
 	super.Tick(DeltaTime);
 
@@ -596,6 +765,10 @@ simulated event Tick(float DeltaTime)
 	if (TacticalCheatManager != none && TacticalCheatManager.bHidePathingPawn)
 	{
 		PuckMeshComponent.SetHidden(true);
+		if( `ISCONTROLLERACTIVE )
+		{
+			PuckMeshCircleComponent.SetHidden(true);
+		}	
 		SlashingMeshComponent.SetHidden(true);
 		OutOfRangeMeshComponent.SetHidden(true);
 		ConcealmentRenderingComponent.SetHidden(true);
@@ -647,7 +820,7 @@ simulated event Tick(float DeltaTime)
 
 	// snap the cursor location to the ground
 	WorldData = `XWORLD;
-	if(!WorldData.GetFloorTileForPosition(CursorLocation, CursorTile))
+	if(!WorldData.GetFloorTileForPosition(CursorLocation, CursorTile, `ISCONTROLLERACTIVE))
 	{
 		CursorTile = WorldData.GetTileCoordinatesFromPosition(CursorLocation);
 	}
@@ -661,6 +834,29 @@ simulated event Tick(float DeltaTime)
 		TargetObjectId = XComDestructibleActor(Hud.CachedMouseInteractionInterface).ObjectID;
 	}
 
+	if( `ISCONTROLLERACTIVE )
+	{
+		if (TargetActor == none)
+		{
+			TargetActor = WorldData.GetActorOnTile(CursorTile);
+			if (TargetActor != none && XGUnit(TargetActor) != none)
+			{
+				TargetActor = XGUnit(TargetActor).GetPawn();
+			}
+		}
+
+		if (TargetObjectId <= 0)
+		{
+			if (XComUnitPawn(TargetActor) != none)
+			{
+				TargetObjectId = XComUnitPawn(TargetActor).GetGameUnit().ObjectID;
+			}
+			else if (XComDestructibleActor(TargetActor) != none)
+			{
+				TargetObjectId = XComDestructibleActor(TargetActor).ObjectID;
+			}
+		}
+	}
 	TargetObject = `XCOMHISTORY.GetGameStateForObjectID(TargetObjectId);
 
 	// special case for melee attack moves. If we're targeting a unit, pick the destination tile based
@@ -683,7 +879,24 @@ simulated event Tick(float DeltaTime)
 		}
 		else
 		{
-			PathDestination = ActiveCache.GetClosestReachableDestination(CursorTile, , MinZ, MaxZ);
+			if( `ISCONTROLLERACTIVE )
+			{
+				//Improve tactical UI when cursor is on original unit AMS 2016/05/05
+
+				// jharries: have to round the z coord to stop the feet being stuck in the ground occasionally, thus causing a pathing fail
+		       	RoundedTile = WorldData.GetTileCoordinatesFromPosition(CursorLocation);
+				RoundedPos = WorldData.GetPositionFromTileCoordinates(RoundedTile);
+				CursorLocation.Z = RoundedPos.Z;
+
+
+				//TEMP bsteiner PathDestination = ActiveCache.GetClosestReachableDestinationToLocation(CursorTile, CursorLocation, , MinZ, MaxZ);
+				PathDestination = ActiveCache.GetClosestReachableDestination(CursorTile, , MinZ, MaxZ); //TEMP bsteiner 
+			}
+			else
+			{
+		
+				PathDestination = ActiveCache.GetClosestReachableDestination(CursorTile, , MinZ, MaxZ);
+			}
 		}
 		TargetObject = none;
 	}
@@ -693,18 +906,24 @@ simulated event Tick(float DeltaTime)
 		|| PathDestination.X != LastDestinationTile.X 
 		|| PathDestination.Y != LastDestinationTile.Y 
 		|| PathDestination.Z != LastDestinationTile.Z
+		|| ( `ISCONTROLLERACTIVE && ( CursorTile != LastCursorTile || (`XPROFILESETTINGS.Data.m_bSmoothCursor && CursorLocation != LastCursorLocation)))
 		|| TargetObject != LastTargetObject)
 	{
 		LastDestinationTile = PathDestination;
 		LastActiveUnit = ActiveUnit;
 
-		RebuildPathingInformation(PathDestination, TargetActor, MeleeAbility != none ? MeleeAbility.GetMyTemplate() : none);
+		RebuildPathingInformation(PathDestination, TargetActor, MeleeAbility != none ? MeleeAbility.GetMyTemplate() : none, CursorTile);
 
 		UpdateMeleeDamagePreview(TargetObject, LastTargetObject, MeleeAbility);
 		LastTargetObject = TargetObject;
 
 		bConcealmentTilesNeedUpdate = false;
 		ForceUpdateNextTick = false;
+	}
+	if( `ISCONTROLLERACTIVE )
+	{
+		DoUpdatePuckVisuals(PathDestination, TargetActor, MeleeAbility != none ? MeleeAbility.GetMyTemplate() : none);
+		LastCursorTile = CursorTile;
 	}
 }
 
@@ -780,6 +999,16 @@ simulated protected function UpdatePuckVisuals(XComGameState_Unit ActiveUnitStat
 	local XGUnit TargetVisualizer;
 	local XComUnitPawn TargetPawn;
 	local float UnitSize;
+	local vector VisualPathEndPoint;
+	local float FadeProgress;
+	local float kFocusedOpacity;
+	local float kNonFocusedOpacity;
+	local float kFNumFocusInterpFrames;
+	local bool bOutOfRange;
+
+	local XComTacticalController TheCursor;
+	if( `ISCONTROLLERACTIVE )
+		VisualPathEndPoint = VisualPath.GetEndPoint();
 
 	WorldData = `XWORLD;
 	TargetPawn = XComUnitPawn(TargetActor);
@@ -792,6 +1021,10 @@ simulated protected function UpdatePuckVisuals(XComGameState_Unit ActiveUnitStat
 	if(PathDestination != CursorTile)
 	{
 		MeshTranslation = WorldData.GetPositionFromTileCoordinates(CursorTile);
+		if( `ISCONTROLLERACTIVE )
+		{
+			MeshTranslation.Z = VisualPathEndPoint.Z;
+		}
 		MeshTranslation.Z = WorldData.GetFloorZForPosition(MeshTranslation) + PathHeightOffset;
 
 		if(MeleeAbilityTemplate != none)
@@ -857,19 +1090,27 @@ simulated protected function UpdatePuckVisuals(XComGameState_Unit ActiveUnitStat
 			MeshScale.Z = 1.0f;
 			OutOfRangeMeshComponent.SetScale3D( MeshScale );
 		}
-		else
+
+		else if (`ISCONTROLLERACTIVE && (PathDestination.X != CursorTile.X || PathDestination.Y != CursorTile.Y))
 		{
 			// hide the melee mesh, show out of range mesh
 			SlashingMeshComponent.SetHidden(true);
 			OutOfRangeMeshComponent.SetHidden(false);
 			OutOfRangeMeshComponent.SetStaticMesh(PuckMeshOutOfRange);
-			OutOfRangeMeshComponent.SetTranslation(MeshTranslation);
+			OutOfRangeMeshComponent.SetTranslation(`CURSOR.GetCursorFeetLocation());
 
+
+			bOutOfRange = true;
 			MeshScale.X = 1.0f;
 			MeshScale.Y = 1.0f;
 			MeshScale.Z = 1.0f;
 			OutOfRangeMeshComponent.SetScale3D( MeshScale );
 		}	
+		else
+		{
+			SlashingMeshComponent.SetHidden(true);
+			OutOfRangeMeshComponent.SetHidden(true);
+		}
 	}
 	else
 	{
@@ -880,10 +1121,15 @@ simulated protected function UpdatePuckVisuals(XComGameState_Unit ActiveUnitStat
 	// the normal puck is always visible, and located wherever the unit
 	// will actually move to when he executes the move
 	PuckMeshComponent.SetHidden(false);
+	if( `ISCONTROLLERACTIVE )
+		PuckMeshCircleComponent.SetHidden(bOutOfRange);
 	if (SlashingMeshComponent.HiddenGame == false)
 	{
 		// update the slashing mesh to be correct for the currently targeted ability
 		PuckMeshComponent.SetStaticMeshes(GetMeleePuckMeshForAbility(MeleeAbilityTemplate), PuckMeshConfirmed);
+		if( `ISCONTROLLERACTIVE )
+			PuckMeshCircleComponent.SetStaticMeshes(GetMeleePuckMeshForAbility(MeleeAbilityTemplate), PuckMeshConfirmed);		
+			
 		if (IsDashing() || ActiveUnitState.NumActionPointsForMoving() == 1)
 		{
 			RenderablePath.SetMaterial(PathMaterialDashing);
@@ -892,23 +1138,76 @@ simulated protected function UpdatePuckVisuals(XComGameState_Unit ActiveUnitStat
 	else if(IsDashing() || ActiveUnitState.NumActionPointsForMoving() == 1)
 	{
 		PuckMeshComponent.SetStaticMeshes(PuckMeshDashing, PuckMeshConfirmedDashing);
+		if( `ISCONTROLLERACTIVE )
+			PuckMeshCircleComponent.SetStaticMeshes(PuckMeshCircleDashing, PuckMeshConfirmedDashing);
+					
 		RenderablePath.SetMaterial(PathMaterialDashing);
 	}
 	else
 	{
 		PuckMeshComponent.SetStaticMeshes(PuckMeshNormal, PuckMeshConfirmed);
+		if( `ISCONTROLLERACTIVE )
+			PuckMeshCircleComponent.SetStaticMeshes(PuckMeshCircle, PuckMeshConfirmed);	
+				
 		RenderablePath.SetMaterial(PathMaterialNormal);
 	}
+	if( `ISCONTROLLERACTIVE )
+	{
+		kNonFocusedOpacity = 0.3;
+		kFocusedOpacity = 1.0;
+		kFNumFocusInterpFrames = 15.0;
+		bMoved = XComTacticalController(`BATTLE.GetALocalPlayerController()).IsControllerPressed();
 
+		if (bMoved)
+		{
+			iFramesSinceMoved = 0;
+			++iFramesSinceNotMoved;
+			FadeProgress = FMin(1.0, float(iFramesSinceNotMoved) / kFNumFocusInterpFrames);
 		
-	MeshTranslation = VisualPath.GetEndPoint(); // make sure we line up perfectly with the end of the path ribbon
+			PuckMeshComponent.SetOpacity(Lerp(kFocusedOpacity, kNonFocusedOpacity, FadeProgress));       // fade out the tile marker
+			PuckMeshCircleComponent.SetOpacity(Lerp(kNonFocusedOpacity, kFocusedOpacity, FadeProgress)); // fade in the cursor
+		}
+		else
+		{
+			iFramesSinceNotMoved = 0;
+			++iFramesSinceMoved;
+			FadeProgress = FMin(1.0, float(iFramesSinceMoved) / kFNumFocusInterpFrames);
+		
+			PuckMeshComponent.SetOpacity(Lerp(kNonFocusedOpacity, kFocusedOpacity, FadeProgress));       // fade in the tile marker
+			PuckMeshCircleComponent.SetOpacity(Lerp(kFocusedOpacity, kNonFocusedOpacity, FadeProgress)); // fade out the cursor
+		}
+	}
+	if( `ISCONTROLLERACTIVE  == false)
+		MeshTranslation = VisualPath.GetEndPoint(); // make sure we line up perfectly with the end of the path ribbon
+	else
+		MeshTranslation = VisualPathEndPoint; // Put a puck on the tile.
 	MeshTranslation.Z = WorldData.GetFloorZForPosition(MeshTranslation) + PathHeightOffset;
 	PuckMeshComponent.SetTranslation(MeshTranslation);
+	if( `ISCONTROLLERACTIVE )
+	{
+		// Put a puck where the cursor is.
+		MeshTranslation = `CURSOR.Location;
+		MeshTranslation.Z = VisualPath.GetEndPoint().Z;
+		MeshTranslation.Z = WorldData.GetFloorZForPosition(MeshTranslation) + PathHeightOffset;
+		PuckMeshCircleComponent.SetTranslation(MeshTranslation);
 
-	MeshScale.X = ActiveUnitState.UnitSize;
-	MeshScale.Y = ActiveUnitState.UnitSize;
-	MeshScale.Z = 1.0f;
-	PuckMeshComponent.SetScale3D(MeshScale);
+		bMoved = LastEndPoint.X != VisualPath.GetEndPoint().X || LastEndPoint.Y != VisualPath.GetEndPoint().Y || LastEndPoint.Z != VisualPath.GetEndPoint().Z;
+		LastEndPoint = VisualPath.GetEndPoint();
+		MeshScale.X = ActiveUnitState.UnitSize;
+		MeshScale.Y = ActiveUnitState.UnitSize;
+		MeshScale.Z = 1.0f;
+		PuckMeshComponent.SetScale3D(MeshScale);
+		
+		
+		PuckMeshCircleComponent.SetScale3D(MeshScale);	
+		
+		// Hide the circle cursor always - 2k feedback.
+		PuckMeshCircleComponent.SetHidden(true);
+	
+		// Hide the cursor until the unit moves - 2k feedback.
+		TheCursor = XComTacticalController(`BATTLE.GetALocalPlayerController());
+		PuckMeshComponent.SetHidden(TheCursor.m_bChangedUnitHasntMovedCursor);
+	}
 }
 
 simulated private function UpdatePuckFlyovers(XComGameState_Unit ActiveUnitState)
@@ -1182,6 +1481,8 @@ state ConfirmAndHide
 	{
 		// have the puck mesh and slashing visuals (if active) do the confirm/ fade out animation
 		PuckMeshComponent.FadeOut(); 
+		if( `ISCONTROLLERACTIVE )
+			PuckMeshCircleComponent.FadeOut(); 		
 		
 		if(!SlashingMeshComponent.HiddenGame)
 		{
@@ -1200,6 +1501,8 @@ state ConfirmAndHide
 	function EndState(name NextState)
 	{
 		PuckMeshComponent.SetHidden(false);
+		if( `ISCONTROLLERACTIVE )
+			PuckMeshCircleComponent.SetHidden(false);		
 		RenderablePath.SetHidden(false);
 		OutOfRangeMeshComponent.SetHidden(false);
 	}
@@ -1275,6 +1578,24 @@ defaultproperties
 	PuckMeshComponent=PuckMeshComponentObject
 	Components.Add(PuckMeshComponentObject)
 
+	Begin Object Class=X2FadingStaticMeshComponent Name=PuckMeshCircleComponentObject
+		StaticMesh=none
+		HiddenGame=true
+		bOwnerNoSee=FALSE
+		CastShadow=FALSE
+		BlockNonZeroExtent=false
+		BlockZeroExtent=false
+		BlockActors=false
+		CollideActors=false
+		TranslucencySortPriority=1000
+		bTranslucentIgnoreFOW=true
+		AbsoluteTranslation=true
+		AbsoluteRotation=true
+		Scale=0.8
+	End Object
+	PuckMeshCircleComponent=PuckMeshCircleComponentObject
+	Components.Add(PuckMeshCircleComponentObject)	
+	
 	Begin Object Class=X2FadingStaticMeshComponent Name=SlashingMeshComponentObject
 		StaticMesh=none
 		HiddenGame=true

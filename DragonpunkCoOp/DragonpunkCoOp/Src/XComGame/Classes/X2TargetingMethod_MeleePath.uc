@@ -9,12 +9,13 @@
 
 class X2TargetingMethod_MeleePath extends X2TargetingMethod;
 
-var private X2MeleePathingPawn      PathingPawn;
-var private XComActionIconManager   IconManager;
-var private XComLevelBorderManager  LevelBorderManager;
-var private XCom3DCursor            Cursor;
-var private X2Camera_Midpoint		TargetingCamera; // deprecated
-var private XGUnit					TargetUnit;
+var private X2MeleePathingPawn			PathingPawn;
+var private XComActionIconManager		IconManager;
+var private XComLevelBorderManager		LevelBorderManager;
+var private XCom3DCursor				Cursor;
+var private X2Camera_Midpoint			TargetingCamera; // deprecated
+var private XGUnit						TargetUnit;
+var private X2Camera_LookAtActorTimed	LookAtCamera; // deprecated
 
 // the index of the last available target we were targeting
 var private int LastTarget;
@@ -96,6 +97,11 @@ function Canceled()
 	PathingPawn.Destroy();
 	IconManager.ShowIcons(false);
 	LevelBorderManager.ShowBorder(false);
+
+	if(LookAtCamera != none && LookAtCamera.LookAtDuration < 0)
+	{
+		`CAMERASTACK.RemoveCamera(LookAtCamera);
+	}
 }
 
 function Committed()
@@ -119,21 +125,31 @@ function NextTarget()
 	DirectSetTarget(LastTarget + 1);
 }
 
+function PrevTarget()
+{
+	DirectSetTarget(LastTarget - 1);
+}
+
 function DirectSetTarget(int TargetIndex)
 {
 	local XComPresentationLayer Pres;
 	local UITacticalHUD TacticalHud;
 	local XComGameStateHistory History;
 	local XComGameState_BaseObject Target;
-	local X2Camera_LookAtActorTimed LookAtCamera;
+	local int NewTarget;
 
 	// advance the target counter
-	LastTarget = TargetIndex % Action.AvailableTargets.Length;
+	NewTarget = TargetIndex % Action.AvailableTargets.Length;
+	if(NewTarget < 0) NewTarget = Action.AvailableTargets.Length + NewTarget;
 
 	// put the targeting reticle on the new target
 	Pres = `PRES;
 	TacticalHud = Pres.GetTacticalHUD();
-	TacticalHud.TargetEnemy(LastTarget);
+	if(NewTarget != LastTarget)
+	{
+		LastTarget = NewTarget;
+		TacticalHud.TargetEnemy(NewTarget);
+	}
 
 	// have the idle state machine look at the new target
 	FiringUnit.IdleStateMachine.CheckForStanceUpdate();
@@ -145,8 +161,13 @@ function DirectSetTarget(int TargetIndex)
 
 	TargetUnit = XGUnit(Target.GetVisualizer());
 
+	if(LookAtCamera != none)
+	{
+		`CAMERASTACK.RemoveCamera(LookAtCamera);
+	}
+
 	LookAtCamera = new class'X2Camera_LookAtActorTimed';
-	LookAtCamera.LookAtDuration = 0.0f;
+	LookAtCamera.LookAtDuration = `ISCONTROLLERACTIVE ? -1.0f : 0.0f;
 	LookAtCamera.ActorToFollow = TargetUnit != none ? TargetUnit.GetPawn() : Target.GetVisualizer();
 	`CAMERASTACK.AddCamera(LookAtCamera);
 }

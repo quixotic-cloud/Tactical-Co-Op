@@ -29,8 +29,13 @@ simulated function UIStrategyMapItem InitMapItem(out XComGameState_GeoscapeEntit
 	ScanButton.SetDefaultDelegate(OnDefaultClicked);
 	ScanButton.SetFactionDelegate(OnFactionClicked);
 	ScanButton.SetButtonType(eUIScanButtonType_BlackMarket);
+	ScanButton.OnSizeRealized = OnButtonSizeRealized;
 
 	return self;
+}
+simulated function OnButtonSizeRealized()
+{
+	ScanButton.SetX(-ScanButton.Width / 2.0);
 }
 
 function UpdateFromGeoscapeEntity(const out XComGameState_GeoscapeEntity GeoscapeEntity)
@@ -112,7 +117,58 @@ function RefreshTooltip(UITooltip refToThisTooltip)
 	UITextTooltip(refToThisTooltip).SetText((GetBlackMarket().bIsOpen) ? m_strTooltipOpenMarket : m_strTooltipClosedMarket);
 }
 
+simulated function OnReceiveFocus()
+{
+	ScanButton.OnReceiveFocus();
+}
 
+simulated function OnLoseFocus()
+{
+	ScanButton.OnLoseFocus();
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return true;
+	}
+
+	switch(cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		if (IsAvengerLandedHere())
+		{
+			if (GetBlackMarket().bIsOpen)
+			{
+				OnFactionClicked();
+			}
+			else
+			{
+				ScanButton.ClickButtonScan();
+			}
+		}
+		else
+		{
+			OnDefaultClicked();
+		}
+
+		return true;		
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function bool IsSelectable()
+{
+	return true;
+}
+simulated function SetZoomLevel(float ZoomLevel)
+{
+	super.SetZoomLevel(ZoomLevel);
+
+	ScanButton.SetY(70.0 * (1.0 - FClamp(ZoomLevel, 0.0, 0.95)));
+}
 defaultproperties
 {
 	bProcessesMouseEvents = false; 

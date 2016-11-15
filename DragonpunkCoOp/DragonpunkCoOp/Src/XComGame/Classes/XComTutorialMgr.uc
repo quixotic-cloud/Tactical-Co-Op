@@ -40,6 +40,7 @@ var const vector vInvalidLookAt;
 var XComGameStateContext_Ability NextPlayerAbilityContext; // This is the ability context we are waiting for player input for
 
 var bool bDemoMode; // If true, tutorial doesn't not draw move/target markers
+var bool bIsTutorialAllowingControls;
 
 simulated event PostBeginPlay()
 {
@@ -599,11 +600,28 @@ state PlayUntilPlayerInputRequired
 {
 	event BeginState(Name PreviousStateName)
 	{
+		local XCom3DCursor Cursor;
+		
+		bIsTutorialAllowingControls = false;
+		Cursor = `CURSOR;
+		Cursor.m_bCustomAllowCursorMovement = false;
+		Cursor.m_bAllowCursorAscensionAndDescension = false;
 		NextPlayerInputFrame = FindNextFrameRequiringPlayerInput();
 
 		// Must set this otherwise SteppingForward might step just a tad too far because it steps past things that don't
 		// have visualization, etc.
 		StepForwardStopFrame = NextPlayerInputFrame - 1;
+	}
+	event EndState(Name NextStateName)
+	{
+		local XCom3DCursor Cursor;
+
+		bIsTutorialAllowingControls = true;
+
+		super.EndState(NextStateName);
+		Cursor = `CURSOR;
+		Cursor.m_bCustomAllowCursorMovement = true;
+		Cursor.m_bAllowCursorAscensionAndDescension = true;
 	}
 
 	event Tick(float DeltaTime)
@@ -713,6 +731,7 @@ Begin:
 defaultproperties
 {
 	bInTutorial = true
+	bIsTutorialAllowingControls = false
 
 	Begin Object Class=StaticMeshComponent Name=StaticMeshComponent0
 		bOwnerNoSee = FALSE

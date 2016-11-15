@@ -69,6 +69,8 @@ simulated function UITacticalQuickLaunch_UnitSlot InitSlot(optional bool bMPSlot
 {
 	InitPanel();
 
+	Navigator.LoopSelection = false; 
+
 	m_bMPSlot = bMPSlot;
 
 	// Spawn divider under everything else
@@ -103,14 +105,14 @@ simulated function UITacticalQuickLaunch_UnitSlot InitSlot(optional bool bMPSlot
 	}
 
 	// create name buttons (after dropdowns so buttons have priority over mouse picking)
-	m_FirstNameButton = Spawn(class'UIButton', self).InitButton('', m_FirstName != "" ? m_FirstName : m_FirstNameButtonLabel, SetName, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_FirstNameButton = Spawn(class'UIButton', self).InitButton('', m_FirstName != "" ? m_FirstName : m_FirstNameButtonLabel, SetName, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
 	m_FirstNameButton.SetPosition(20, 0).SetWidth(300);
-	m_LastNameButton = Spawn(class'UIButton', self).InitButton('', m_LastName != "" ? m_LastName : m_LastNameButtonLabel, SetName, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_LastNameButton = Spawn(class'UIButton', self).InitButton('', m_LastName != "" ? m_LastName : m_LastNameButtonLabel, SetName, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
 	m_LastNameButton.SetPosition(20, 36).SetWidth(300);
-	m_NickNameButton = Spawn(class'UIButton', self).InitButton('', m_NickName != "" ? m_NickName : m_NickNameButtonLabel, SetName, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_NickNameButton = Spawn(class'UIButton', self).InitButton('', m_NickName != "" ? m_NickName : m_NickNameButtonLabel, SetName, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
 	m_NickNameButton.SetPosition(20, 72).SetWidth(300);
 
-	m_AbilitiesButton = Spawn(class'UIButton', self).InitButton('', "Edit Abilities", EditAbilities, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_AbilitiesButton = Spawn(class'UIButton', self).InitButton('', "Edit Abilities", EditAbilities, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
 	m_AbilitiesButton.SetPosition(20, 108).SetWidth(200);
 
 	// text scales when we resize the button (after setting text), calling realize forces the TextField to be recreated
@@ -118,6 +120,21 @@ simulated function UITacticalQuickLaunch_UnitSlot InitSlot(optional bool bMPSlot
 	m_LastNameButton.mc.FunctionVoid("realize");
 	m_NickNameButton.mc.FunctionVoid("realize");
 	m_AbilitiesButton.mc.FunctionVoid("realize");
+	
+	Navigator.Clear();
+	Navigator.AddControl(m_CharacterTypeDropdown);
+	Navigator.AddControl(m_SoldierClassDropdown);
+	Navigator.AddControl(m_CharacterPoolDropdown);
+	Navigator.AddControl(m_SoldierRankDropdown);
+	Navigator.AddControl(m_PrimaryWeaponDropdown);
+	Navigator.AddControl(m_HeavyWeaponDropdown);
+	Navigator.AddControl(m_SecondaryWeaponDropdown);
+	Navigator.AddControl(m_ArmorDropdown);
+	Navigator.AddControl(m_UtilityItem1Dropdown);
+	Navigator.AddControl(m_UtilityItem2Dropdown);
+
+	Navigator.SetSelected(m_CharacterTypeDropdown);
+	
 	return self;
 }
 
@@ -256,6 +273,27 @@ simulated function RefreshDropdowns()
 	}
 }
 
+function int SortCharacterTemplates(name Template1, name Template2)
+{
+	local bool Template1IsSoldier;
+	local bool Template2IsSoldier;
+
+	// soldier and sparks go to the top of the list, as a convienience
+	Template1IsSoldier = Template1 == 'Soldier' || Template1 == 'SparkSoldier';
+	Template2IsSoldier = Template2 == 'Soldier' || Template2 == 'SparkSoldier';
+	if(Template1IsSoldier && !Template2IsSoldier)
+	{
+		return 1;
+	}
+	else if(!Template1IsSoldier && Template2IsSoldier)
+	{
+		return -1;
+	}
+
+	// and everything else gets sorted normally
+	return string(Template1) > string(Template2) ? -1 : 1;
+}
+
 simulated function RefreshCharacterTypeDropdown()
 {
 	local int i, CharCount;
@@ -269,11 +307,16 @@ simulated function RefreshCharacterTypeDropdown()
 	CharTemplateManager = class'X2CharacterTemplateManager'.static.GetCharacterTemplateManager();
 	CharTemplateManager.GetTemplateNames(arrNames);
 
+	// sort the templates by alphabetical order, to make searching them faster.
+	arrNames.Sort(SortCharacterTemplates);
+
 	CharCount = 0;
 	for (i = 0; i < arrNames.Length; ++i)
 	{
 		CharTemplate = CharTemplateManager.FindCharacterTemplate(arrNames[i]);
-		if (CharTemplate == none || (m_bMPSlot && (!CharTemplate.IsTemplateAvailableToAnyArea(CharTemplate.BITFIELD_GAMEAREA_Multiplayer))))
+		if (CharTemplate == none 
+			|| (m_bMPSlot && (!CharTemplate.IsTemplateAvailableToAnyArea(CharTemplate.BITFIELD_GAMEAREA_Multiplayer)))
+			|| CharTemplate.CharacterGroupName == 'Speaker') // remove speaker templates from TQL, since they aren't meant to be playable
 			continue;
 
 		strDisplayText = string(arrNames[i]);
@@ -801,6 +844,28 @@ simulated function LoadTemplatesFromCharacter(XComGameState_Unit Unit, XComGameS
 	m_NickName = Unit.GetNickName();
 }
 
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	if (Navigator.GetSelected().OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function OnReceiveFocus()
+{
+	super.OnReceiveFocus();
+
+	Navigator.GetSelected().OnReceiveFocus();
+}
+
 //==============================================================================
 
 defaultproperties
@@ -814,4 +879,5 @@ defaultproperties
 	m_NickNameButtonLabel = "Nick Name";
 
 	m_iCharacterPoolSelection = 0;
+	bCascadeFocus = false
 }

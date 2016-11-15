@@ -76,6 +76,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	// Show header with "After Action" text
 	`HQPRES.m_kAvengerHUD.FacilityHeader.SetText(class'UIFacility'.default.m_strAvengerLocationName, m_strAfterActionReport);
 	`HQPRES.m_kAvengerHUD.FacilityHeader.Hide();
+	Navigator.SetSelected(m_kSlotList);
 }
 
 function StartPostMissionCinematic()
@@ -140,9 +141,9 @@ function StartPostMissionCinematic()
 					// only increment if we could fill the slot. We want to fill as many of the "important"
 					// matinee slots as possible
 					SlotIndex++; 
+				}
 			}
 		}
-	}	
 	}	
 
 	WorldInfo.MyLocalEnvMapManager.SetEnableCaptures(true);
@@ -203,12 +204,13 @@ event OnRemoteEvent(name RemoteEventName)
 	super.OnRemoteEvent(RemoteEventName);
 
 	// Only show screen if we're at the top of the state stack
-	if(RemoteEventName == 'PostM_ShowSoldierHUD' && `SCREENSTACK.GetCurrentScreen() == self)
+	if(RemoteEventName == 'PostM_ShowSoldierHUD' && (`SCREENSTACK.GetCurrentScreen() == self || `SCREENSTACK.IsCurrentClass(class'UIReconnectController')))
 	{
 		Show();
-		UpdateNavHelp();
+
 		`HQPRES.m_kAvengerHUD.FacilityHeader.Show();
 		bRecievedShowHUDRemoteEvent = true;
+		UpdateNavHelp();
 
 		// Animate the slots in from left to right
 		for(i = 0; i < SlotListOrder.Length; ++i)
@@ -274,6 +276,20 @@ simulated function UpdateData()
 			}
 		}
 	}
+	
+	m_kSlotList.SetSelectedIndex(-1);
+	for (ListItemIndex = 0; ListItemIndex < m_kSlotList.itemCount; ListItemIndex++)
+	{
+		if (m_kSlotList.GetItem(ListItemIndex).bIsNavigable) 
+		{
+			m_kSlotList.SetSelectedIndex(ListItemIndex);
+			break;
+		}
+	}
+
+	m_kSlotList.Navigator.SelectFirstAvailable();
+
+	UpdateNavHelp();
 }
 
 simulated function UpdateMissionInfo()
@@ -312,7 +328,18 @@ simulated function UpdateNavHelp()
 	local UINavigationHelp NavHelp;
 	NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
 	NavHelp.ClearButtonHelp();
-	NavHelp.AddContinueButton(OnContinue);
+	if (bRecievedShowHUDRemoteEvent)
+	{
+		if (m_kSlotList.GetSelectedItem() == None) 
+		{
+			NavHelp.AddContinueButton(OnContinue);
+		}
+		else
+		{
+			NavHelp.AddSelectNavHelp(,true);
+			NavHelp.AddCenterHelp(m_strContinue, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE, OnContinue);
+		}
+	}
 }
 
 simulated function OnContinue()
@@ -339,6 +366,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
 
+	if (!bRecievedShowHUDRemoteEvent)
+	{
+		return true;
+	}
 	bHandled = true;
 
 	switch( cmd )
@@ -347,7 +378,7 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 `if(`notdefined(FINAL_RELEASE))
 		case class'UIUtilities_Input'.const.FXS_KEY_TAB:
 `endif
-		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		//case class'UIUtilities_Input'.const.FXS_BUTTON_A:
 		//TEST//case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
@@ -364,6 +395,37 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 			break;
 		case class'UIUtilities_Input'.const.FXS_BUTTON_START:
 			`HQPRES.UIPauseMenu( ,true );
+			break;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+			if (m_kSlotList.GetSelectedItem() != None) 
+			{
+				m_kSlotList.GetSelectedItem().OnUnrealCommand(cmd, arg);
+			}
+			else
+			{
+				OnContinue();
+			}
+
+			break;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			if (bRecievedShowHUDRemoteEvent)
+			{
+				OnContinue();
+			}
+			else
+			{
+				bHandled = false;
+			}
+
+			break;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
+			Navigator.Prev();
+			break;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
+			Navigator.Next();
 			break;
 		default:
 			bHandled = false;
@@ -725,7 +787,9 @@ state Cinematic_PawnsWalkingUp
 
 	function StartCameraMove()
 	{
-		`HQPRES.CAMLookAtNamedLocation(UIDisplayCam_Default, 6.0f);
+		//<workshop> Fix temporary control lockup after mission by changing interp time from 6 to 0 seconds... the camera didn't seem to move anyways AMS 2016/05/25
+		//`HQPRES.CAMLookAtNamedLocation(UIDisplayCam_Default, 6.0f);
+		`HQPRES.CAMLookAtNamedLocation(UIDisplayCam_Default, 0.0f);
 	}
 }
 

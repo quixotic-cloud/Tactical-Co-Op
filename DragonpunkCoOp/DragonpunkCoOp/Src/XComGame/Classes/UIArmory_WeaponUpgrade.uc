@@ -83,12 +83,24 @@ simulated function InitArmory(StateObjectReference UnitOrWeaponRef, optional nam
 	SlotsList.OnChildMouseEventDelegate = OnListChildMouseEvent;
 	SlotsList.OnSelectionChanged = PreviewUpgrade;
 	SlotsList.OnItemClicked = OnItemClicked;
+	SlotsList.Navigator.LoopSelection = false;	
+	//INS: - JTA 2016/3/2
+	SlotsList.bLoopSelection = false;
+	SlotsList.Navigator.LoopOnReceiveFocus = true;
+	//INS: WEAPON_UPGRADE_UI_FIXES, BET, 2016-03-23
+	SlotsList.bCascadeFocus = true;
+	SlotsList.bPermitNavigatorToDefocus = true;
 
 	CustomizeList = Spawn(class'UIList', SlotsListContainer);
 	CustomizeList.ItemPadding = 5;
 	CustomizeList.bStickyHighlight = false;
 	CustomizeList.InitList('customizeListMC');
 	CustomizeList.AddOnInitDelegate(UpdateCustomization);
+	CustomizeList.Navigator.LoopSelection = false;
+	CustomizeList.bLoopSelection = false;
+	CustomizeList.Navigator.LoopOnReceiveFocus = true;
+	CustomizeList.bCascadeFocus = true;
+	CustomizeList.bPermitNavigatorToDefocus = true;
 
 	UpgradesListContainer = Spawn(class'UIPanel', self);
 	UpgradesListContainer.bAnimateOnInit = false;
@@ -101,6 +113,7 @@ simulated function InitArmory(StateObjectReference UnitOrWeaponRef, optional nam
 	Navigator.RemoveControl(UpgradesList);
 
 	WeaponStats = Spawn(class'UIArmory_WeaponUpgradeStats', self).InitStats('weaponStatsMC', WeaponRef);
+	WeaponStats.DisableNavigation(); 
 
 	if(GetUnit() != none)
 		WeaponRef = GetUnit().GetItemInSlot(eInvSlot_PrimaryWeapon).GetReference();
@@ -113,13 +126,16 @@ simulated function InitArmory(StateObjectReference UnitOrWeaponRef, optional nam
 
 	MouseGuard = UIMouseGuard_RotatePawn(`SCREENSTACK.GetFirstInstanceOf(class'UIMouseGuard_RotatePawn'));
 	MouseGuard.OnMouseEventDelegate = OnMouseGuardMouseEvent;
-	MouseGuard.SetActorPawn(none, DefaultWeaponRotation);
+	MouseGuard.SetActorPawn(ActorPawn, DefaultWeaponRotation);
+	PreviewUpgrade(SlotsList, 0); //Force a refresh of the weapon pawn
 }
 
 simulated function OnInit()
 {
 	super.OnInit();
 	SetTimer(0.01f, true, nameof(InterpolateWeapon));
+
+	Navigator.Next(); //bsg-jneal (7.12.16): Tell the Navigator to select the initial list item for WeaponUpgrade so the menu has an initial selection when it opens.
 }
 
 // Override the soldier cycling behavior since we don't want to spawn soldier pawns on previous armory screens
@@ -158,6 +174,8 @@ simulated static function CycleToSoldier(StateObjectReference NewRef)
 
 	if(UpgradeScreen.ActorPawn != none)
 		UpgradeScreen.ActorPawn.SetRotation(CachedRotation);
+	//Force refresh - otherwise we end up with out-of-date weapon pawn (showing customization from previous soldier)
+	UpgradeScreen.PreviewUpgrade(UpgradeScreen.SlotsList, 0);
 }
 
 simulated function SetWeaponReference(StateObjectReference NewWeaponRef)
@@ -322,7 +340,7 @@ simulated function ChangeActiveList(UIList kActiveList, optional bool bSkipAnima
 
 	ActiveList = kActiveList;
 	UIArmory_WeaponUpgradeItem(SlotsList.GetSelectedItem()).SetLocked(ActiveList != SlotsList);
-	ActiveList.SetSelectedIndex(INDEX_NONE);
+	ActiveList.SetSelectedIndex(0); //bsg-jneal (7.12.16): Let the start index be 0 for console so the list has an initial selection on opening, having the list init at index -1 is more of a mouse/keyboard style
 	
 	if(ActiveList == SlotsList)
 	{
@@ -343,6 +361,17 @@ simulated function ChangeActiveList(UIList kActiveList, optional bool bSkipAnima
 			ActorPawn.SetLocation(PreviousLocation);
 
 		SetUpgradeText();
+		SlotsListContainer.EnableNavigation();
+		UpgradesListContainer.DisableNavigation();
+		Navigator.SetSelected(SlotsListContainer);
+
+		if(SlotsListContainer.Navigator.SelectedIndex == -1)
+			SlotsListContainer.Navigator.SetSelected(SlotsList);
+
+		if(SlotsList.SelectedIndex == -1)
+			SlotsList.SetSelectedIndex(0);
+		else
+			PreviewUpgrade(SlotsList, SlotsList.SelectedIndex); //Reset weapon pawn so it can be rotated
 	}
 	else
 	{
@@ -352,13 +381,13 @@ simulated function ChangeActiveList(UIList kActiveList, optional bool bSkipAnima
 		// disable list item selection on LockerList, enable it on EquippedList
 		UpgradesListContainer.EnableMouseHit();
 		SlotsListContainer.DisableMouseHit();
+		SlotsListContainer.DisableNavigation();
+		UpgradesListContainer.EnableNavigation();
+		Navigator.SetSelected(UpgradesListContainer);
+		UpgradesListContainer.Navigator.SetSelected(UpgradesList);
 	}
 
-	if (ActiveList != none)
-	{
-		Navigator.SetSelected(ActiveList);
-		ActiveList.Navigator.SetSelected(ActiveList.GetItem(ActiveList.SelectedIndex != -1 ? ActiveList.SelectedIndex : 0));
-	}
+	UpdateNavHelp();
 } 
 
 simulated function OnItemClicked(UIList ContainerList, int ItemIndex)
@@ -382,6 +411,8 @@ simulated function OnItemClicked(UIList ContainerList, int ItemIndex)
 		UpdateNavHelp();
 		UpdateUpgrades();
 		ChangeActiveList(UpgradesList);
+		//bsg-lsimkin; 07-12-16; TTP 5932: No audio plays when selecting weapon upgrade slot
+		Movie.Pres.PlayUISound(eSUISound_MenuOpen);
 	}
 	else
 	{
@@ -404,6 +435,23 @@ simulated function OnItemClicked(UIList ContainerList, int ItemIndex)
 				EquipUpgrade(NewUpgradeTemplate);
 		}
 	}
+}
+
+//<workshop> Remove Rotate when in UpgradesList - CN 2016/06/02
+simulated function UpdateNavHelp()
+{
+	NavHelp.ClearButtonHelp();
+	NavHelp.AddBackButton(OnCancel);
+	if(!(ActiveList == UpgradesList && ActiveList.ItemCount == 0)) //will not show 'select' if there is nothing to select
+	{
+		NavHelp.AddSelectNavHelp();
+	}
+	NavHelp.AddLeftHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%LB %RB" @ m_strTabNavHelp));
+	if (ActiveList == SlotsList)
+	{
+		NavHelp.AddLeftHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%RS" @ m_strRotateNavHelp));
+	}
+	NavHelp.Show();
 }
 
 simulated function PreviewUpgrade(UIList ContainerList, int ItemIndex)
@@ -447,6 +495,15 @@ simulated function PreviewUpgrade(UIList ContainerList, int ItemIndex)
 			PawnLocationTag = UpgradeTemplate.UpgradeAttachments[WeaponAttachIndex].UIArmoryCameraPointTag;
 			break;
 		}
+	}
+	if(ActiveList != UpgradesList)
+	{
+		MouseGuard.SetActorPawn(ActorPawn); //When we're not selecting an upgrade, let the user spin the weapon around
+		RestoreWeaponLocation();
+	}
+	else
+	{
+		MouseGuard.SetActorPawn(None); //Otherwise, grab the rotation to show them the upgrade as they select it
 	}
 
 	SetUpgradeText(UpgradeTemplate.GetItemFriendlyName(), UpgradeTemplate.GetItemBriefSummary());
@@ -565,6 +622,8 @@ simulated public function EquipUpgradeCallback(eUIAction eAction)
 			Movie.Pres.PlayUISound(eSUISound_MenuClose);
 
 		ChangeActiveList(SlotsList);
+		Navigator.SetSelected();
+		Navigator.SetSelected(SlotsListContainer);
 	}
 	else
 		Movie.Pres.PlayUISound(eSUISound_MenuClose);
@@ -585,19 +644,23 @@ simulated function UpdateCustomization(UIPanel DummyParam)
 
 	// WEAPON NAME
 	//-----------------------------------------------------------------------------------------
-	GetCustomizeItem(i++).UpdateDataDescription(class'UIUtilities_Text'.static.GetColoredText(m_strCustomizeWeaponName, eUIState_Normal), OpenWeaponNameInputBox);
+
+	GetCustomizeItem(i++).UpdateDataDescription(m_strCustomizeWeaponName, OpenWeaponNameInputBox);
+
 
 	// WEAPON PRIMARY COLOR
 	//-----------------------------------------------------------------------------------------
 	Palette = `CONTENT.GetColorPalette(ePalette_ArmorTint);
-	GetCustomizeItem(i++).UpdateDataColorChip(class'UIUtilities_Text'.static.GetColoredText(class'UICustomize_Menu'.default.m_strWeaponColor, eUIState_Normal),
+
+	GetCustomizeItem(i++).UpdateDataColorChip(class'UICustomize_Menu'.default.m_strWeaponColor,
 		class'UIUtilities_Colors'.static.LinearColorToFlashHex(Palette.Entries[UpdatedWeapon.WeaponAppearance.iWeaponTint].Primary), WeaponColorSelector);
 
 	// WEAPON PATTERN (VETERAN ONLY)
 	//-----------------------------------------------------------------------------------------
-	GetCustomizeItem(i++).UpdateDataValue(class'UIUtilities_Text'.static.GetColoredText(class'UICustomize_Props'.default.m_strWeaponPattern, eUIState_Normal),
-							  class'UIUtilities_Text'.static.GetColoredText(GetWeaponPatternDisplay(UpdatedWeapon.WeaponAppearance.nmWeaponPattern), eUIState_Normal, FontSize), CustomizeWeaponPattern);
 
+	GetCustomizeItem(i++).UpdateDataValue(class'UICustomize_Props'.default.m_strWeaponPattern,
+		class'UIUtilities_Text'.static.GetColoredText(GetWeaponPatternDisplay(UpdatedWeapon.WeaponAppearance.nmWeaponPattern), eUIState_Normal, FontSize), CustomizeWeaponPattern);
+	
 	CustomizeList.SetPosition(CustomizationListX, CustomizationListY - CustomizeList.ShrinkToFit() - CustomizationListYPadding);
 
 	CleanupCustomizationState();
@@ -831,20 +894,36 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	
 	if (ActiveList != none)
 	{
-		switch( cmd )
+		if (ColorSelector != none && ColorSelector.OnUnrealCommand(cmd, arg))
 		{
-			case class'UIUtilities_Input'.const.FXS_BUTTON_A:
-			case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
-			case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-				OnItemClicked(ActiveList, ActiveList.SelectedIndex);
-				return true;
-		}
-
-		if (ActiveList.Navigator.OnUnrealCommand(cmd, arg))
 			return true;
+		}
+	
+		switch (cmd)
+		{
+			case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+			case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+				if (CustomizeList != none && CustomizeList.OnUnrealCommand(cmd, arg))
+				{
+					return true;
+				}
+
+			break;
+		}
 	}
 
 	return super.OnUnrealCommand(cmd, arg);
+}
+simulated function OnAccept()
+{
+	if (ActiveList.SelectedIndex == -1)
+	{
+		CustomizeList.OnUnrealCommand(class'UIUtilities_Input'.const.FXS_BUTTON_A, 
+			class'UIUtilities_Input'.const.FXS_ACTION_RELEASE);
+		return;
+	}
+
+	OnItemClicked(ActiveList, ActiveList.SelectedIndex);
 }
 
 simulated function OnCancel()
@@ -902,12 +981,25 @@ simulated function OpenWeaponNameInputBox()
 {
 	local TInputDialogData kData;
 
-	kData.strTitle = m_strCustomizeWeaponName;
-	kData.iMaxChars = class'XComCharacterCustomization'.const.NICKNAME_NAME_MAX_CHARS;
-	kData.strInputBoxText = UpdatedWeapon.Nickname;
-	kData.fnCallback = OnNameInputBoxClosed;
+//	if(!`GAMECORE.WorldInfo.IsConsoleBuild() || `ISCONTROLLERACTIVE )
+//	{
+		kData.strTitle = m_strCustomizeWeaponName;
+		kData.iMaxChars = class'XComCharacterCustomization'.const.NICKNAME_NAME_MAX_CHARS;
+		kData.strInputBoxText = UpdatedWeapon.Nickname;
+		kData.fnCallback = OnNameInputBoxClosed;
 
-	Movie.Pres.UIInputDialog(kData);
+		Movie.Pres.UIInputDialog(kData);
+/*	}
+	else
+	{
+		Movie.Pres.UIKeyboard( m_strCustomizeWeaponName, 
+			UpdatedWeapon.Nickname, 
+			VirtualKeyboard_OnNameInputBoxAccepted, 
+			VirtualKeyboard_OnNameInputBoxCancelled,
+			false, 
+			class'XComCharacterCustomization'.const.NICKNAME_NAME_MAX_CHARS
+		);
+	}*/
 }
 
 function OnNameInputBoxClosed(string text)
@@ -916,6 +1008,18 @@ function OnNameInputBoxClosed(string text)
 	UpdatedWeapon.Nickname = text;
 	SubmitCustomizationChanges();
 	SetWeaponReference(WeaponRef);
+}
+function VirtualKeyboard_OnNameInputBoxAccepted(string text, bool bWasSuccessful)
+{
+	if(bWasSuccessful && text != "") //ADDED_SUPPORT_FOR_BLANK_STRINGS - JTA 2016/6/9
+	{
+		OnNameInputBoxClosed(text);
+	}
+}
+
+function VirtualKeyboard_OnNameInputBoxCancelled()
+{
+	
 }
 
 simulated function OnReceiveFocus()
@@ -933,6 +1037,7 @@ simulated function SubmitCustomizationChanges()
 {
 	if(HasWeaponChanged()) 
 	{
+		CustomizationState.AddStateObject(UpdatedWeapon);
 		`GAMERULES.SubmitGameState(CustomizationState);
 	}
 	else

@@ -44,13 +44,13 @@ function BuildGamepad()
 	UIGamePad[1].icon = class'UIUtilities_Input'.const.ICON_RB_R1; 
 	UIGamePad[1].label = m_sNextUnit;
 
-	UIGamePad[2].icon = class'UIUtilities_Input'.const.ICON_Y_TRIANGLE;
+	UIGamePad[2].icon = class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE;
 	UIGamePad[2].label = m_sEndTurn;
 
 	UIGamePad[3].icon = class'UIUtilities_Input'.const.ICON_B_CIRCLE; 
 	UIGamePad[3].label = m_sTurnToCursor;
 
-	UIGamePad[4].icon = class'UIUtilities_Input'.const.ICON_X_SQUARE; 
+	UIGamePad[4].icon = class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE; 
 	UIGamePad[4].label = m_sInventory;
 
 	UIGamePad[5].icon = class'UIUtilities_Input'.const.ICON_A_X; 

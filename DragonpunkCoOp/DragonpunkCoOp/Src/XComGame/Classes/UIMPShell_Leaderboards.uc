@@ -16,12 +16,17 @@ enum ELeaderboardSortType
 	eLeaderboardSortType_Wins,
 	eLeaderboardSortType_Losses,
 	eLeaderboardSortType_Disconnects,
+	eLeaderboardSortType_SIZE
+
 };
 
 // these are set in UIFacilitySummary_HeaderButton
 var bool m_bFlipSort;
 var ELeaderboardSortType m_eSortType;
 var EMPLeaderboardType   m_eLeaderboardType;
+var ELeaderboardSortType m_eSortOrder[ELeaderboardSortType.eLeaderboardSortType_SIZE];
+var array<UILeaderboard_HeaderButton> m_aHeaderButtons;
+var int m_iCurrentlySelectedHeaderButton;
 
 var int m_iTopPlayersRank;
 
@@ -44,11 +49,13 @@ var bool            m_bMyRankTop;
 var UINavigationHelp m_NavHelp;
 var array<TLeaderboardEntry> m_LeaderboardsData;
 
+var localized string            m_strToggleSortingButtonText;
 var localized string            m_strLeaderboardHeaderText;
 var localized string            m_strTopPlayersButtonText;
 var localized string            m_strYourRankButtonText;
 var localized string            m_strFriendRanksButtonText;
 var localized string            m_strNameColumnText;
+var localized string            m_strNameColumnText_Xbox;
 var localized string            m_strRankColumnText;
 var localized string            m_strPreviousPageText;
 var localized string            m_strNextPageText;
@@ -56,8 +63,13 @@ var localized string            m_strWinsColumnText;
 var localized string            m_strLossesColumnText;
 var localized string            m_strDisconnectsColumnText;
 
+simulated function string GetUsernameText()
+{
+	return m_strNameColumnText;
+}
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
 {
+	local UILeaderboard_HeaderButton headerButton;
 	super.InitScreen(InitController, InitMovie, InitName);
 	
 	m_kContainer = Spawn(class'UIPanel', self).InitPanel();
@@ -86,16 +98,35 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_kHeader = Spawn(class'UIPanel', self).InitPanel('', 'LeaderboardHeader');
 	m_kHeader.bIsNavigable = false;
 
-	Spawn(class'UILeaderboard_HeaderButton', m_kHeader).InitHeaderButton("rank", eLeaderboardSortType_Rank, m_strRankColumnText);
-	Spawn(class'UILeaderboard_HeaderButton', m_kHeader).InitHeaderButton("gamertag", eLeaderboardSortType_Name, m_strNameColumnText);
-	Spawn(class'UILeaderboard_HeaderButton', m_kHeader).InitHeaderButton("wins", eLeaderboardSortType_Wins, m_strWinsColumnText);
-	Spawn(class'UILeaderboard_HeaderButton', m_kHeader).InitHeaderButton("losses", eLeaderboardSortType_Losses, m_strLossesColumnText);
-	Spawn(class'UILeaderboard_HeaderButton', m_kHeader).InitHeaderButton("disconnects", eLeaderboardSortType_Disconnects, m_strDisconnectsColumnText);
+	headerButton = Spawn(class'UILeaderboard_HeaderButton', m_kHeader);
+	headerButton.InitHeaderButton("rank", eLeaderboardSortType_Rank, m_strRankColumnText);
+	m_aHeaderButtons.AddItem( headerButton );
+	
+	headerButton = Spawn(class'UILeaderboard_HeaderButton', m_kHeader);
+	headerButton.InitHeaderButton("gamertag", eLeaderboardSortType_Name, GetUsernameText());
+	m_aHeaderButtons.AddItem( headerButton );
+	
+	//Spawn(class'UILeaderboard_HeaderButton', m_kHeader).InitHeaderButton("wins", eLeaderboardSortType_Wins, m_strWinsColumnText);
+	//Spawn(class'UILeaderboard_HeaderButton', m_kHeader).InitHeaderButton("losses", eLeaderboardSortType_Losses, m_strLossesColumnText);
+	//Spawn(class'UILeaderboard_HeaderButton', m_kHeader).InitHeaderButton("disconnects", eLeaderboardSortType_Disconnects, m_strDisconnectsColumnText);
+
+	headerButton = Spawn(class'UILeaderboard_HeaderButton', m_kHeader);
+	headerButton.InitHeaderButton("wins", eLeaderboardSortType_Wins, m_strWinsColumnText);
+	m_aHeaderButtons.AddItem( headerButton );
+
+	headerButton = Spawn(class'UILeaderboard_HeaderButton', m_kHeader);
+	headerButton.InitHeaderButton("losses", eLeaderboardSortType_Losses, m_strLossesColumnText);
+	m_aHeaderButtons.AddItem( headerButton );
+
+	headerButton = Spawn(class'UILeaderboard_HeaderButton', m_kHeader);
+	headerButton.InitHeaderButton("disconnects", eLeaderboardSortType_Disconnects, m_strDisconnectsColumnText);
+	m_aHeaderButtons.AddItem( headerButton );
 	
 	SubscribeToOnCleanupWorld();
 
 	Navigator.Clear();
 
+	
 	PrevPageButton = Spawn(class'UIButton', self).InitButton('prevpage', m_strPreviousPageText, PreviousPageCallback);
 	PrevPageButton.AnchorBottomCenter();
 	PrevPageButton.SetPosition(-450, -40);
@@ -115,6 +146,22 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	NextPageButton  = Spawn(class'UIButton', self).InitButton('nextPage', m_strNextPageText, NextPageCallback);
 	NextPageButton.AnchorBottomCenter();
 	NextPageButton.SetPosition(350, -40);
+
+	PrevPageButton.SetVisible(`ISCONTROLLERACTIVE == false);
+	TopPlayersButton.SetVisible(`ISCONTROLLERACTIVE == false);
+	YourRankButton.SetVisible(`ISCONTROLLERACTIVE == false);
+	FriendsButton.SetVisible(`ISCONTROLLERACTIVE == false);
+	NextPageButton.SetVisible(`ISCONTROLLERACTIVE == false);
+
+	
+	
+	m_eSortOrder[0] = eLeaderboardSortType_Rank;
+	m_eSortOrder[1] = eLeaderboardSortType_Name;
+	m_eSortOrder[2] = eLeaderboardSortType_Wins;
+	m_eSortOrder[3] = eLeaderboardSortType_Losses;
+	m_eSortOrder[4] = eLeaderboardSortType_Disconnects;
+
+	m_iCurrentlySelectedHeaderButton = 0;
 }
 
 simulated function UpdateNavHelp()
@@ -127,21 +174,52 @@ simulated function UpdateNavHelp()
 
 simulated function UpdateNavButtons()
 {
-	PrevPageButton.SetDisabled(m_eLeaderboardType != eMPLeaderboard_TopPlayers);
-	NextPageButton.SetDisabled(m_eLeaderboardType != eMPLeaderboard_TopPlayers);
-
-	if(m_eLeaderboardType == eMPLeaderboard_TopPlayers)
+	if( `ISCONTROLLERACTIVE )
 	{
-		PrevPageButton.Show();
+		//MODIFIED FOR XBOX USE OF 'GAMERCARD' - JTA 2016/4/8
+		//INS:
+		m_NavHelp.AddCenterHelp(m_strToggleSortingButtonText, class'UIUtilities_Input'.const.ICON_X_SQUARE);
+
+		//Only display the "Top Players" button if we're not displaying that leaderboard.
+		if(m_eLeaderboardType != eMPLeaderboard_TopPlayers)
+			m_NavHelp.AddCenterHelp(m_strTopPlayersButtonText, class'UIUtilities_Input'.const.ICON_LT_L2);
+
+		//Only display the "Your Rank" button if we're not displaying that leaderboard.
+		if(m_eLeaderboardType != eMPLeaderboard_YourRank)
+			m_NavHelp.AddCenterHelp(m_strYourRankButtonText, class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+
+		//Only display the "Friend Ranks" button if we're not displaying that leaderboard.
+		if(m_eLeaderboardType != eMPLeaderboard_Friends)
+			m_NavHelp.AddCenterHelp(m_strFriendRanksButtonText, class'UIUtilities_Input'.const.ICON_RT_R2);
+
+		//CONSOLE_INPUT RJM 2016/03/04; JTA 2016/6/6
+		if(m_eLeaderboardType == eMPLeaderboard_TopPlayers)
+		{
+			if(m_iTopPlayersRank > 1)
+			{
+				m_NavHelp.AddCenterHelp(m_strPreviousPageText, class'UIUtilities_Input'.const.ICON_LB_L1);
+			}
+			m_NavHelp.AddCenterHelp(m_strNextPageText, class'UIUtilities_Input'.const.ICON_RB_R1);
+		}
 	}
-
-	TopPlayersButton.Show();
-	YourRankButton.Show();
-	FriendsButton.Show();
-
-	if(m_eLeaderboardType == eMPLeaderboard_TopPlayers)
+	else
 	{
-		NextPageButton.Show();
+		PrevPageButton.SetDisabled(m_eLeaderboardType != eMPLeaderboard_TopPlayers);
+		NextPageButton.SetDisabled(m_eLeaderboardType != eMPLeaderboard_TopPlayers);
+
+		if(m_eLeaderboardType == eMPLeaderboard_TopPlayers)
+		{
+			PrevPageButton.Show();
+		}
+
+		TopPlayersButton.Show();
+		YourRankButton.Show();
+		FriendsButton.Show();
+
+		if(m_eLeaderboardType == eMPLeaderboard_TopPlayers)
+		{
+			NextPageButton.Show();
+		}
 	}
 }
 
@@ -150,38 +228,126 @@ simulated function OnInit()
 	super.OnInit();
 	
 	m_NavHelp = m_kMPShellManager.NavHelp;
-	UpdateNavHelp();
+	if( `ISCONTROLLERACTIVE ) UpdateNavHelp();
 
 	m_kMPShellManager.CancelLeaderboardsFetch();
 	m_kMPShellManager.AddLeaderboardFetchCompleteDelegate(OnLeaderBoardFetchComplete);
 	TopPlayersButtonCallback(TopPlayersButton);
+	if( `ISCONTROLLERACTIVE ) 
+		m_NavHelp.SetCenterHelpPaddingValue(m_NavHelp.CENTER_HELP_CONTAINER_PADDING - 10);
 }
 
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	local int previousSelectedIndex;
+	local bool bHandled;
+
+	if( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
+		return false;
+
+	bHandled = true;
+
+	switch( cmd )
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+
+		//here we change the sort type.
+		//we also change our index
+		previousSelectedIndex = m_iCurrentlySelectedHeaderButton;
+		if(m_bFlipSort)
+		{	
+			m_iCurrentlySelectedHeaderButton++;
+			m_eSortType = m_eSortOrder[m_iCurrentlySelectedHeaderButton];
+			if(m_iCurrentlySelectedHeaderButton >= eLeaderboardSortType_SIZE)
+			{
+				m_iCurrentlySelectedHeaderButton = 0;
+				m_eSortType = m_eSortOrder[m_iCurrentlySelectedHeaderButton];
+			}
+		}
+		if(previousSelectedIndex != m_iCurrentlySelectedHeaderButton)
+		{
+			//we've changed to a different index that means
+			//that we need to deselect and reselect our new button.
+			m_aHeaderButtons[previousSelectedIndex].Deselect();
+			m_aHeaderButtons[m_iCurrentlySelectedHeaderButton].Select();
+		}
+		else
+		{
+			m_bFlipSort = !m_bFlipSort;
+			m_aHeaderButtons[m_iCurrentlySelectedHeaderButton].SetArrow( m_bFlipSort );
+		}
+		UpdateData();
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
+		PreviousPageCallback(none);
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_LTRIGGER:
+		TopPlayersButtonCallback(none);
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
+		YourRankButtonCallback(none);
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		ViewProfile();
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_RTRIGGER:
+		FriendRanksButtonCallback(none);
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
+		NextPageCallback(none);
+		break;
+
+	default:
+		bHandled = false;
+		break;
+	}
+
+	if (!bHandled && m_kList.Navigator.OnUnrealCommand(cmd, arg))
+		return true;
+
+	return bHandled || super.OnUnrealCommand(cmd, arg);
+}
+public function ViewProfile()
+{
+	//TODO 
+}
 public function PreviousPageCallback(UIButton button)
 {
-	if(m_iTopPlayersRank > 1)
+	if(m_eLeaderboardType == eMPLeaderboard_TopPlayers)
 	{
-		m_iTopPlayersRank -= 20;
-
-		if(m_iTopPlayersRank < 1)
+		if(m_iTopPlayersRank > 1)
 		{
-			m_iTopPlayersRank = 1;
-		}
+			m_iTopPlayersRank -= 20;
 
-		if(!FetchTopPlayersListData()) // failed to fetch go back to previous rank
-		{
-			m_iTopPlayersRank += 20;
+			if(m_iTopPlayersRank < 1)
+			{
+				m_iTopPlayersRank = 1;
+			}
+
+			if(!FetchTopPlayersListData()) // failed to fetch go back to previous rank
+			{
+				m_iTopPlayersRank += 20;
+			}
 		}
 	}
 }
 
 public function NextPageCallback(UIButton button)
 {
-	m_iTopPlayersRank += 20;
-
-	if(!FetchTopPlayersListData()) // failed to fetch go back to previous rank
+	if(m_eLeaderboardType == eMPLeaderboard_TopPlayers)
 	{
-		m_iTopPlayersRank -= 20;
+		m_iTopPlayersRank += 20;
+
+		if(!FetchTopPlayersListData()) // failed to fetch go back to previous rank
+		{
+			m_iTopPlayersRank -= 20;
+		}
 	}
 }
 
@@ -200,7 +366,8 @@ public function TopPlayersButtonCallback(UIButton button)
 		m_kScreenHeader.SetText(m_strLeaderboardHeaderText, m_strTopPlayersButtonText);
 		m_kScreenHeader.Show();
 	}
-	UpdateNavButtons();
+	if( `ISCONTROLLERACTIVE == false)	UpdateNavButtons();
+	m_kScreenHeader.SetText(m_strLeaderboardHeaderText, m_strTopPlayersButtonText);
 }
 
 public function YourRankButtonCallback(UIButton button)
@@ -218,7 +385,8 @@ public function YourRankButtonCallback(UIButton button)
 		m_kScreenHeader.SetText(m_strLeaderboardHeaderText, m_strYourRankButtonText);
 		m_kScreenHeader.Show();
 	}
-	UpdateNavButtons();
+	if( `ISCONTROLLERACTIVE == false) UpdateNavButtons();
+	m_kScreenHeader.SetText(m_strLeaderboardHeaderText, m_strYourRankButtonText);
 }
 
 public function FriendRanksButtonCallback(UIButton button)
@@ -235,7 +403,8 @@ public function FriendRanksButtonCallback(UIButton button)
 		m_kScreenHeader.SetText(m_strLeaderboardHeaderText, m_strFriendRanksButtonText);
 		m_kScreenHeader.Show();
 	}
-	UpdateNavButtons();
+	if( `ISCONTROLLERACTIVE == false ) UpdateNavButtons();
+	m_kScreenHeader.SetText(m_strLeaderboardHeaderText, m_strFriendRanksButtonText);
 }
 
 function BackButtonCallback()
@@ -266,6 +435,7 @@ simulated function UpdateData()
 		kListItem = UILeaderboard_ListItem(m_kList.CreateItem(class'UILeaderboard_ListItem')).InitListItem();
 		kListItem.UpdateData(kLeaderbardEntry);
 	}
+	m_kList.SetSelectedIndex(0);
 }
 
 simulated function int GetLowestRank()
@@ -291,6 +461,7 @@ function OnLeaderBoardFetchComplete(const out TLeaderboardsData kLeaderboardsDat
 	UpdateData();
 
 	Movie.Pres.UICloseProgressDialog();
+	UpdateNavHelp();
 }
 
 function SortLeaderboards()
@@ -412,6 +583,8 @@ function bool FetchLeaderboardData(EMPLeaderboardType kLeaderboardType)
 	bSuccess = m_kMPShellManager.OSSBeginLeaderboardsFetch(kLeaderboardType, m_iTopPlayersRank, 20);
 	if(bSuccess)
 	{
+		// If we're going to spawn a dialog box that says we're fetching data, that means we don't want navhelp to display anything, since we aren't able to do anything(kmartinez)
+		m_NavHelp.ClearButtonHelp();
 		kDialogBoxData.strTitle = class'X2MPData_Shell'.default.m_strMPFetchingLeaderboardsProgressDialogTitle;
 		kDialogBoxData.strDescription = class'X2MPData_Shell'.default.m_strMPFetchingLeaderboardsProgressDialogText;
 		kDialogBoxData.fnCallback = CloseScreen;
@@ -443,6 +616,7 @@ function Cleanup()
 {
 	m_kMPShellManager.ClearLeaderboardFetchCompleteDelegate(OnLeaderBoardFetchComplete);
 	m_kMPShellManager.CancelLeaderboardsFetch();
+	if( `ISCONTROLLERACTIVE ) m_NavHelp.SetCenterHelpPaddingValue(m_NavHelp.CENTER_HELP_CONTAINER_PADDING);
 }
 
 defaultproperties

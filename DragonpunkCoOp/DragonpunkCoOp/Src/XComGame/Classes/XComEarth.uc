@@ -267,6 +267,11 @@ function SaveZoomLevel()
 	fSavedZoom = fTargetZoom;
 }
 
+function float GetCurrentZoomLevel()
+{
+	return fSavedZoom;
+}
+
 function RestoreSavedViewLocation()
 {
 	v2ViewLoc = v2SavedViewLoc;
@@ -409,12 +414,12 @@ function ApplyImmediateZoomOffset(float fZoomOffset)
 
 function simulated float ComputeYMin()
 {	
-	return 0.1784 * fCurrentZoom - 0.0353;
+	return 0.0584 * fCurrentZoom - 0.0353;
 }
 
 function simulated float ComputeYMax()
 {
-	return -0.223 * fCurrentZoom + 1.1148;
+	return -0.211 * fCurrentZoom + 1.1148;
 }
 
 simulated event Tick(float DeltaTime)

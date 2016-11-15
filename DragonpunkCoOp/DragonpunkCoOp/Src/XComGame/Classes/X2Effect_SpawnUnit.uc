@@ -67,7 +67,12 @@ function TriggerSpawnEvent(const out EffectAppliedData ApplyEffectParameters, XC
 	World = `XWORLD;
 
 	TargetUnitState = XComGameState_Unit(History.GetGameStateForObjectID(ApplyEffectParameters.TargetStateObjectRef.ObjectID));
-	`assert(TargetUnitState != none);
+	if( TargetUnitState == none )
+	{
+		`RedScreen("TargetUnitState in X2Effect_SpawnUnit::TriggerSpawnEvent does not exist. @dslonneger");
+		return;
+	}
+	
 
 	if( bClearTileBlockedByTargetUnitFlag )
 	{

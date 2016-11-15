@@ -20,6 +20,7 @@ struct native FloorReveals
 
 var array<TFocusPoints> m_aFocusPoints;
 var array<Actor> FocusActors;
+const MaxFocusPoints = 50;
 
 var native Map{AXComBuildingVolume*, FFloorReveals} CurrentLevelReveals;
 
@@ -165,8 +166,8 @@ event bool GetDataFromScript(float DeltaTime)
 
 		for (OldFocusIndex = 0; OldFocusIndex < OldFocusPoints.Length; OldFocusIndex++)
 		{
-			if (VSizeSq(m_aFocusPoints[i].vFocusPoint - OldFocusPoints[OldFocusIndex].vFocusPoint) < 25.0f // 5 Units
-				&& VSizeSq(m_aFocusPoints[i].vCameraLocation - OldFocusPoints[OldFocusIndex].vCameraLocation) < 25.0f)
+			if (VSizeSq(m_aFocusPoints[i].vFocusPoint - OldFocusPoints[OldFocusIndex].vFocusPoint) < 1024.0f // 32 Units
+				&& VSizeSq(m_aFocusPoints[i].vCameraLocation - OldFocusPoints[OldFocusIndex].vCameraLocation) < 1024.0f)
 			{
 				OldFocusPoints.Remove(OldFocusIndex, 1);
 				break;
@@ -178,8 +179,11 @@ event bool GetDataFromScript(float DeltaTime)
 	for (i = 0; i < OldFocusPoints.Length; i++)
 	{
 		OldFocusPoints[i].fDelay -= DeltaTime;
-		if (OldFocusPoints[i].fDelay > 0.0 || bDisableFocusPointExpiration)
+		if ((OldFocusPoints[i].fDelay > 0.0 || bDisableFocusPointExpiration)
+			&& m_aFocusPoints.Length < MaxFocusPoints)
+		{
 			m_aFocusPoints.AddItem(OldFocusPoints[i]);
+		}
 	}
 
 	if (TCM != none && TCM.m_bShowPOILocations_Cheat)

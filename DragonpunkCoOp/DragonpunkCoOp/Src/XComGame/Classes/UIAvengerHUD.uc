@@ -9,6 +9,7 @@ var UINavigationHelp	NavHelp;
 var UIX2ResourceHeader			ResourceContainer;
 //var UIText				ResourceLabel;
 
+var config bool AvengerSecondButtonNavigation;
 var UIEventQueue                EventQueue;
 var UIToDoWidget				ToDoWidget;
 var UIAvengerShortcuts			Shortcuts;
@@ -550,6 +551,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local bool bHandled;
 
+	if (EventQueue.OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
 
@@ -563,6 +568,13 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 			`HQPRES.UIPersonnel(eUIPersonnel_All, class'UIUtilities_Strategy'.static.OnPersonnelSelected);
 			break;
 `endif
+		case class'UIUtilities_Input'.const.FXS_BUTTON_L3:
+			if (ToDoWidget.bIsVisible)
+			{
+				OpenNotificationsScreen();
+			}
+
+			break;
 		default:
 			bHandled = false;
 			break;
@@ -570,12 +582,23 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 	if( bHandled ) return true; 
 
-	//Also send this down to the Shortcuts bar, since Shortcuts is not a separate screen, but instead a child of the HUD. 
-	if( Shortcuts.OnUnrealCommand(cmd, arg) ) return true; 
+	if (NavHelp.OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
 
+	if( Shortcuts.OnUnrealCommand(cmd, arg) ) return true; 
+	
 	return super.OnUnrealCommand(cmd, arg);
 }
 
+simulated function OpenNotificationsScreen()
+{
+	if(ToDoWidget != None)
+	{
+		ToDoWidget.OpenScreen();
+	}
+}
 //==============================================================================
 
 defaultproperties

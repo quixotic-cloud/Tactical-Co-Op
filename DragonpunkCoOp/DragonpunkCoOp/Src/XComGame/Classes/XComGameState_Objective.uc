@@ -589,10 +589,12 @@ function EventListenerReturn OnObjectiveCompleted(Object EventData, Object Event
 	local Object ThisObj;
 	local XComGameState NewGameState;
 
+	`log("XComGameState_Objective::OnObjectiveCompleted",,'XComNarrative');
 	foreach m_Template.NextObjectives(NextObjective)
 	{
 		if( NextObjective != '' )
 		{
+			`log("XComGameState_Objective::OnObjectiveCompleted NextObjective="$NextObjective,,'XComNarrative');
 			NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("Start The Next Objective");
 			XComGameStateContext_ChangeContainer(NewGameState.GetContext()).BuildVisualizationFn = BuildVisualizationForNarrative;
 
@@ -959,6 +961,7 @@ static function BuildVisualizationForNarrative(XComGameState VisualizeGameState,
 	local X2Action_PlayNarrative NarrativeAction;
 	local XComGameState_Objective ObjectiveState;
 	local int i;
+	`log("BuildVisualizationForNarrative",,'XComNarrative');
 
 	foreach VisualizeGameState.IterateByClassType(class'XComGameState_Objective', ObjectiveState)
 	{
@@ -978,6 +981,18 @@ static function BuildVisualizationForNarrative(XComGameState VisualizeGameState,
 }
 
 function EventListenerReturn OnNarrativeEventTrigger(Object EventData, Object EventSource, XComGameState GameState, Name EventID)
+{
+	if (`HQPRES != none)
+	{
+	return `HQPRES.OnNarrativeEventTrigger(self, EventData, EventSource, GameState, EventID);
+	}
+	else
+	{
+		DoNarrativeEventTrigger(EventData, EventSource, GameState, EventID);
+	}
+}
+
+function EventListenerReturn DoNarrativeEventTrigger(Object EventData, Object EventSource, XComGameState GameState, Name EventID)
 {
 	local X2ObjectiveTemplate TheTemplate;
 	local NarrativeTrigger EventTrigger;

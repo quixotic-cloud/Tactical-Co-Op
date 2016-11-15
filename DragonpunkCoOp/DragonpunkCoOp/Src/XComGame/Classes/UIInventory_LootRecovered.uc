@@ -74,6 +74,7 @@ simulated function PopulateData()
 	local XComNarrativeMoment LootRecoveredNarrative;
 	local array<StateObjectReference> LootList;
 	local XComGameState NewGameState;
+	local UIInventory_HeaderListItem HeaderListItem;
 
 	super.PopulateData();
 
@@ -149,21 +150,28 @@ simulated function PopulateData()
 
 	if(ObjectiveItems.Length > 0)
 	{
-		Spawn(class'UIInventory_HeaderListItem', List.ItemContainer).InitHeaderItem(class'UIUtilities_Image'.const.LootIcon_Objectives, m_strObjectiveItemsRecovered);
+		HeaderListItem = Spawn(class'UIInventory_HeaderListItem', List.ItemContainer);
+		HeaderListItem.InitHeaderItem(class'UIUtilities_Image'.const.LootIcon_Objectives, m_strObjectiveItemsRecovered);
+		HeaderListItem.DisableNavigation();
+		
 		for(i = 0; i < ObjectiveItems.Length; ++i)
 			AddLootItem(ObjectiveItems[i]);
 	}
 
 	if(Loot.Length > 0)
 	{
-		Spawn(class'UIInventory_HeaderListItem', List.ItemContainer).InitHeaderItem(class'UIUtilities_Image'.const.LootIcon_Loot, m_strLootRecovered);
+		HeaderListItem = Spawn(class'UIInventory_HeaderListItem', List.ItemContainer);
+		HeaderListItem.InitHeaderItem(class'UIUtilities_Image'.const.LootIcon_Loot, m_strLootRecovered);
+		HeaderListItem.DisableNavigation();
 		for(i = 0; i < Loot.Length; ++i)
 			AddLootItem(Loot[i]);
 	}
 
 	if(Artifacts.Length > 0)
 	{
-		Spawn(class'UIInventory_HeaderListItem', List.ItemContainer).InitHeaderItem(class'UIUtilities_Image'.const.LootIcon_Artifacts, m_strArtifactRecovered, BattleData.AllTacticalObjectivesCompleted() ? m_strArtifactRecoveredSweep : m_strArtifactRecoveredEvac);
+		HeaderListItem = Spawn(class'UIInventory_HeaderListItem', List.ItemContainer);
+		HeaderListItem.InitHeaderItem(class'UIUtilities_Image'.const.LootIcon_Artifacts, m_strArtifactRecovered, BattleData.AllTacticalObjectivesCompleted() ? m_strArtifactRecoveredSweep : m_strArtifactRecoveredEvac);
+		HeaderListItem.DisableNavigation();
 		for(i = 0; i < Artifacts.Length; ++i)
 			AddLootItem(Artifacts[i]);
 	}
@@ -175,13 +183,15 @@ simulated function PopulateData()
 		i = 0;
 		while(i < List.ItemCount)
 		{
-			ListItem = UIInventory_ListItem(List.GetItem(i++));
-			if(ListItem != none)
+
+			ListItem = UIInventory_ListItem(List.GetItem(i));
+			if (ListItem != none && ListItem.bIsNavigable)
 			{
 				List.SetSelectedItem(ListItem);
 				PopulateItemCard(ListItem.ItemTemplate, ListItem.ItemRef);
 				break;
 			}
+			i++;
 		}
 	}
 	

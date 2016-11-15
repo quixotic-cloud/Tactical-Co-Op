@@ -499,6 +499,7 @@ simulated function RealizeNavHelp()
 {
 	NavHelp.ClearButtonHelp();
 
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
 	if(class'XComGameState_HeadquartersXCom'.static.IsObjectiveCompleted('T0_M1_WelcomeToLabs'))
 	{
 		NavHelp.AddBackButton(OnCancel);

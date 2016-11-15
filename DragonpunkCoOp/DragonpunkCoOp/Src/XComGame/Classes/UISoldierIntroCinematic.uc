@@ -60,13 +60,6 @@ simulated function SpawnSoldierPawn()
 	SoldierPawn.CreateVisualInventoryAttachments(PawnMgr, XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(SoldierRef.ObjectID)));
 	GremlinPawn = PawnMgr.GetCosmeticPawn(eInvSlot_SecondaryWeapon, SoldierRef.ObjectID);
 
-	//Keep dangly bits from wigging out when the character is teleported into the matinee
-	if(XComHumanPawn(SoldierPawn) != none)
-	{
-		XComHumanPawn(SoldierPawn).FreezePhysics();
-		SetTimer(1.0f, false, 'WakePhysics', XComHumanPawn(SoldierPawn));
-	}
-
 	SetTimer(0.035, false, 'SetSoldierMatineeVariable');
 }
 

@@ -173,7 +173,7 @@ simulated function NeedsAttention( bool bNeedsAttention , optional bool bIsObjec
 
 simulated function UIListItemString SetBad(bool isBad, optional string TooltipText)
 {
-	ButtonBG.SetBad(bIsBad, TooltipText);
+	ButtonBG.SetBad(isBad, TooltipText);
 	super.SetBad(isBad, TooltipText);
 	return self;
 }
@@ -254,6 +254,12 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
 
+	switch(cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
+		OnClickedConfirmButton(ConfirmButton);
+		return true;
+	}
 	return super.OnUnrealCommand(cmd, arg);
 }
 

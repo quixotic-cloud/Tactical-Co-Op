@@ -40,8 +40,16 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 simulated function UpdateNavHelp()
 {
-	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
-	`HQPRES.m_kAvengerHUD.NavHelp.AddBackButton(CloseScreen);
+	local UINavigationHelp NavHelp;
+
+	NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
+
+	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
+	NavHelp.AddBackButton(CloseScreen);
+
+	if(`ISCONTROLLERACTIVE)
+		NavHelp.AddSelectNavHelp(class'UIRecruitmentListItem'.default.RecruitConfirmLabel);
 }
 
 simulated function UpdateData()
@@ -72,6 +80,7 @@ simulated function UpdateData()
 	if(m_arrRecruits.Length > 0)
 	{
 		List.SetSelectedIndex(0, true);
+		List.Navigator.SelectFirstAvailable();
 	}
 	else
 	{

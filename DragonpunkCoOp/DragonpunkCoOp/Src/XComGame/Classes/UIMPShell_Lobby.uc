@@ -83,6 +83,8 @@ var localized string  m_strQuickSaveCancel;
 var localized string  m_strEnterNameHeader;
 var localized string m_strInviteFriendButtonText;
 
+var localized string m_strSquadCostErrorTitle;
+var localized string m_strSquadCostErrorText;
 var public string m_strNewNameRequested; 
 
 var UIButton                  InviteFriendButton;
@@ -123,24 +125,24 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_kLocalPRI = XComMPLobbyPRI(GetALocalPlayerController().PlayerReplicationInfo);
 	m_kProfileSettings = `XPROFILESETTINGS;
 
-	super.InitScreen(InitController, InitMovie, InitName);
+		super.InitScreen(InitController, InitMovie, InitName);
 	ReadLobbyLoadouts();
 	m_kPawnMgr.SetCheckGameState(m_kSquadLoadout);
 	m_kLocalPlayerInfo.SetPlayerLoadout(m_kSquadLoadout);
 
-	if(!m_kMPShellManager.OnlineGame_GetIsRanked() && !m_kMPShellManager.OnlineGame_GetAutomatch() )
+	if (!m_kMPShellManager.OnlineGame_GetIsRanked() && !m_kMPShellManager.OnlineGame_GetAutomatch())
 	{
 		m_bAllowEditing = true;
 	}
 
-	if(m_kMPShellManager.OnlineGame_GetIsRanked() == true)
+	if (m_kMPShellManager.OnlineGame_GetIsRanked() == true)
 	{
-	//	headerName = class'X2MPData_Shell'.default.m_strRankedMatch;
+		//	headerName = class'X2MPData_Shell'.default.m_strRankedMatch;
 	}
 	else
 	{
-	//	headerName = class'X2MPData_Shell'.default.m_strUnrankedMatch;
-	//	headerName @= class'X2MPData_Shell'.default.m_arrNetworkTypeNames[m_kMPShellManager.OnlineGame_GetNetworkType()];
+		//	headerName = class'X2MPData_Shell'.default.m_strUnrankedMatch;
+		//	headerName @= class'X2MPData_Shell'.default.m_arrNetworkTypeNames[m_kMPShellManager.OnlineGame_GetNetworkType()];
 	}
 	//TEMP_ScreenNameHeader.SetText(headerName);
 
@@ -148,18 +150,28 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	PC.bVoluntarilyDisconnectingFromGame = false;
 
 	OnlineEventMgr = `ONLINEEVENTMGR;
-	OnlineEventMgr.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
+		OnlineEventMgr.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
 	OnlineEventMgr.AddGameInviteCompleteDelegate(OnGameInviteComplete);
 	OnlineEventMgr.AddNotifyConnectionProblemDelegate(OnConnectionProblem);
 	class'GameEngine'.static.GetOnlineSubsystem().PlayerInterface.AddMutingChangeDelegate(OnMutingChange);
 
-	ReadyButton = Spawn(class'UIButton', self).InitButton('ReadyButton', m_strReadyButtonText, ReadyButtonCallback);
-	ReadyButton.AnchorTopCenter();
-	ReadyButton.SetPosition(-450, 140);
-
 	StartButton = Spawn(class'UILargeButton', self).InitLargeButton('StartButton', class'UIStartScreen'.default.m_sPressStartPC, , StartButtonCallback);
 	StartButton.AnchorTopCenter();
 	StartButton.Hide();
+
+	if (`ISCONTROLLERACTIVE)
+	{
+		StartButton.SetText(class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE, 20, 20, -10) @ class'UIStartScreen'.default.m_sPressStartPC);
+		ReadyButton = Spawn(class'UILargeButton', self).InitLargeButton('ContinueButton', class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, -13) @ Caps(m_strReadyButtonText));
+		ReadyButton.AnchorBottomRight();
+	}
+	else
+	{
+		ReadyButton = Spawn(class'UIButton', self).InitButton('ReadyButton', m_strReadyButtonText, ReadyButtonCallback);
+		ReadyButton.AnchorTopCenter();
+		ReadyButton.SetPosition(-450, 140);
+	}
+
 
 	History = `XCOMHISTORY;
 	NetworkMgr = `XCOMNETMANAGER;
@@ -190,7 +202,65 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 }
 function UpdateNavHelp()
 {
+	if( `ISCONTROLLERACTIVE == false ) return; 
 	
+	NavHelp.ClearButtonHelp();
+
+	if(!bIsFocused)
+		return;
+
+	NavHelp.AddBackButton(BackButtonCallback);
+	NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericDetails, class'UIUtilities_Input'.const.ICON_LSCLICK_L3, InfoButtonCallback);
+
+	if (m_kMPShellManager.OnlineGame_GetNetworkType() != eMPNetworkType_LAN && !m_kMPShellManager.OnlineGame_GetIsRanked() )
+	{
+		NavHelp.AddCenterHelp(m_strInviteFriendButtonText, class'UIUtilities_Input'.const.ICON_BACK_SELECT);
+	}	
+	else if(!IsInState('WaitingForOpponent') && (!NetworkMgr.HasServerConnection() ))
+	{
+		NavHelp.AddCenterHelp(m_strMPLoadout_ViewOpponentProfile, class'UIUtilities_Input'.const.ICON_RT_R2);
+	}
+	if(m_kLocalPlayerInfo.m_iSquadCost > 0 && (m_kLocalPlayerInfo.m_iSquadCost <= m_kGRI.m_iMPMaxSquadCost || m_kGRI.m_iMPMaxSquadCost  <= 0))
+	{		
+		ReadyButton.SetVisible(true);
+		if(m_kLocalPlayerInfo.GetPlayerReady())
+		{
+			//NavHelp.AddRightHelp(m_strMPLoadout_CancelReady, class'UIUtilities_Input'.const.ICON_X_SQUARE);
+			ReadyButton.SetText(class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, 0) @ m_strMPLoadout_CancelReady);
+
+			//TODO - should be removed when the auto-start feature is implemented after all players have "readied up" - JTA 2016/2/9
+			if(NetworkMgr != None && NetworkMgr.HasServerConnection() && m_bAllPlayersReady)
+				NavHelp.AddRightHelp(Caps(class'UIStartScreen'.default.m_sPressStartPC), class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+		}
+		else
+		{
+			ReadyButton.SetText(class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, 0) @ m_strMPLoadout_Ready);
+		}
+	}
+	else
+	{
+		ReadyButton.SetVisible(false);
+	}
+
+	if( IsInState('EditingUnits') )
+	{
+		if(NetworkMgr.HasServerConnection() && m_bAllPlayersReady)
+		{
+			StartButton.Show();
+			StartButton.SetPosition(-StartButton.Width * 0.5f, 140);
+		}
+		else if(m_kLocalPlayerInfo.GetPlayerReady())
+		{
+			StartButton.Hide();
+			ReadyButton.SetText(class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, 0) @ m_strMPLoadout_CancelReady);
+		}
+		else
+		{
+			StartButton.Hide();
+			ReadyButton.SetText(class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, 0) @ m_strMPLoadout_Ready);
+			ReadyButton.SetDisabled(!(m_kLocalPlayerInfo.m_iSquadCost > 0 && (m_kLocalPlayerInfo.m_iSquadCost <= m_kGRI.m_iMPMaxSquadCost || m_kGRI.m_iMPMaxSquadCost  < 0)));
+		}
+	}
 }
 
 function Tick( float DeltaTime )
@@ -272,6 +342,7 @@ simulated function OnReceiveFocus()
 		// we should have already been booted back to the main menu but i'm guessing there is a timing issue with this screen not being detected in the UI stack -tsmith
 		m_kMPShellManager.m_OnlineEventMgr.ReturnToMPMainMenu(QuitReason_LostLinkConnection);
 	}
+	UpdateNavHelp();
 }
 
 function ReadLobbyLoadouts()
@@ -303,6 +374,11 @@ function InitWidgets()
 
 function UpdateButtons()
 {
+	if(!Movie.IsMouseActive())
+	{
+		UpdateNavHelp();
+		return;
+	}
 	NavHelp.ClearButtonHelp();
 
 	NavHelp.AddBackButton(BackButtonCallback);
@@ -356,6 +432,10 @@ function BackButtonCallback()
 
 function ReadyButtonCallback(UIButton button)
 {
+	local TDialogueBoxData kDialogData;
+	//Don't allow ready state to change if game has started
+	if(IsInState('Client_LoadingMap'))
+		return;
 	`log(self $ "::" $ GetFuncName(),, 'uixcom_mp');
 	if(m_kLocalPlayerInfo.m_iSquadCost > 0 && (m_kLocalPlayerInfo.m_iSquadCost <= m_kGRI.m_iMPMaxSquadCost || m_kGRI.m_iMPMaxSquadCost  < 0))
 	{
@@ -370,12 +450,23 @@ function ReadyButtonCallback(UIButton button)
 
 		UpdateData();
 	}
+	else
+	{
+		kDialogData.strTitle = m_strSquadCostErrorTitle;
+		kDialogData.eType = eDialog_Warning;
+		kDialogData.strText = m_strSquadCostErrorText;
+		kDialogData.strAccept = class'UIUtilities_Text'.default.m_strGenericOK;
+
+		`PRES.UIRaiseDialog(kDialogData);
+	}
 }
 
 function StartButtonCallback(UIButton button)
 {
 	`log(self $ "::" $ GetFuncName(),, 'uixcom_mp');
-	if(m_bAllPlayersReady)
+
+	//As only the host has a visible start button only let the host start the game
+	if(NetworkMgr.HasServerConnection() && m_bAllPlayersReady)
 	{
 		StartGame();
 	}
@@ -387,6 +478,12 @@ function InviteFriendButtonCallback()
 	`log(self $ "::" $ GetFuncName(),, 'uixcom_mp');
 	OnInviteButtonClicked();
 }
+
+function ViewOpponentProfile()
+{
+
+}
+
 
 //X-Com 2 MP Lobby integration
 //=====================================================
@@ -545,6 +642,10 @@ function SetupMapData(XComGameState StrategyStartState, XComGameState TacticalSt
 	m_BattleData.bUseFirstStartTurnSeed = true;
 	m_BattleData.iFirstStartTurnSeed    = class'Engine'.static.GetARandomSeed();
 	m_BattleData.GameSettings           = XComOnlineGameSettings(class'GameEngine'.static.GetOnlineSubsystem().GameInterface.GetGameSettings('Game'));
+	if (m_BattleData.GameSettings == None)
+	{
+		m_BattleData.GameSettings       = XComOnlineGameSettings(class'GameEngine'.static.GetOnlineSubsystem().GameInterface.GetGameSettings('Lobby'));
+	}
 
 	`log(`location @ `ShowVar(m_BattleData.MapData.PlotMapName, PlotMapName) @ `ShowVar(m_BattleData.MapData.Biome, Biome) @ `ShowVar(m_BattleData.m_strMapCommand, MapCommand),,'XCom_Online');
 
@@ -569,6 +670,8 @@ function SetupStartState()
 
 	`ONLINEEVENTMGR.ReadProfileSettings();
 	History.ResetHistory();
+	//bsg-mfawcett(09.01.16): reset mission manager cards here so that we can correctly set up our mission (fixes issue with fresh profile going into MP lobby, backing out, then starting another MP lobby)
+	`TACTICALMISSIONMGR.ResetCachedCards();
 
 	///
 	/// Setup the Strategy side ...
@@ -759,6 +862,10 @@ function OnInviteButtonClicked()
 	if(m_kMPShellManager.OnlineGame_GetNetworkType() == eMPNetworkType_LAN || m_kMPShellManager.OnlineGame_GetIsRanked())
 		return;
 
+	if (!CanInvite())
+	{
+		return;
+	}
 	onlineSub = `ONLINEEVENTMGR.OnlineSub;
 	`assert(onlineSub != none);
 
@@ -935,15 +1042,34 @@ function DisplayConfirmExitDialog()
 
 	kConfirmData.fnCallback = OnDisplayConfirmExitDialogAction;
 		
+	NavHelp.ClearButtonHelp(); //Nav Help will be refreshed when we gain focus again, if the user changes their mind
 	Movie.Pres.UIRaiseDialog(kConfirmData);
 }
 
 function OnDisplayConfirmExitDialogAction(eUIAction eAction)
 {
+	local XComPresentationLayerBase Presentation;
+	local XComShellPresentationLayer ShellPresentation;
+	//local TProgressDialogData kDialogBoxData;
 	`ONLINEEVENTMGR.m_bMPConfirmExitDialogOpen = false;
 
 	if (eAction == eUIAction_Accept)
 	{
+		//Moved dialog popup inside of accept button press to only show the dialog if the user is backing out of the lobby
+		Presentation = XComPlayerController(class'UIInteraction'.static.GetLocalPlayer(0).Actor).Pres;
+		ShellPresentation = XComShellPresentationLayer(Presentation);
+
+		if (ShellPresentation != none)
+		{
+			//kDialogBoxData.strTitle = ShellPresentation.m_strOnlineCancelingMultiplayerSession_Title;
+			//kDialogBoxData.strDescription = ShellPresentation.m_strOnlineCancelingMultiplayerSession_Text;
+			//Presentation.UIProgressDialog(kDialogBoxData);
+
+			if(NavHelp != None)
+			{
+				NavHelp.ClearButtonHelp();
+			}
+		}
 		Cleanup();
 		//OnBack();
 		CancelGame();
@@ -971,13 +1097,16 @@ function OnDestroyedOnlineGame(name SessionName,bool bWasSuccessful)
 	`log(self $ "::" $ GetFuncName() @ "- Attempting to exit.", true, 'XCom_Online');
 
 	kGameInterface = `ONLINEEVENTMGR.OnlineSub.GameInterface;
-	if (none != kGameInterface)
+	`log(`location @ "SessionName="$SessionName @ "bWasSuccessful="$bWasSuccessful);
+	// Make sure that all sessions are fully closed
+	if (kGameInterface.GetGameSettings('Game') == None && kGameInterface.GetGameSettings('Lobby') == None)
 	{
 		kGameInterface.ClearDestroyOnlineGameCompleteDelegate(OnDestroyedOnlineGame);
-	}
+	
 
 	m_iBeforeExitBitfield = m_iBeforeExitBitfield | (1 << eBeforeExit_DestroyedGame);
 	AttemptExitLoadoutScreen();
+	}
 }
 
 function OnSaveCompleteCancel(bool bWasSuccessful)
@@ -1134,7 +1263,7 @@ simulated function RefreshDisplay()
 
 	//			if(Movie.IsMouseActive())
 	//			{
-	//				m_kLocalPlayerInfo.SetStartButtonHelp(m_strMPLoadout_Mouse_Start, class'UIUtilities_Input'.const.ICON_START);
+	//				m_kLocalPlayerInfo.SetStartButtonHelp(m_strMPLoadout_Mouse_Start, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_START);
 	//			}
 	//			else
 	//			{
@@ -1142,7 +1271,7 @@ simulated function RefreshDisplay()
 	//				if( WorldInfo.IsConsoleBuild(CONSOLE_PS3) )
 	//					m_kLocalPlayerInfo.SetStartButtonHelp( m_strMPLoadout_PressStart, "");
 	//				else
-	//					m_kLocalPlayerInfo.SetStartButtonHelp( m_strMPLoadout_PressStart, class'UIUtilities_Input'.const.ICON_START);
+	//					m_kLocalPlayerInfo.SetStartButtonHelp( m_strMPLoadout_PressStart, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_START);
 	//			}
 	//		}
 	//		else	
@@ -1188,7 +1317,7 @@ simulated function RefreshDisplay()
 	//		}
 	//		else			
 	//		{
-	//			AS_SetReadyButtonHelp(m_strMPLoadout_Ready, class'UIUtilities_Input'.const.ICON_START);
+	//			AS_SetReadyButtonHelp(m_strMPLoadout_Ready, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_START);
 	//		}
 	//		RefreshLoadoutManagementButtons(true);
 	//	}
@@ -1204,7 +1333,7 @@ simulated function RefreshDisplay()
 	//	}
 	//	else			
 	//	{
-	//		AS_SetReadyButtonHelp(m_strMPLoadout_Ready, class'UIUtilities_Input'.const.ICON_START);
+	//		AS_SetReadyButtonHelp(m_strMPLoadout_Ready, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_START);
 	//	}
 	//	RefreshLoadoutManagementButtons(true);
 
@@ -1308,8 +1437,8 @@ function OpenRenameInterface()
 	else
 		inputName = m_strNewNameRequested;
 
-	if(!WorldInfo.IsConsoleBuild())
-	{
+	//if(!WorldInfo.IsConsoleBuild() || `ISCONTROLLERACTIVE )
+	//{
 		// on PC, we have a real keyboard, so use that instead
 		kData.fnCallbackAccepted = PCTextField_OnAccept_Rename;
 		kData.fnCallbackCancelled = PCTextField_OnCancel_Rename;
@@ -1317,7 +1446,7 @@ function OpenRenameInterface()
 		kData.iMaxChars = MAX_CHARS;
 		kData.strInputBoxText = inputName;
 		XComPresentationLayerBase(Owner).UIInputDialog(kData);
-	}
+/*	}
 	else
 	{
 		//`log("+++ Loading the VirtualKeyboard", ,'uixcom');
@@ -1327,7 +1456,7 @@ function OpenRenameInterface()
 										 VirtualKeyboard_OnCancel_Rename,
 										 false, // Do not need to validate these names -ttalley
 										 MAX_CHARS);
-	}
+	}*/
 }
 
 reliable client function PCTextField_OnAccept_Rename( string userInput )
@@ -1649,6 +1778,41 @@ simulated function OnCancel()
 	}
 }
 
+//bsg-cballinger (7.10.2016): BEGIN, Overwrite functions in UIMPShell_SquadEditor, so they do not conflict with the user trying to back out of the lobby
+function OnDisplaySaveSquadBeforeExitDialog(eUIAction eAction)
+{
+	`log(self $ "::" $ GetFuncName() @ `ShowVar(eAction),, 'uixcom_mp');
+	if(eAction == eUIAction_Accept)
+	{
+		m_kMPShellManager.AddSaveProfileSettingsCompleteDelegate(SaveProfileSettingsComplete_Exit);
+		SaveLoadout();
+	}
+	else //clear squad saving/editing flags, so user can back out of lobby next time they press back
+	{
+		DirtiedUnit = none;
+		m_bLoadoutDirty = false;
+		m_bSavingLoadout = false;
+	}
+}
+
+
+function SaveProfileSettingsComplete_Exit(bool bSuccess)
+{
+	`log(self $ "::" $ GetFuncName() @ `ShowVar(bSuccess),, 'uixcom_mp');
+	m_bSavingLoadout = false;
+	m_kMPShellManager.ClearSaveProfileSettingsCompleteDelegate(SaveProfileSettingsComplete_Exit);
+	if(bSuccess)
+	{
+		m_bLoadoutDirty = false;
+		DirtiedUnit = none;
+	}
+	else
+	{
+		//ShowWriteProfileFailedDialog();
+	}
+}
+
+//bsg-cballinger (7.10.2016): END
 simulated function UpdateData(optional bool bFillSquad)
 {
 	super.UpdateData(bFillSquad);
@@ -1686,6 +1850,42 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 	{
 		SendHistory();
 	}
+}
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	switch (cmd)
+	{
+		case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
+			StartButtonCallback(none);
+			return true;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			ReadyButtonCallback(none);
+			return true;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_SELECT:
+			if (CanInvite())
+			{
+				InviteFriendButtonCallback();
+				return true;
+			}
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_R3:
+			//Disabling Rename functionality while in lobby - JTA 2016/6/17
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RTRIGGER:
+			ViewOpponentProfile();
+			return true;
+		default:
+			break;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 // Game Host
@@ -1959,6 +2159,14 @@ Begin:
 	LoadTacticalMap();
 }
 
+function bool CanInvite()
+{
+	if(	m_kMPShellManager.OnlineGame_GetNetworkType() != eMPNetworkType_LAN && !m_kMPShellManager.OnlineGame_GetIsRanked())
+	{
+		return true;
+	}
+	return false;
+}
 defaultproperties
 {
 	bOpponentJoined=false;

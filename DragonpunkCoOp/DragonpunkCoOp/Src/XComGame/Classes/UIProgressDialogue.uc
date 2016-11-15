@@ -75,7 +75,15 @@ simulated function OnInit()
 	AS_SetTitle(Caps(m_kData.strTitle));
 	AS_SetDescription(m_kData.strDescription);
 	
-	AS_SetButtonHelp( m_kData.strAbortButtonText, class'UIUtilities_Input'.static.GetBackButtonIcon() );
+	if(Movie.IsMouseActive())
+	{
+		AS_SetButtonHelp( m_kData.strAbortButtonText, class'UIUtilities_Input'.static.GetBackButtonIcon() );
+	}
+	else
+	{
+		//This function converts the actionscript in AS_SetButtonHelp to an unrealscript function that does the same thing
+		SetButtonHelp(m_kData.strAbortButtonText, class'UIUtilities_Input'.static.GetBackButtonIcon());
+	}
 
 	Movie.InsertHighestDepthScreen(self);
 	Show();
@@ -141,11 +149,20 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 //==============================================================================
 simulated function bool OnCancel( optional string strOption = "" )
 {
+
+	if (XComPresentationLayerBase(Owner) != none)
+	{
+		XComPresentationLayerBase(Owner).UICloseProgressDialog();
+	}
+	
 	if(m_fnCallback != none)
 	{
 		// Remove this screen.
-		if(XComPresentationLayerBase(Owner) != none)
-			XComPresentationLayerBase(Owner).UICloseProgressDialog(); 
+		if( `ISCONTROLLERACTIVE == false )
+		{
+			if(XComPresentationLayerBase(Owner) != none)
+				XComPresentationLayerBase(Owner).UICloseProgressDialog(); 
+		}
 
 		m_fnCallback();
 	}
@@ -178,6 +195,18 @@ simulated function OnRemoved()
 		XComPresentationLayerBase(Owner).UICloseProgressDialog(); 
 }
 
+//This function converts the Actionscript function AS_SetButtonHelp to an unrealscript version
+simulated function SetButtonHelp( string buttonText, string icon )
+{
+	local UIButton NavHelp;
+
+	NavHelp = Spawn(class'UIButton', Self, 'theButton');
+	//note: the actionscript version uses the style 'STYLE_HOTLINK_BUTTON', which displays a background on consoles
+	NavHelp.InitButton('theButton',buttonText,,eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+	NavHelp.SetGamepadIcon(icon);
+	NavHelp.SetVisible(buttonText != ""); //will leave the blank button background if visible is not set to false
+		
+}
 
 //==============================================================================
 //		FLASH COMMUNICATION:

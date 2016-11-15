@@ -100,7 +100,8 @@ simulated function UpdateStats()
 		Show();
 	}
 
-	AS_ToggleSoldierInfoTip(true);
+	//This displays the L3 icon, which we need to handle dynamically from Unrealscript
+	//AS_ToggleSoldierInfoTip(true);
 }
 
 simulated function SetStats( XGUnit kActiveUnit )

@@ -62,8 +62,15 @@ function RealizeToDoWidget()
 			ToDoWidget.RequestCategoryUpdate();
 			break;
 		case class'UIStrategyMap':
-			ToDoWidget.RefreshLocation();
-			ToDoWidget.Show();
+			if( `ISCONTROLLERACTIVE == false)
+			{
+				ToDoWidget.RefreshLocation();
+				ToDoWidget.Show();
+			}
+			else
+			{
+				ToDoWidget.Hide();
+			}
 			break;
 		default:
 			ToDoWidget.Hide();
@@ -186,6 +193,8 @@ function RealizeObjectives()
 {
 	local UIAvengerHUD AvengerHUD;
 	local UIScreen CurrentScreen;
+	local XComHQPresentationLayer HQPres;
+	local bool bShouldShowObjectives;
 
 	AvengerHUD = UIAvengerHUD(`SCREENSTACK.GetScreen(class'UIAvengerHUD'));
 
@@ -197,7 +206,14 @@ function RealizeObjectives()
 		{
 		case class'UIFacilityGrid':
 		case class'UIStrategyMap':
-			AvengerHUD.Objectives.Show();
+			bShouldShowObjectives = true;
+			HQPres = `HQPRES;
+			
+			if (HQPres != None && HQPres.NonInterruptiveEventsOccurring())
+				bShouldShowObjectives = false;
+			
+			if(bShouldShowObjectives)
+				AvengerHUD.Objectives.Show();
 			break;
 		default:
 			AvengerHUD.Objectives.Hide();

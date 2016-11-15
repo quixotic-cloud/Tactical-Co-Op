@@ -1103,8 +1103,11 @@ function BeginShellLogin(int ControllerId)
 
 	//ShellLoginProgressMsg(m_sLoadingProfile);
 
-	// Associate the correct controller
-	SetActiveController(ControllerId);
+	if( `ISCONTROLLERACTIVE() )
+	{
+		// Associate the correct controller
+		SetActiveController(ControllerId);
+	}
 
 	// Initialize rich presence system
 	InitRichPresence();

@@ -51,8 +51,6 @@ var localized string m_strClassicDesc;
 var localized string m_strIronmanLabel;
 var localized string m_strTutorialLabel;
 
-var UINavigationHelp   NavHelp;
-
 //----------------------------------------------------------------------------
 
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
@@ -69,8 +67,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	// Toggle the controlled start option based on whether the player has either played a controlled game, or turned the option off previously
 	//`GAME.m_bControlledStart = !m_bCompletedControlledGame;       //jbouscher: `GAME does not exist at this point, I believe it is set in UIShellDifficulty
 	NavHelp = InitController.Pres.GetNavHelp();
-	NavHelp.ClearButtonHelp();
-	NavHelp.AddBackButton(CloseScreen);
+	UpdateNavHelp();
 
 	Show();
 }
@@ -129,12 +126,9 @@ state ShellMenu
 		local int iOption;
 			
 		MAX_OPTIONS = eSSO_MAX;
-		//AS_SetTitle(m_strTitle);
 
 		MC.FunctionString("SetTitle", m_strTitle);
-		SetHelp( 0, "", "");
 
-		//AS_Clear();
 		List.ClearItems();
 
 		for( iOption = 0; iOption < eSSO_MAX; iOption++ )
@@ -163,6 +157,7 @@ state ShellMenu
 	
 	simulated function OnUCancel()
 	{
+		NavHelp.ClearButtonHelp();
 		Movie.Stack.Pop(self); 
 	}
 }
@@ -280,20 +275,6 @@ simulated public function ConfirmControlCallback(eUIAction eAction)
 	}
 
 	// SCOTT RAMSAY: Player has actively turned off "Controlled start", so mark that in profile
-}
-
-simulated function CloseScreen()
-{
-	super.CloseScreen();
-
-	NavHelp.ClearButtonHelp();
-}
-simulated function OnReceiveFocus()
-{
-	super.OnReceiveFocus();
-
-	NavHelp.ClearButtonHelp();
-	NavHelp.AddBackButton(CloseScreen);
 }
 
 DefaultProperties

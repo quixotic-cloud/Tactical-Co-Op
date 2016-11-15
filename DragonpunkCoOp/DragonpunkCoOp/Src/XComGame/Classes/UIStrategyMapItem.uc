@@ -43,6 +43,7 @@ var StateObjectReference GeoscapeEntityRef;
 
 // The History index from the last time this visualizer was updated based on the associated GeoscapeEntity game state.
 var int HistoryIndexOnLastUpdate;
+var int m_iTooltipDataIndex;
 
 // Localized header string for this pin type
 var localized string MapPin_Header;
@@ -50,6 +51,11 @@ var localized string MapPin_Header;
 // Localized tooltip for this pin type
 var localized string MapPin_Tooltip;
 
+
+var float ZoomScale;
+var float TargetAlpha;
+var float DesiredAlpha;
+var bool bOverrideZoomHide;
 // 3D UI
 var UIStrategyMapItem3D MapItem3D;
 var UIStrategyMapItemAnim3D AnimMapItem3D;
@@ -293,6 +299,7 @@ function GenerateTooltip( string tooltipHTML )
 	if( tooltipHTML != "" )
 	{
 		TooltipID = Movie.Pres.m_kTooltipMgr.AddNewTooltipTextBox(tooltipHTML, 15, 0, string(MCPath), , false, , true, , , , , , 0.0 /*no delay*/);
+		m_iTooltipDataIndex = TooltipID;
 		Movie.Pres.m_kTooltipMgr.TextTooltip.SetUsePartialPath(TooltipID, true);
 		bHasTooltip = true;
 	}
@@ -362,6 +369,27 @@ function InitStatic3DUI(const out XComGameState_GeoscapeEntity GeoscapeEntity)
 	}
 }
 
+function UpdateStatic3DUI()
+{
+	local StaticMesh UIMesh;
+	local vector ZeroVec;
+	local XComGameState_GeoscapeEntity GeoscapeEntity;
+
+	GeoscapeEntity = XComGameState_GeoscapeEntity(`XCOMHISTORY.GetGameStateForObjectID(GeoscapeEntityRef.ObjectID));
+
+	if (MapItem3D != none)
+	{	
+		UIMesh = GeoscapeEntity.GetStaticMesh();
+		if (UIMesh != MapItem3D.GetStaticMesh())
+		{
+			MapItem3D.SetStaticMesh(UIMesh);
+			MapItem3D.SetMeshTranslation(ZeroVec);
+			MapItem3D.SetMeshRotation(GeoscapeEntity.GetMeshRotator());
+		}
+
+		MapItem3D.SetScale3D(GeoscapeEntity.GetMeshScale() * ZoomScale);
+	}
+}
 function InitAnimated3DUI(const out XComGameState_GeoscapeEntity GeoscapeEntity)
 {
 	local SkeletalMesh UISkelMesh;
@@ -406,6 +434,30 @@ function UpdateFlyoverText()
 
 // Virtual initializer
 function OnInitFromGeoscapeEntity(const out XComGameState_GeoscapeEntity GeoscapeEntity);
+// Exactly the same as "ShouldDrawUI" minus a check that gets called too often.
+protected function bool MoreEfficientShouldDrawUI(out Vector2D screenPos)
+{
+	local vector WrapOffset;
+
+	if(GetStrategyMap().m_eUIState == eSMS_Flight)
+	{
+		return false;
+	}
+
+	// to take care of world coordinate wrapping, check onscreen status with offsets around the world
+	if(class'UIUtilities'.static.IsOnScreen(CachedWorldLocation, screenPos))
+	{
+		return true;
+	}
+	else
+	{
+		WrapOffset.X = `EARTH.GetWidth();
+		return (class'UIUtilities'.static.IsOnScreen(CachedWorldLocation + WrapOffset, screenPos)
+				|| class'UIUtilities'.static.IsOnScreen(CachedWorldLocation - WrapOffset, screenPos));
+	}
+}
+
+// Note: Should "ShouldDrawUI" be changed, please update "MoreEfficientShouldDrawUI" as well.
 
 function bool ShouldDrawUI(out Vector2D screenPos)
 {
@@ -461,15 +513,18 @@ function UpdateVisuals()
 	local Vector2D TmpVector;
 	local XComStrategyMap XComMap; 	
 	local Rotator NewRotation;
+	local bool ShouldGeoscapeEntityBeDrawn;
 
 	History = `XCOMHISTORY;
 	GeoscapeEntity = XComGameState_GeoscapeEntity(History.GetGameStateForObjectID(GeoscapeEntityRef.ObjectID));
 
+	ShouldGeoscapeEntityBeDrawn = GeoscapeEntity.ShouldBeVisible();
 	Cached2DWorldLocation = GeoscapeEntity.Get2DLocation();
 	CachedWorldLocation = `EARTH.ConvertEarthToWorld(Cached2DWorldLocation);
 	CachedWorldLocation.Z = GeoscapeEntity.GetLocation().Z; //used by airship map entities for flying animations, needs to be updated every tick
 
-	if( ShouldDrawUI(TmpVector) )
+//	if( ShouldDrawUI(TmpVector) )
+	if( ShouldGeoscapeEntityBeDrawn && MoreEfficientShouldDrawUI(TmpVector) )
 	{	
 		SetNormalizedPosition(TmpVector);
 		UpdateFromGeoscapeEntity(GeoscapeEntity);
@@ -482,11 +537,13 @@ function UpdateVisuals()
 
 		if( GeoscapeEntity.ShowFadedPin() )
 		{
-			SetAlpha(50);
+			//SetAlpha(50);
+			DesiredAlpha = 0.5;
 		}
 		else
 		{
-			SetAlpha(100);
+			//SetAlpha(100);
+			DesiredAlpha = 1.0;
 		}
 
 		
@@ -497,7 +554,8 @@ function UpdateVisuals()
 		Hide();		
 	}
 
-	if (ShouldDrawMesh())
+//	if (ShouldDrawMesh())
+	if (ShouldGeoscapeEntityBeDrawn)
 	{
 		SetHidden(false);
 
@@ -553,14 +611,19 @@ function UpdateFromGeoscapeEntity(const out XComGameState_GeoscapeEntity Geoscap
 		// update the flyover text for this pin
 		UpdateFlyoverText();
 
+		OnGeoscapeEntityUpdated();
 		HistoryIndexOnLastUpdate = History.GetCurrentHistoryIndex();
 	}
 }
 
+function OnGeoscapeEntityUpdated()
+{
+}
 function FadeOut()
 {
 	// TODO - eventually make this fade out gradually
-	SetAlpha(50);
+	//SetAlpha(50);
+	DesiredAlpha = 0.5;
 	Show();
 
 	// set the mission pin UI item to be cleaned up in the near future
@@ -594,6 +657,63 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 		break;
 	}
 }
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	local XComGameStateHistory History;
+	local XComGameState_GeoscapeEntity GeoscapeEntity;
+
+	if (GetStrategyMap().m_eUIState == eSMS_Flight)
+	{
+		return true;
+	}
+
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return true;
+	}
+
+	switch(cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		History = `XCOMHISTORY;
+		GeoscapeEntity = XComGameState_GeoscapeEntity(History.GetGameStateForObjectID(GeoscapeEntityRef.ObjectID));
+		GeoscapeEntity.AttemptSelectionCheckInterruption();
+		return true;		
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function bool IsSelectable()
+{
+	return false;
+}
+simulated function SetZoomLevel(float ZoomLevel)
+{
+	ZoomScale = 0.623 + ((ZoomLevel - 0.32) / (1.274 - 0.32)) * (1.7124 - 0.623);
+	if (!bOverrideZoomHide)
+	{
+		if (ZoomLevel > 1.06)
+		{
+			TargetAlpha = 0.0;
+		}
+		else
+		{
+			TargetAlpha = DesiredAlpha;
+		}
+	}
+	else
+	{
+		TargetAlpha = DesiredAlpha;
+	}
+}
+
+simulated function Update(float DeltaTime)
+{
+	SetAlpha(Lerp(Alpha / 100.0, TargetAlpha, 1.0 - 0.0016 ** DeltaTime));
+}
+
 simulated function UIStrategyMap GetStrategyMap()
 {
 	return UIStrategyMap(`SCREENSTACK.GetScreen(class'UIStrategyMap'));
@@ -612,12 +732,14 @@ simulated function OnMouseIn()
 	{
 		`SOUNDMGR.PlaySoundEvent("Play_Mouseover"); //Possibly update with custom sound from auto 
 	}
+	bOverrideZoomHide = true;
 }
 
 // Clear mouse hover special behavior
 simulated function OnMouseOut()
 {
 	MC.FunctionVoid("hideShadow");
+	bOverrideZoomHide = false;
 }
 
 
@@ -636,7 +758,10 @@ DefaultProperties
 	m_fAlpha = 100; 
 	m_fScale = 0.05;
 	m_fPercent = 1.0; 
+	m_iTooltipDataIndex=-1;
 
 	HistoryIndexOnLastUpdate=-1
 	LibID = "MapItemGeneric";
+
+	ZoomScale = 1.0;
 }

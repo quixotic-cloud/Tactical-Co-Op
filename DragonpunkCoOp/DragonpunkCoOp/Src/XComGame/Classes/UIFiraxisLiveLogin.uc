@@ -122,8 +122,11 @@ simulated function InitScreen( XComPlayerController InitController, UIMovie Init
 
 	super.InitScreen(InitController, InitMovie, InitName);
 
-	bStoredMouseIsActive = Movie.IsMouseActive();
-	Movie.ActivateMouse();
+	if(`ISCONTROLLERACTIVE == false)
+	{
+		bStoredMouseIsActive = Movie.IsMouseActive();
+		Movie.ActivateMouse();
+	}
 
 	m_Generic4Label = m_InitNewUserLabel;
 	m_UsernameLabel = m_InitUserNameLabel; 
@@ -133,21 +136,21 @@ simulated function InitScreen( XComPlayerController InitController, UIMovie Init
 
 	m_kAllContainer = Spawn(class'UIPanel', self).InitPanel('loginScreenMC');
 
-	m_Generic4Button = Spawn(class'UIButton', m_kAllContainer).InitButton('NewUserButton', m_Generic4Label, OnGeneric4ButtonPress, eUIButtonStyle_HOTLINK_BUTTON);
+	m_Generic4Button = Spawn(class'UIButton', m_kAllContainer).InitButton('NewUserButton', m_Generic4Label, OnGeneric4ButtonPress, eUIButtonStyle_None);
 	m_Generic4Button.SetPosition(325, 370);
 	m_Generic4Button.OnSizeRealized = OnCreateAccountButtonSizeRealized;
 	
-	m_Generic2Button = Spawn(class'UIButton', m_kAllContainer).InitButton('LoginButton', m_Generic2Label, OnGeneric2ButtonPress, eUIButtonStyle_HOTLINK_BUTTON);
+	m_Generic2Button = Spawn(class'UIButton', m_kAllContainer).InitButton('LoginButton', m_Generic2Label, OnGeneric2ButtonPress, eUIButtonStyle_None);
 	m_Generic2Button.SetPosition(500, 370);
-	m_Generic1Button = Spawn(class'UIButton', m_kAllContainer).InitButton('CancelButton', m_Generic1Label, OnGeneric1ButtonPress, eUIButtonStyle_HOTLINK_BUTTON);
+	m_Generic1Button = Spawn(class'UIButton', m_kAllContainer).InitButton('CancelButton', m_Generic1Label, OnGeneric1ButtonPress, eUIButtonStyle_None);
 	//m_eulaAcceptButton = Spawn(class'UIButton', self);
 	m_UsernameButton = Spawn(class'UIButton', m_kAllContainer);
 	m_UsernameButton.ResizeToText = false;
-	m_UsernameButton.InitButton('loginTextButton', class'UIUtilities_Text'.static.AlignLeft(m_UsernameLabel), OpenTextBoxInput);
+	m_UsernameButton.InitButton('loginTextButton', class'UIUtilities_Text'.static.AlignLeft(m_UsernameLabel), OpenTextBoxInput, eUIButtonStyle_None);
 
 	m_PasswordButton = Spawn(class'UIButton', m_kAllContainer);
 	m_PasswordButton.ResizeToText = false;
-	m_PasswordButton.InitButton('passwordTextButton', class'UIUtilities_Text'.static.AlignLeft(m_PasswordLabel), OpenTextBoxInput);
+	m_PasswordButton.InitButton('passwordTextButton', class'UIUtilities_Text'.static.AlignLeft(m_PasswordLabel), OpenTextBoxInput, eUIButtonStyle_None);
 
 	/*m_eulaAcceptButton.InitButton( , m_InitOKLabel, AgreeToEULA);
 	m_eulaAcceptButton.SetPosition(850, 920);
@@ -156,7 +159,19 @@ simulated function InitScreen( XComPlayerController InitController, UIMovie Init
 	MC.FunctionString("UpdateLoginTitle", m_2KTitle);
 
 	NavHelp = Movie.Pres.GetNavHelp();
-	//NavHelp.AddBackButton(CloseScreen);
+	NavHelp.AddBackButton(CloseScreen);
+	NavHelp.AddLeftHelp(class'UIArmory_Promotion'.default.m_strSelect, class'UIUtilities_Input'.const.ICON_A_X);
+
+	if(!Movie.IsMouseActive())
+	{
+		Navigator.Clear();
+		Navigator.AddControl(m_UsernameButton);
+		Navigator.AddControl(m_PasswordButton);
+		Navigator.AddControl(m_Generic1Button);
+		Navigator.AddControl(m_Generic4Button);
+		Navigator.AddControl(m_Generic2Button);
+		Navigator.SetSelected(m_Generic2Button);
+	}
 }
 
 simulated function OnCreateAccountButtonSizeRealized()
@@ -511,6 +526,15 @@ state CreateUserEmail
 
 		m_UsernameButton.Show();
 		m_PasswordButton.Hide();
+
+		if(!Movie.IsMouseActive())
+		{
+			Navigator.Clear();
+			Navigator.AddControl(m_UsernameButton);
+			Navigator.AddControl(m_Generic1Button);
+			Navigator.AddControl(m_Generic2Button);
+			Navigator.SetSelected(m_Generic2Button);
+		}
 	}
 
 	function OnGeneric2ButtonPress(UIButton button)
@@ -549,6 +573,13 @@ state ShowEmailNotify
 		m_Generic1Button.Hide();
 		m_Generic2Button.Show();
 		m_Generic4Button.Hide();
+
+		if(!Movie.IsMouseActive())
+		{
+			Navigator.Clear();
+			Navigator.AddControl(m_Generic2Button);
+			Navigator.SetSelected(m_Generic2Button);
+		}
 	}
 
 	function OnGeneric2ButtonPress(UIButton button)
@@ -568,6 +599,11 @@ state ReadEULA
 	{
 		local int i;
 
+		if(!Movie.IsMouseActive())
+		{
+			Navigator.Clear();
+		}
+
 		m_eulaButtons.Remove(0, m_eulaButtons.Length);
 		for( i = 0; i < m_EULAs.Length; ++i )
 		{
@@ -576,7 +612,6 @@ state ReadEULA
 			m_eulaButtons[i].InitButton('', class'UIUtilities_Text'.static.AlignLeft(m_ReadLabel$":"@m_EULAs[i].Title), ReadEulas);
 			m_eulaButtons[i].SetPosition(320, 240 + (30 * i));
 			m_eulaButtons[i].SetWidth( 510 );
-			
 		}
 
 		//flash set eula layout
@@ -607,6 +642,22 @@ state ReadEULA
 		{
 			m_eulaButtons[i].Show();
 		}
+
+		if(!Movie.IsMouseActive())
+		{
+			Navigator.Clear();
+			
+			for(i = 0; i < m_eulaButtons.Length; i++)
+			{
+				Navigator.AddControl(m_eulaButtons[i]);
+			}
+			
+			Navigator.AddControl(m_Generic1Button);
+			Navigator.AddControl(m_Generic2Button);
+
+			Navigator.SetSelected(m_Generic2Button);
+		}
+		NavHelp.AddCenterHelp(m_InitOKLabel, class'UIUtilities_Input'.const.ICON_A_X, AgreeToEULA);
 
 		MC.FunctionVoid("ShowMy2kPanel");
 	}
@@ -679,11 +730,28 @@ state ReadEULA
 
 	function ResetScreen()
 	{
+		local int i;
+
 		global.ResetScreen();
 
 		m_Generic4Button.Hide();
 		m_PasswordButton.Hide();
 		m_UsernameButton.Hide();
+
+		if(!Movie.IsMouseActive())
+		{
+			Navigator.Clear();
+			
+			for(i = 0; i < m_eulaButtons.Length; i++)
+			{
+				Navigator.AddControl(m_eulaButtons[i]);
+			}
+			
+			Navigator.AddControl(m_Generic1Button);
+			Navigator.AddControl(m_Generic2Button);
+
+			Navigator.SetSelected(m_Generic2Button);
+		}
 	}
 
 Begin:
@@ -708,6 +776,15 @@ state LinkingAccount_NewUser
 	{
 		m_Generic4Button.Hide();
 		m_PasswordButton.Hide();
+
+		if(!Movie.IsMouseActive())
+		{
+			Navigator.Clear();
+			Navigator.AddControl(m_UsernameButton);
+			Navigator.AddControl(m_Generic1Button);
+			Navigator.AddControl(m_Generic2Button);
+			Navigator.SetSelected(m_Generic2Button);
+		}
 	}
 
 	function ResetScreen()
@@ -887,6 +964,12 @@ state ConnectionStatus
 		m_Generic4Button.Hide();
 		m_PasswordButton.Hide();
 		m_UsernameButton.Hide();
+		if(!Movie.IsMouseActive())
+		{
+			Navigator.Clear();
+			Navigator.AddControl(m_Generic2Button);
+			Navigator.SetSelected(m_Generic2Button);
+		}
 	}
 
 	function OnGeneric2ButtonPress(UIButton button)
@@ -925,6 +1008,12 @@ state ConnectionFailure
 		m_Generic4Button.Hide();
 		m_PasswordButton.Hide();
 		m_UsernameButton.Hide();
+		if(!Movie.IsMouseActive())
+		{
+			Navigator.Clear();
+			Navigator.AddControl(m_Generic1Button);
+			Navigator.SetSelected(m_Generic1Button);
+		}
 	}
 
 	function OnGeneric1ButtonPress(UIButton button)
@@ -1126,7 +1215,13 @@ function ReadEulas(UIButton button)
 		}
 	}
 
-	NavHelp.AddCenterHelp(m_InitOKLabel, , AgreeToEULA);
+	if(!Movie.IsMouseActive())
+	{
+		Navigator.Clear();
+		Navigator.AddControl(m_eulaText);
+	}
+
+	NavHelp.AddCenterHelp(m_InitOKLabel, class'UIUtilities_Input'.const.ICON_A_X, AgreeToEULA);
 }
 
 function OnGeneric1ButtonPress(UIButton button)
@@ -1229,10 +1324,28 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 `endif
 		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
-		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
-		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
-		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:	
+		
 			OnGeneric1ButtonPress(m_Generic1Button);
+			break;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+			if(m_eulaText.bIsVisible)
+			{
+				AgreeToEULA();
+				break;
+			}
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN:
+			if(m_eulaText.bIsVisible)
+			{
+				m_eulaText.scrollbar.OnMouseScrollEvent(-1);
+			}
+			bHandled = false;
+			break;
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP:
+			if(m_eulaText.bIsVisible)
+			{
+				m_eulaText.scrollbar.OnMouseScrollEvent(1);
+			}
+			bHandled = false;
 			break;
 		default:
 			bHandled = false;

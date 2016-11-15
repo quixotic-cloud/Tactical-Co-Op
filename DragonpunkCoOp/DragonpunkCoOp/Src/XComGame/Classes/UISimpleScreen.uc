@@ -194,7 +194,7 @@ simulated function UIText AddUncenteredTitle(TRect rPos, String strText, EUIStat
 	return TextWidget;
 }
 
-simulated function UIText UpdateTitle(name InitName, String strText, EUIState ColorState, int FontSize)
+simulated function UIText UpdateTitle(name InitName, String strText, EUIState ColorState, int FontSize, optional bool bUncentered = false)
 {
 	local UIText TextWidget;
 
@@ -203,7 +203,11 @@ simulated function UIText UpdateTitle(name InitName, String strText, EUIState Co
 	if( TextWidget != none )
 	{
 		TextWidget.SetText(class'UIUtilities_Text'.static.GetColoredText(strText, ColorState, FontSize));
-		TextWidget.SetHtmlText(class'UIUtilities_Text'.static.AlignCenter(TextWidget.Text));
+
+		if(!bUncentered)
+		{
+			TextWidget.SetHtmlText(class'UIUtilities_Text'.static.AlignCenter(TextWidget.Text));
+		}
 	}
 
 	return TextWidget;

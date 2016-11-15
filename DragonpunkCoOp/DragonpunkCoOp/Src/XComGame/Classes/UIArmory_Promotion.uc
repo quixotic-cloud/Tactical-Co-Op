@@ -26,10 +26,16 @@ var localized string m_strAWCUnlockDialogText;
 var localized string m_strAbilityLockedTitle;
 var localized string m_strAbilityLockedDescription;
 
+var localized string m_strInfo;
+var localized string m_strSelect;
+
+var int SelectedAbilityIndex;
+
 var UIList  List;
 
 var bool bShownClassPopup, bShownCorporalPopup, bShownAWCPopup; // DEPRECATED bsteiner 3/24/2016 
 
+var protected int previousSelectedIndexOnFocusLost;
 
 simulated function InitPromotion(StateObjectReference UnitRef, optional bool bInstantTransition)
 {
@@ -51,6 +57,7 @@ simulated function InitPromotion(StateObjectReference UnitRef, optional bool bIn
 	// Don't show nav help during tutorial, or during the After Action sequence.
 	bUseNavHelp = class'XComGameState_HeadquartersXCom'.static.IsObjectiveCompleted('T0_M2_WelcomeToArmory') || Movie.Pres.ScreenStack.IsInStack(class'UIAfterAction');
 
+	UnitReference = UnitRef;
 	super.InitArmory(UnitRef,,,,,, bInstantTransition);
 
 	List = Spawn(class'UIList', self).InitList('promoteList');
@@ -59,27 +66,155 @@ simulated function InitPromotion(StateObjectReference UnitRef, optional bool bIn
 	List.bAutosizeItems = false;
 
 	PopulateData();
+	List.Navigator.LoopSelection = false;
+
+	Navigator.Clear();
+	Navigator.LoopSelection = false;
+	if (ClassRowItem != None) 
+	{
+		Navigator.AddControl(ClassRowItem);
+	}
+
+	Navigator.AddControl(List);
+	if (List.SelectedIndex < 0)
+	{
+		Navigator.SetSelected(ClassRowItem);
+	}
+	else
+	{
+		Navigator.SetSelected(List);
+	}
 
 	MC.FunctionVoid("animateIn");
 }
 
+simulated function OnInit()
+{
+	super.OnInit();
+
+	SetTimer(0.1334, false, 'UpdateClassRowSelection');
+}
+
+simulated function UpdateClassRowSelection()
+{
+	if (List.SelectedIndex < 0)
+	{
+		ClassRowItem.SetSelectedAbility(1);
+	}
+}
 simulated function UpdateNavHelp()
 {
+	//<workshop> SCI 2016/4/12
+	//INS:
+	local int i;
+	local string PrevKey, NextKey;
+	local XGParamTag LocTag;
+	if(!bIsFocused)
+	{
+		return;
+	}
+
+	NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
+
+	NavHelp.ClearButtonHelp();
+	//</workshop>
+
 	if(UIAfterAction(Movie.Stack.GetScreen(class'UIAfterAction')) != none)
 	{
-		`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
-		`HQPRES.m_kAvengerHUD.NavHelp.AddContinueButton(OnCancel);
+		//<workshop> SCI 2016/3/1
+		//WAS:
+		//`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
+		//`HQPRES.m_kAvengerHUD.NavHelp.AddContinueButton(OnCancel);
+		NavHelp.AddBackButton(OnCancel);
+		if (!UIArmory_PromotionItem(List.GetSelectedItem()).bIsDisabled)
+		{
+			NavHelp.AddLeftHelp(m_strInfo, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LSCLICK_L3);
+		}
+
+		if (!XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitReference.ObjectID)).ShowPromoteIcon())
+		{
+			NavHelp.AddContinueButton(OnCancel);
+		}
+		else if (UIArmory_PromotionItem(List.GetSelectedItem()).bEligibleForPromotion)
+		{
+			NavHelp.AddLeftHelp(m_strSelect, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+		}
+
+		if( `ISCONTROLLERACTIVE )
+		{
+			if (IsAllowedToCycleSoldiers() && class'UIUtilities_Strategy'.static.HasSoldiersToCycleThrough(UnitReference, CanCycleTo))
+			{
+				NavHelp.AddLeftHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%LB %RB" @ m_strTabNavHelp));
+			}
+
+			NavHelp.AddLeftHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%RS" @ m_strRotateNavHelp));
+		}
 	}
 	else
 	{
-		super.UpdateNavHelp();
+		//<workshop> SCI 2016/4/12
+		//WAS:
+		//super.UpdateNavHelp();
+		NavHelp.AddBackButton(OnCancel);
+		
+		if (XComHQPresentationLayer(Movie.Pres) != none)
+		{
+			LocTag = XGParamTag(`XEXPANDCONTEXT.FindTag("XGParam"));
+			LocTag.StrValue0 = Movie.Pres.m_kKeybindingData.GetKeyStringForAction(PC.PlayerInput, eTBC_PrevUnit);
+			PrevKey = `XEXPAND.ExpandString(PrevSoldierKey);
+			LocTag.StrValue0 = Movie.Pres.m_kKeybindingData.GetKeyStringForAction(PC.PlayerInput, eTBC_NextUnit);
+			NextKey = `XEXPAND.ExpandString(NextSoldierKey);
+
+			if (class'XComGameState_HeadquartersXCom'.static.GetObjectiveStatus('T0_M7_WelcomeToGeoscape') != eObjectiveState_InProgress &&
+				RemoveMenuEvent == '' && NavigationBackEvent == '' && !`ScreenStack.IsInStack(class'UISquadSelect'))
+			{
+				NavHelp.AddGeoscapeButton();
+			}
+
+			if (Movie.IsMouseActive() && IsAllowedToCycleSoldiers() && class'UIUtilities_Strategy'.static.HasSoldiersToCycleThrough(UnitReference, CanCycleTo))
+			{
+				NavHelp.SetButtonType("XComButtonIconPC");
+				i = eButtonIconPC_Prev_Soldier;
+				NavHelp.AddCenterHelp( string(i), "", PrevSoldier, false, PrevKey);
+				i = eButtonIconPC_Next_Soldier; 
+				NavHelp.AddCenterHelp( string(i), "", NextSoldier, false, NextKey);
+				NavHelp.SetButtonType("");
+			}
+		}
+
+	        if (UIArmory_PromotionItem(List.GetSelectedItem()).bEligibleForPromotion)
+		{
+			NavHelp.AddSelectNavHelp();
+		}
+
+		if (!UIArmory_PromotionItem(List.GetSelectedItem()).bIsDisabled)
+		{
+			NavHelp.AddLeftHelp(m_strInfo, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LSCLICK_L3);
+		}
+
+		if( `ISCONTROLLERACTIVE )
+		{
+			if (IsAllowedToCycleSoldiers() && class'UIUtilities_Strategy'.static.HasSoldiersToCycleThrough(UnitReference, CanCycleTo))
+			{
+				NavHelp.AddLeftHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%LB %RB" @ m_strTabNavHelp));
+			}
+
+			NavHelp.AddLeftHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%RS" @ m_strRotateNavHelp));
+		}
+
+		NavHelp.Show();
+		//</workshop>
 	}
 }
 
 simulated function OnLoseFocus()
 {
 	super.OnLoseFocus();
-	List.SetSelectedIndex(-1);
+	//<workshop> FIX_FOR_PROMOTION_LOST_FOCUS_ISSUE kmartinez 2015-10-28
+	// only set our variable if we're not trying to set a default value.
+	if( List.SelectedIndex != -1)
+		previousSelectedIndexOnFocusLost = List.SelectedIndex;
+	//List.SetSelectedIndex(-1);
 	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
 }
 
@@ -144,7 +279,11 @@ simulated function PopulateData()
 	// Check to see if Unit needs to show a new class popup.
 	if(Unit.bNeedsNewClassPopup)
 	{
+		AwardRankAbilities(ClassTemplate, 0);
+
 		`HQPRES.UIClassEarned(Unit.GetReference());
+
+		Unit = GetUnit(); // we've updated the UnitState, update the Unit to reflect the latest changes
 	}
 	
 	// Check for AWC Ability popup
@@ -156,6 +295,8 @@ simulated function PopulateData()
 		{
 			ShowAWCDialog(AWCAbilityNames);
 		}
+
+		Unit = GetUnit();  // we've updated the UnitState, update the Unit to reflect the latest changes
 	}
 
 	previewIndex = -1;
@@ -263,6 +404,16 @@ simulated function PopulateData()
 
 	class'UIUtilities_Strategy'.static.PopulateAbilitySummary(self, Unit);
 	PreviewRow(List, previewIndex);
+	if (previewIndex < 0)
+	{
+		Navigator.SetSelected(ClassRowItem);
+		ClassRowItem.OnReceiveFocus();
+	}
+	else
+	{
+		Navigator.SetSelected(List);
+		List.SetSelectedIndex(previewIndex);
+	}
 }
 
 simulated function OnClassRowMouseEvent(UIPanel Panel, int Cmd)
@@ -417,6 +568,15 @@ simulated function PreviewRow(UIList ContainerList, int ItemIndex)
 	}
 
 	MC.EndOp();
+	if (Rank == 0)
+	{
+		ClassRowItem.SetSelectedAbility(1);
+	}
+	else
+	{
+		UIArmory_PromotionItem(List.GetItem(ItemIndex)).SetSelectedAbility(SelectedAbilityIndex);
+	}
+	UpdateNavHelp();
 }
 
 simulated function HideRowPreview()
@@ -454,6 +614,7 @@ simulated function ConfirmAbilitySelection(int Rank, int Branch)
 	LocTag.StrValue0 = AbilityTemplate.LocFriendlyName;
 	DialogData.strText = `XEXPAND.ExpandString(m_strConfirmAbilityText);
 	Movie.Pres.UIRaiseDialog(DialogData);
+	UpdateNavHelp();
 }
 
 simulated function ComfirmAbilityCallback(EUIAction Action)
@@ -486,8 +647,12 @@ simulated function ComfirmAbilityCallback(EUIAction Action)
 
 		Movie.Pres.PlayUISound(eSUISound_SoldierPromotion);
 	}
-	else
+	else 	// if we got here it means we were going to upgrade an ability, but then we decided to cancel
+	{
 		Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
+		List.SetSelectedIndex(previousSelectedIndexOnFocusLost, true);
+		UIArmory_PromotionItem(List.GetSelectedItem()).SetSelectedAbility(SelectedAbilityIndex);
+	}
 }
 
 simulated function bool OnUnrealCommand(int cmd, int arg)
@@ -502,6 +667,11 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	// Only pay attention to presses or repeats; ignoring other input types
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
+	if (List.GetSelectedItem().OnUnrealCommand(cmd, arg))
+	{
+		UpdateNavHelp();
+		return true;
+	}
 
 	bHandled = true;
 
@@ -544,7 +714,9 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
 		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-			if( UIAfterAction(Movie.Stack.GetScreen(class'UIAfterAction')) != none )
+			//if( UIAfterAction(Movie.Stack.GetScreen(class'UIAfterAction')) != none )
+			if (UIAfterAction(Movie.Stack.GetScreen(class'UIAfterAction')) != none &&
+				!XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitReference.ObjectID)).ShowPromoteIcon())
 				OnCancel();
 			break;
 		default:
@@ -552,10 +724,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 			break;
 	}
 
-	if (List.Navigator.OnUnrealCommand(cmd, arg))
-	{
-		return true;
-	}
+	//if (List.Navigator.OnUnrealCommand(cmd, arg))
+	//{
+	//	return true;
+	//}
 	
 	return bHandled || super.OnUnrealCommand(cmd, arg);
 }
@@ -582,7 +754,18 @@ simulated function OnReceiveFocus()
 		UIArmory_PromotionItem(List.GetItem(i)).RealizePromoteState();
 	}
 
-	Navigator.SetSelected(List);
+	if (previousSelectedIndexOnFocusLost >= 0)
+	{
+		Navigator.SetSelected(List);
+		List.SetSelectedIndex(previousSelectedIndexOnFocusLost);
+		UIArmory_PromotionItem(List.GetSelectedItem()).SetSelectedAbility(SelectedAbilityIndex);
+	}
+	else
+	{
+		Navigator.SetSelected(ClassRowItem);
+		ClassRowItem.SetSelectedAbility(1);
+	}
+	UpdateNavHelp();
 }
 
 simulated function string GetPromotionBlueprintTag(StateObjectReference UnitRef)
@@ -669,4 +852,6 @@ defaultproperties
 	bAutoSelectFirstNavigable = false;
 	DisplayTag = "UIBlueprint_Promotion";
 	CameraTag = "UIBlueprint_Promotion";
+	previousSelectedIndexOnFocusLost = -1;
+	SelectedAbilityIndex = 1;
 }

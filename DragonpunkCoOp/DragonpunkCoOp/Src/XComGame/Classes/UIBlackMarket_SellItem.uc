@@ -13,6 +13,8 @@ var UIBGBox BG;
 
 var UIButton Add;
 var UIButton Remove;
+var UIPanel  PlusIcon;
+var UIPanel  MinusIcon;
 
 var int NumSelling;
 var StateObjectReference ItemRef;
@@ -24,12 +26,15 @@ simulated function InitListItem(BlackMarketItemPrice BuyPrice)
 {
 	InitPanel();
 
-	Navigator.HorizontalNavigation = true;
+	if( `ISCONTROLLERACTIVE == false )
+	{
+		Navigator.HorizontalNavigation = true;
 
-	BG = Spawn(class'UIBGBox', self);
-	BG.bIsNavigable = false; 
-	BG.InitBG('theButton', 0, 0, 695, 40);
-	BG.ProcessMouseEvents(OnChildMouseEvent);
+		BG = Spawn(class'UIBGBox', self);
+		BG.bIsNavigable = false; 
+		BG.InitBG('theButton', 0, 0, 695, 40);
+		BG.ProcessMouseEvents(OnChildMouseEvent);
+	}
 
 	Remove = Spawn(class'UIButton', self);
 	Remove.bIsNavigable = false;
@@ -40,6 +45,24 @@ simulated function InitListItem(BlackMarketItemPrice BuyPrice)
 	Add.bIsNavigable = false;
 	Add.InitButton('InventoryAddButton');
 	Add.ProcessMouseEvents(OnButtonMouseEvent);
+
+	if(`ISCONTROLLERACTIVE)
+	{
+		Add.Hide();
+		Remove.Hide();
+
+		PlusIcon = Spawn(class'UIPanel', self);
+		PlusIcon.bIsNavigable = false;
+		PlusIcon.InitPanel('plusMC');
+
+		MinusIcon = Spawn(class'UIPanel', self);
+		MinusIcon.bIsNavigable = false;
+		MinusIcon.InitPanel('minusMC');
+
+		PlusIcon.Hide();
+		MinusIcon.Hide();
+	}
+	
 	PopulateData(BuyPrice);
 }
 
@@ -154,11 +177,17 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	switch( cmd )
 	{
 	case class'UIUtilities_Input'.const.FXS_ARROW_LEFT:
+	case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT:
+	case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
 		`SOUNDMGR.PlaySoundEvent("Generic_Mouse_Click");
 		ChangeQuantity(-1);
 		break;
 
 	case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
+	case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT:
+	case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
 		`SOUNDMGR.PlaySoundEvent("Generic_Mouse_Click");
 		ChangeQuantity(1);
 		break;

@@ -37,6 +37,7 @@ var UIPanel MainMenuBG;
 var UIPanel DebugMenuContainer;
 var UIPanel Logo; 
 var UIScrollingText TickerText;
+var UINavigationHelp NavHelp;
 var UIPanel TickerBG;
 var float DefaultMainMenuOffset;
 var float TickerHeight;
@@ -69,6 +70,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	`FXSLIVE.AddReceivedMOTDDelegate(OnReceivedMOTD);
 	`FXSLIVE.FirstClientInit();
 	CreateTicker();
+	Logo.DisableNavigation();
 }
 
 simulated function OnInit()
@@ -89,6 +91,10 @@ simulated function OnInit()
 	// Force any network connections at this point to close
 	NetworkMgr = `XCOMNETMANAGER;
 	NetworkMgr.Disconnect();
+
+	// The player's profile settings load asynchronously, and update the movie when loaded. This watch ensures we respond to that if it has not yet occurred.
+	WorldInfo.MyWatchVariableMgr.RegisterWatchVariable(Movie.Pres.Get2DMovie(), 'MouseActive', self, UpdateNavHelp); 
+	UpdateNavHelp();
 }
 //----------------------------------------------------------
 
@@ -301,6 +307,48 @@ simulated function OnMenuButtonClicked(UIButton button)
 		break;
 	}
 }
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	switch (cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
+		if (arg == class'UIUtilities_Input'.const.FXS_ACTION_PRESS)
+		{
+			Navigator.Prev();
+			return true;
+		}
+
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
+		if (arg == class'UIUtilities_Input'.const.FXS_ACTION_PRESS)
+		{
+			Navigator.Next();
+			return true;
+		}
+
+		break;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+//----------------------------------------------------------
+
+simulated function UpdateNavHelp()
+{
+	if(NavHelp != none)
+		NavHelp.ClearButtonHelp();
+
+	if(`ISCONTROLLERACTIVE)
+	{
+		if(NavHelp == none)
+			NavHelp = Spawn(class'UINavigationHelp', self).InitNavHelp();
+
+		NavHelp.bIsVerticalHelp = true;
+		NavHelp.AddSelectNavHelp();
+	}
+}
 
 //----------------------------------------------------------
 
@@ -310,27 +358,30 @@ simulated function InitDebugOptions()
 
 	if( DebugMenuContainer != none ) return; 
 
+	DebugMenuContainer.Remove();
+
 	DebugMenuContainer = Spawn(class'UIPanel', self).InitPanel('DebugMenuContainer');
 	DebugMenuContainer.bCascadeFocus = false;
 	DebugMenuContainer.Navigator.HorizontalNavigation = false;
 
 	Spawn(class'UIButton', DebugMenuContainer)
-		.InitButton('DynamicDebug', "DEBUG DYNAMIC UI", UIDebugButtonClicked)
+		.InitButton('DynamicDebug', "DEBUG DYNAMIC UI", UIDebugButtonClicked, eUIButtonStyle_NONE)
 		.SetOrigin(class'UIUtilities'.const.ANCHOR_TOP_RIGHT)
 		.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT)
 		.SetPosition(-10, 10); //Offset when anchored (absolute positioning when not)
 
 	Spawn(class'UIButton', DebugMenuContainer)
-		.InitButton('CharacterPool', "CHARACTER POOL", UIDebugButtonClicked)
+		.InitButton('CharacterPool', "CHARACTER POOL", UIDebugButtonClicked, eUIButtonStyle_NONE)
 		.SetOrigin(class'UIUtilities'.const.ANCHOR_TOP_RIGHT)
 		.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT)
 		.SetPosition(-10, 50); //Offset when anchored (absolute positioning when not)
 
 	Button = Spawn(class'UIButton', DebugMenuContainer);
-	Button.InitButton('IntervalChallenge', "CHALLENGE MODE", UIDebugButtonClicked);
+	Button.InitButton('IntervalChallenge', "CHALLENGE MODE", UIDebugButtonClicked, eUIButtonStyle_NONE);
 	Button.SetOrigin(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetPosition(-10, 90); //Offset when anchored (absolute positioning when not)
+	//Button.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 
 	`ONLINEEVENTMGR.RefreshLoginStatus();
 	if( `XENGINE.MCPManager == none || !(`ONLINEEVENTMGR.bHasLogin) )
@@ -339,25 +390,25 @@ simulated function InitDebugOptions()
 	}
 
 	Button = Spawn(class'UIButton', DebugMenuContainer);
-	Button.InitButton('FiraxisLiveLogin', "FIRAXIS LIVE", UIDebugButtonClicked);
+	Button.InitButton('FiraxisLiveLogin', "FIRAXIS LIVE", UIDebugButtonClicked, eUIButtonStyle_NONE);
 	Button.SetOrigin(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetPosition(-10, 130); //Offset when anchored (absolute positioning when not)
 
 	Button = Spawn(class'UIButton', DebugMenuContainer);
-	Button.InitButton('DirectedDemo', "DIRECTED DEMO", UIDebugButtonClicked);
+	Button.InitButton('DirectedDemo', "DIRECTED DEMO", UIDebugButtonClicked, eUIButtonStyle_NONE);
 	Button.SetOrigin(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetPosition(-10, 170); //Offset when anchored (absolute positioning when not)
 
 	Button = Spawn(class'UIButton', DebugMenuContainer);
-	Button.InitButton('MultiplayerMenus', "MULTIPLAYER MENUS", UIDebugButtonClicked);
+	Button.InitButton('MultiplayerMenus', "MULTIPLAYER MENUS", UIDebugButtonClicked, eUIButtonStyle_NONE);
 	Button.SetOrigin(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetPosition(-10, 210); //Offset when anchored (absolute positioning when not)
 
 	Button = Spawn(class'UIButton', DebugMenuContainer);
-	Button.InitButton('FinalShellMenu', m_sFinalShellDebug, UIDebugButtonClicked);
+	Button.InitButton('FinalShellMenu', m_sFinalShellDebug, UIDebugButtonClicked, eUIButtonStyle_NONE);
 	Button.SetOrigin(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
 	Button.SetPosition(-10, 250); //Offset when anchored (absolute positioning when not)	
@@ -414,8 +465,16 @@ simulated function OnReceiveFocus()
 		Movie.DeactivateMouse();
 
 	XComShellPresentationLayer(Movie.Pres).Get3DMovie().ShowDisplay('UIShellBlueprint');
+
+	if( DebugMenuContainer != none )
+	{
+		//Refresh the buttons.
+		InitDebugOptions();
+	}
 	//Use the panel version 
 	super(UIPanel).AnimateIn();
+
+	UpdateNavHelp();
 }
 
 
@@ -429,6 +488,7 @@ simulated function  CreateTicker()
 	TickerBG.Hide();
 	TickerBG.bAnimateOnInit = false;
 
+	TickerBG.DisableNavigation();
 	TickerText = Spawn(class'UIScrollingText', self).InitScrollingText();
 	TickerText.AnchorBottomLeft().SetY(-TickerHeight + 10);
 	TickerText.SetWidth(Movie.m_v2ScaledFullscreenDimension.X);

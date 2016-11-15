@@ -53,6 +53,7 @@ var bool m_bMismatchedLanguageLoadoutsSkipped;
 var bool m_bSeenMismatchLanguageDialog;
 // END taken from old UIMultiplayerLoadoutList -tsmith
 
+var bool m_bKeyboardOpen;
 var UINavigationHelp AnchoredNavHelp;
 var UINavigationHelp IntegratedNavHelp;
 var UIButton DeleteButton;
@@ -63,7 +64,16 @@ var UIButton ConfirmButton;
 // screen to spawn and transition to when the editable squad item is clicked. -tsmith
 var class<UIMPShell_SquadEditor> UISquadEditorClass;
 
+var UILargeButton LaunchButton;
+var localized string ConfirmMPAccountTitle;
+var localized string ConfirmMPAccountMessage;
 var int SelectedIndex;
+var transient XComGameState SquadToEdit; //m_kSquadLoadout gets stomped when we gain/lose focus - need to cache this here
+var localized string m_strLoadingSquadDataTitle;
+var localized string m_strLoadingSquadDataText;
+var localized string m_strCreatingNewSquadTitle;
+var localized string m_strCreatingNewLoadoutText;
+var bool bWaitingToCreateNewLoadout;
 
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
 {
@@ -73,7 +83,10 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	SquadList.InitList('MPSquadList');
 	SquadList.bStickyHighlight = false;
 	SquadList.OnItemClicked = SquadListItemClicked;
-	SquadList.OnSelectionChanged = SetSelected;
+	if(`ISCONTROLLERACTIVE)
+	{
+		SquadList.OnSelectionChanged = SetSelected;
+	}
 	SquadList.OnItemDoubleClicked = SquadListItemDoubleClicked;
 	SquadList.Navigator.LoopOnReceiveFocus = true;
 	SquadList.Navigator.LoopSelection = false;
@@ -81,8 +94,12 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	AnchoredNavHelp = m_kMPShellManager.NavHelp;
 	IntegratedNavHelp = Spawn(class'UINavigationHelp', self).InitNavHelp('integratedHelpBarMC');
+	IntegratedNavHelp.MC.FunctionNum("SetCenterHelpPadding", 100);
 
 	Movie.UpdateHighestDepthScreens();
+	
+	//clear out the input repeat timers to prevent menu navigation from selecting items before the menu is fully initialized
+	Movie.Pres.ClearInput();
 }
 
 simulated function OnInit()
@@ -94,12 +111,34 @@ simulated function OnInit()
 	CreateSquadList();
 	CreateSquadInfoPanel();
 	SelectFirstLoadout();
+	InitLaunchButton();
+	UpdateGamepadFocus();
+	m_bKeyboardOpen = false;
 }
 
+//A child class can override this if there is no 'launch' functionality
+//further use of 'LaunchButton' should always check to see if it exists
+simulated function InitLaunchButton()
+{
+	LaunchButton = Spawn(class'UILargeButton', self);
+	LaunchButton.bAnimateOnInit = true;
+	LaunchButton.InitLargeButton('ContinueButton',class'UIUtilities_Text'.static.InjectImage(
+	class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, -13) @ m_strConfirm);
+	
+	LaunchButton.AnchorBottomRight();
+	LaunchButton.SetVisible(false);
+	LaunchButton.ShowBG(true);
+}
+function EditSquadButtonCallback()
+{
+	//Override
+}
 simulated function UpdateNavHelp()
 {
 	AnchoredNavHelp.ClearButtonHelp();
 	AnchoredNavHelp.AddBackButton(BackButtonCallback);
+	if(!Movie.IsMouseActive())
+		return;
 
 	if(DeleteButton == none)
 	{
@@ -111,15 +150,14 @@ simulated function UpdateNavHelp()
 
 	if(CloneButton == none)
 	{
-		CloneButton = IntegratedNavHelp.AddCenterButton(m_strCloneSet, , CloneButtonCallback, m_kSquadLoadout == none);
+		CloneButton = IntegratedNavHelp.AddCenterButton(m_strCloneSet, , CloneButtonCallback, m_kSquadLoadout == none, , class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
 		CloneButton.OnClickedDelegate = CloneClickedButtonCallback;
-
 		Navigator.AddControl(CloneButton);
 	}
 
 	if(RenameButton == none)
 	{
-		RenameButton = IntegratedNavHelp.AddCenterButton(m_strRenameSet, , RenameButtonCallback, m_kSquadLoadout == none);
+		RenameButton = IntegratedNavHelp.AddCenterButton(m_strRenameSet, , RenameButtonCallback, m_kSquadLoadout == none, , class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
 		RenameButton.OnClickedDelegate = RenameClickedButtonCallback;
 		Navigator.AddControl(RenameButton);
 	}
@@ -134,8 +172,35 @@ simulated function UpdateNavHelp()
 	 UpdateNavHelpState();
 }
 
+//updates the navigation as 'help' instead of 'buttons'
+simulated function UpdateNavHelpInGamepadMode()
+{
+	IntegratedNavHelp.ClearButtonHelp();
+	if(m_kSquadLoadout != none)
+	{
+		//These are only visible when the list has a squad selected
+		IntegratedNavHelp.AddCenterHelp(m_strEditSquad, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+		IntegratedNavHelp.AddCenterHelp(m_strCloneSet, class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+		IntegratedNavHelp.AddCenterHelp(m_strDeleteSet, class'UIUtilities_Input'.const.ICON_RSCLICK_R3);		
+	}
+	else 
+	{
+		IntegratedNavHelp.AddCenterHelp(m_strCreateNewLoadout, class'UIUtilities_Input'.static.GetAdvanceButtonIcon()); //MP_SELECT_NAVHELP, BET, 2016-05-23
+	}
+
+	if (LaunchButton != None)
+	{
+		LaunchButton.SetVisible(m_kSquadLoadout != None && CanJoinGame());
+	}
+}
 simulated function UpdateNavHelpState()
 {
+	//<workshop> GAMEPAD_NAV_HELP - JTA 2015/11/15
+	if(!Movie.IsMouseActive())
+	{
+		UpdateNavHelpInGamepadMode();
+		return;
+	}
 	DeleteButton.SetDisabled(m_kSquadLoadout == none);
 	CloneButton.SetDisabled(m_kSquadLoadout == none);
 	RenameButton.SetDisabled(m_kSquadLoadout == none);
@@ -158,19 +223,54 @@ simulated function UpdateNavHelpState()
 
 function AddNewSquadButtonCallback()
 {
-	`log(self $ "::" $ GetFuncName(),, 'uixcom_mp');
+	//`log(self $ "::" $ GetFuncName(),, 'uixcom_mp');
 	OpenNameNewSquadInputInterface();
 }
 
+function CloseSquadCompleteProgressDialog()
+{
+	local XComPresentationLayerBase Presentation;
+	Presentation = XComPlayerController(class'UIInteraction'.static.GetLocalPlayer(0).Actor).Pres;
+	Presentation.UICloseProgressDialog();
+}
+
+function AddNewSquadCompleteCallback()
+{
+	CloseSquadCompleteProgressDialog();
+}
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
+	// Only pay attention to presses or repeats; ignoring other input types
+	// NOTE: Ensure repeats only occur with arrow keys
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
 
+	if (m_bKeyboardOpen)
+	{
+		return false;
+	}
 	switch( cmd )
 	{
 		case class'UIUtilities_Input'.const.FXS_KEY_DELETE:
 			DeleteButtonCallback();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_R3:
+			if(m_kSquadLoadout != none)
+				DeleteButtonCallback();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
+			if(m_kSquadLoadout != none)
+				CloneButtonCallback();
+			return true;
+		//case class'UIUtilities_Input'.const.FXS_BUTTON_R3:
+		//	if(m_kSquadLoadout != none)
+		//		RenameButtonCallback();
+		//	return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			NextButton();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+			SquadListItemClicked(SquadList, SquadList.SelectedIndex); //this function sorts out the 'on press' behavior' - JTA 2016/3/16
 			return true;
 	}
 
@@ -225,7 +325,7 @@ function RenameButtonCallback()
 function DeleteButtonCallback()
 {
 	`log(self $ "::" $ GetFuncName(),, 'uixcom_mp');
-	if(SelectedIndex >= 0)
+	if(SelectedIndex >= 0 && `ISCONTROLLERACTIVE)
 	{
 		m_kDeletingLoadout = XComGameState(UIMechaListItem(SquadList.GetItem(SelectedIndex)).metadataObject);
 	}
@@ -240,12 +340,21 @@ function DeleteButtonCallback()
 
 function NextButton()
 {
+	if(!Movie.IsMouseActive())
+		//'Next' Button functionality is handled in child classes - Removing functionality here to ensure there is no unexpected behavior
+		return;
 	if(m_kSquadLoadout != none)
 		CreateSquadEditor(m_kSquadLoadout);
 }
 
 function NextButtonCallback(UIButton Button)
 {
+	//button is disabled without gamepad, so we need to do the check here again
+	local int pointTotal;
+	pointTotal = UIMechaListItem(SquadList.GetItem(SelectedIndex)).metadataInt;
+	if(m_kMPShellManager.OnlineGame_GetMaxSquadCost() < 0 ||
+		pointTotal > m_kMPShellManager.OnlineGame_GetMaxSquadCost())
+		return;
 	if(m_kSquadLoadout != none)
 		CreateSquadEditor(m_kSquadLoadout);
 }
@@ -292,7 +401,29 @@ function CreateSquadInfoPanel()
 
 function CreateSquadEditor(XComGameState kSquad)
 {
+
+	AnchoredNavHelp.ClearButtonHelp();
 	UIMPShell_SquadEditor(`SCREENSTACK.Push(Spawn(UISquadEditorClass, Movie.Pres))).InitSquadEditor(kSquad);
+}
+simulated function CreateSquadEditor_HitchDialog()
+{
+	local TProgressDialogData kDialogData;
+	kDialogData.strTitle = m_strLoadingSquadDataTitle;
+	kDialogData.strDescription = m_strLoadingSquadDataText;
+	Movie.Pres.UIProgressDialog(kDialogData);
+
+	SetTimer(0.5f, false, nameof(CreateSquadEditor_PostHitchDialog));
+
+	//<bsg> TTP_5451_NONFUNCTIONAL_NAV_BUTTON_MP_LOAD_SQUAD_DATA jneal 06/27/16
+	//INS:
+	AnchoredNavHelp.ClearButtonHelp();
+	//</bsg>
+}
+
+simulated function CreateSquadEditor_PostHitchDialog()
+{
+	Movie.Pres.UICloseProgressDialog();
+	UIMPShell_SquadEditor(`SCREENSTACK.Push(Spawn(UISquadEditorClass, Movie.Pres))).InitSquadEditor(SquadToEdit);
 }
 
 function SquadListItemDoubleClicked(UIList listControl, int itemIndex)
@@ -319,23 +450,22 @@ function SquadListItemClicked(UIList listControl, int itemIndex)
 	}
 	else
 	{
+		//checkboxes are gone in the console version, so now we always edit the squad on press
+		if(!Movie.IsMouseActive())
+		{
+			EditSquadButtonCallback();
+			return;
+		}
+		
 		MechaListItem = UIMechaListItem(listControl.GetItem(itemIndex));
 		if(MechaListItem != none)
 			OnCheckboxClicked(MechaListItem.Checkbox);
-
-		`log(self $ "::" $ GetFuncName() @ "itemIndex=" $ itemIndex @ `ShowVar(UIMechaListItem(listControl.GetItem(itemIndex)).metadataObject),, 'uixcom_mp');
-		m_kSquadLoadout = XComGameState(UIMechaListItem(listControl.GetItem(itemIndex)).metadataObject);
 	}
 }
 
 function SetSelected(UIList listControl, int itemIndex)
 {
-	if(itemIndex < 0)
-	{
-		if(SelectedIndex < 0)
-			return;
-		itemIndex = SelectedIndex;
-	}
+	SetSelectedIndex(itemIndex);
 
 	`log(self $ "::" $ GetFuncName() @ "itemIndex=" $ itemIndex @ `ShowVar(UIMechaListItem(listControl.GetItem(itemIndex)).metadataObject),, 'uixcom_mp');
 	m_kSquadLoadout = XComGameState(UIMechaListItem(listControl.GetItem(itemIndex)).metadataObject);
@@ -356,8 +486,8 @@ function OpenNameNewSquadInputInterface()
 
 	MAX_CHARS = 50;
 
-	if(!WorldInfo.IsConsoleBuild())
-	{
+//	if(!WorldInfo.IsConsoleBuild() || `ISCONTROLLERACTIVE )
+// 	{
 		// on PC, we have a real keyboard, so use that instead
 		kData.fnCallbackAccepted = PCTextField_OnAccept_NameNewSquad;
 		kData.fnCallbackCancelled = PCTextField_OnCancel_NameNewSquad;
@@ -365,7 +495,7 @@ function OpenNameNewSquadInputInterface()
 		kData.iMaxChars = MAX_CHARS;
 		kData.strInputBoxText = m_strDefaultSquadName;
 		Movie.Pres.UIInputDialog(kData);
-	}
+/*	}
 	else
 	{
 		//`log("+++ Loading the VirtualKeyboard", ,'uixcom');
@@ -375,7 +505,8 @@ function OpenNameNewSquadInputInterface()
 										 VirtualKeyboard_OnCancel_NameNewSquad,
 										 false, // Do not need to validate these names -ttalley
 										 MAX_CHARS);
-	}
+		bWaitingToCreateNewLoadout = true;
+	}*/
 }
 
 function PCTextField_OnAccept_NameNewSquad( string userInput )
@@ -389,6 +520,7 @@ function PCTextField_OnCancel_NameNewSquad( string userInput )
 
 function VirtualKeyboard_OnAccept_NameNewSquad( string userInput, bool bWasSuccessful )
 {
+	bWaitingToCreateNewLoadout = false;
 	if( userInput == "" ) bWasSuccessful = false; 
 
 	if(!bWasSuccessful)
@@ -409,6 +541,8 @@ function VirtualKeyboard_OnAccept_NameNewSquad( string userInput, bool bWasSucce
 
 function VirtualKeyboard_OnCancel_NameNewSquad()
 {
+	bWaitingToCreateNewLoadout = false;
+	CloseSquadCompleteProgressDialog();
 }
 
 // CLONE -tsmith
@@ -419,8 +553,8 @@ function OpenCloneSquadInputInterface()
 
 	MAX_CHARS = 50;
 
-	if(!WorldInfo.IsConsoleBuild())
-	{
+//	if( `ISCONTROLLERACTIVE == false)
+//	{
 		// on PC, we have a real keyboard, so use that instead
 		kData.fnCallbackAccepted = PCTextField_OnAccept_CloneSquad;
 		kData.fnCallbackCancelled = PCTextField_OnCancel_CloneSquad;
@@ -428,9 +562,10 @@ function OpenCloneSquadInputInterface()
 		kData.iMaxChars = MAX_CHARS;
 		kData.strInputBoxText = XComGameStateContext_SquadSelect(m_kCloningLoadout.GetContext()).strLoadoutName $ m_strCloneSquadNameSuffix;
 		Movie.Pres.UIInputDialog(kData);
-	}
+/*	}
 	else
 	{
+		m_bKeyboardOpen = true;
 		//`log("+++ Loading the VirtualKeyboard", ,'uixcom');
 		Movie.Pres.UIKeyboard( m_strEnterNameHeader, 
 										 XComGameStateContext_SquadSelect(m_kCloningLoadout.GetContext()).strLoadoutName $ m_strCloneSquadNameSuffix, 
@@ -438,7 +573,7 @@ function OpenCloneSquadInputInterface()
 										 VirtualKeyboard_OnCancel_CloneSquad,
 										 false, // Do not need to validate these names -ttalley
 										 MAX_CHARS);
-	}
+	}*/
 }
 
 function PCTextField_OnAccept_CloneSquad( string userInput )
@@ -453,6 +588,7 @@ function PCTextField_OnCancel_CloneSquad( string userInput )
 function VirtualKeyboard_OnAccept_CloneSquad( string userInput, bool bWasSuccessful )
 {
 	local XComGameState kNewLoadout;
+	m_bKeyboardOpen = false;
 
 	if( userInput == "" ) bWasSuccessful = false; 
 
@@ -478,6 +614,7 @@ function VirtualKeyboard_OnAccept_CloneSquad( string userInput, bool bWasSuccess
 
 function VirtualKeyboard_OnCancel_CloneSquad()
 {
+	m_bKeyboardOpen = false;
 	m_kCloningLoadout = none;
 }
 
@@ -490,8 +627,8 @@ function OpenRenameSquadInputInterface()
 
 	MAX_CHARS = 50;
 
-	if(!WorldInfo.IsConsoleBuild())
-	{
+//	if(`ISCONTROLLERACTIVE == false )
+//	{
 		// on PC, we have a real keyboard, so use that instead
 		kData.fnCallbackAccepted = PCTextField_OnAccept_RenameSquad;
 		kData.fnCallbackCancelled = PCTextField_OnCancel_RenameSquad;
@@ -499,7 +636,7 @@ function OpenRenameSquadInputInterface()
 		kData.iMaxChars = MAX_CHARS;
 		kData.strInputBoxText = XComGameStateContext_SquadSelect(m_kRenamingLoadout.GetContext()).strLoadoutName;
 		Movie.Pres.UIInputDialog(kData);
-	}
+/*	}
 	else
 	{
 		//`log("+++ Loading the VirtualKeyboard", ,'uixcom');
@@ -509,7 +646,7 @@ function OpenRenameSquadInputInterface()
 										 VirtualKeyboard_OnCancel_RenameSquad,
 										 false, // Do not need to validate these names -ttalley
 										 MAX_CHARS);
-	}
+	}*/
 }
 
 function PCTextField_OnAccept_RenameSquad( string userInput )
@@ -560,6 +697,7 @@ function DisplayConfirmDeleteDialog()
 	kConfirmData.fnCallback = OnDisplayConfirmDeleteDialogAction;
 
 	Movie.Pres.UIRaiseDialog(kConfirmData);
+	AnchoredNavHelp.ClearButtonHelp();
 }
 
 function OnDisplayConfirmDeleteDialogAction(eUIAction eAction)
@@ -571,9 +709,11 @@ function OnDisplayConfirmDeleteDialogAction(eUIAction eAction)
 		m_kMPShellManager.SaveProfileSettings(true);
 		UpdateSquadListItems();
 		SelectFirstLoadout();
+		UpdateGamepadFocus();
 	}
 
 	m_kDeletingLoadout = none;
+	UpdateNavHelp();
 }
 
 function SelectFirstLoadout()
@@ -618,12 +758,24 @@ function UpdateSquadListItems()
 		}
 
 		kListItem.InitListItem();
-		kListItem.SetWidgetType(EUILineItemType_Checkbox);
-		kListItem.UpdateDataCheckbox(kSquadLoadoutContext.strLoadoutName@"-"@pointTotal@m_strPointTotalPostfix, "", false);
+		if( `ISCONTROLLERACTIVE )
+		{
+			kListItem.SetWidgetType(EUILineItemType_Description);
+			kListItem.UpdateDataDescription(kSquadLoadoutContext.strLoadoutName@"-"@pointTotal@m_strPointTotalPostfix);
+		}
+		else
+		{
+			kListItem.SetWidgetType(EUILineItemType_Checkbox);
+			kListItem.UpdateDataCheckbox(kSquadLoadoutContext.strLoadoutName@"-"@pointTotal@m_strPointTotalPostfix, "", false, OnCheckboxClicked);
+		}
 		kListItem.metadataObject = kSquadLodoutState;
 		kListItem.metadataInt = pointTotal;
 
-		if(m_kMPShellManager.OnlineGame_GetMaxSquadCost() > 0)
+		if(pointTotal <= 0)
+		{
+			kListItem.SetBad(true);
+		}
+		else if(m_kMPShellManager.OnlineGame_GetMaxSquadCost() > 0)
 		{
 			kListItem.SetBad(pointTotal > m_kMPShellManager.OnlineGame_GetMaxSquadCost() || (pointTotal == 0 && (m_kMPShellManager.OnlineGame_GetIsRanked() || m_kMPShellManager.OnlineGame_GetAutomatch())));
 		}
@@ -632,6 +784,41 @@ function UpdateSquadListItems()
 	}
 
 	SelectFirstLoadout();
+}
+function ShowAttemptingToConnectToGameRanked()
+{
+	local XComPresentationLayerBase Presentation;
+	local XComShellPresentationLayer ShellPresentation;
+	local TProgressDialogData kDialogBoxData;
+
+	Presentation = XComPlayerController(class'UIInteraction'.static.GetLocalPlayer(0).Actor).Pres;
+	ShellPresentation = XComShellPresentationLayer(Presentation);
+
+	if (ShellPresentation != none)
+	{
+		kDialogBoxData.strTitle = ShellPresentation.m_strOnlineSearchForRankedAutomatch_Title;
+		kDialogBoxData.strDescription = ShellPresentation.m_strOnlineReadRankedStats_Text;
+		kDialogBoxData.fnCallback = ShellPresentation.OSSAutomatchRankedWaitDialogAbortCallback;
+		Presentation.UIProgressDialog(kDialogBoxData);
+	}
+}
+
+function ShowAttemptingToConnectToGameUnranked()
+{
+	local XComPresentationLayerBase Presentation;
+	local XComShellPresentationLayer ShellPresentation;
+	local TProgressDialogData kDialogBoxData;
+
+	Presentation = XComPlayerController(class'UIInteraction'.static.GetLocalPlayer(0).Actor).Pres;
+	ShellPresentation = XComShellPresentationLayer(Presentation);
+
+	if (ShellPresentation != none)
+	{
+		kDialogBoxData.strTitle = ShellPresentation.m_strOnlineSearchForUnrankedAutomatch_Title;
+		kDialogBoxData.strDescription = ShellPresentation.m_strOnlineSearchForUnrankedAutomatch_Text;
+		kDialogBoxData.fnCallback = ShellPresentation.OSSAutomatchUnrankedWaitDialogAbortCallback;
+		Presentation.UIProgressDialog(kDialogBoxData);
+	}
 }
 
 simulated function bool CanJoinGame()
@@ -644,6 +831,10 @@ simulated function bool CanJoinGame()
 	{
 		pointTotal += kLoadoutUnit.GetUnitPointValue();
 	}
+	if(pointTotal <= 0)
+	{
+		return false;
+	}
 
 	return m_kMPShellManager.OnlineGame_GetMaxSquadCost() < 0 || !(pointTotal > m_kMPShellManager.OnlineGame_GetMaxSquadCost() || (pointTotal == 0 && (m_kMPShellManager.OnlineGame_GetIsRanked() || m_kMPShellManager.OnlineGame_GetAutomatch())));
 }
@@ -654,21 +845,21 @@ simulated function OnCheckboxClicked(UICheckBox Checkbox)
 
 	Index = SquadList.GetItemIndex(Checkbox);
 
-	if(SelectedIndex == Index)
+	if(Checkbox.bChecked)
 	{
-		Checkbox.SetChecked(false);
-		SetSelectedIndex(-1);
+		Checkbox.SetChecked(false, false);
+		SetSelected(SquadList, -1);
 		return;
 	}
 
 	// unselect previously selected index
 	if(SelectedIndex >= 0 && SelectedIndex < SquadList.ItemCount)
-		UIMechaListItem(SquadList.GetItem(SelectedIndex)).Checkbox.SetChecked(false);
+		UIMechaListItem(SquadList.GetItem(SelectedIndex)).Checkbox.SetChecked(false, false);
 
 	if(Index > 0 && Index < SquadList.ItemCount)
-		UIMechaListItem(SquadList.GetItem(Index)).Checkbox.SetChecked(true);
+		UIMechaListItem(SquadList.GetItem(Index)).Checkbox.SetChecked(true, false);
 
-	SetSelectedIndex(Index);
+	SetSelected(SquadList, Index);
 }
 
 simulated function SetSelectedIndex(int Index)
@@ -766,6 +957,58 @@ simulated function OnReceiveFocus()
 	
 	UpdateNavHelp();
 	UpdateData();
+	UpdateGamepadFocus();
+}
+simulated function OnLoseFocus()
+{
+	if(AnchoredNavHelp != None)
+	{
+		AnchoredNavHelp.ClearButtonHelp();
+	}
+	super.OnLoseFocus();
+}
+simulated function UpdateGamepadFocus()
+{
+	if(!Movie.IsMouseActive())
+	{
+		if(SelectedIndex < 0 || SelectedIndex >= SquadList.ItemCount)
+			SelectedIndex = 0;
+
+		SquadList.SetSelectedIndex(SelectedIndex);
+		Navigator.SetSelected(SquadList);
+	}	
+}
+simulated function DisplayConfirmMPAccountDialog()
+{
+	local TDialogueBoxData kConfirmData;
+	local string PlayerName;
+
+	PlayerName = class'GameEngine'.static.GetOnlineSubsystem().PlayerInterface.GetPlayerNickname(0);
+	kConfirmData.strTitle = Repl(ConfirmMPAccountTitle,"%USERNAME",class'UIUtilities_Text'.static.GetColoredText(PlayerName, eUIState_Highlight));
+	kConfirmData.strText = ConfirmMPAccountMessage;
+	kConfirmData.strAccept = class'UIUtilities_Text'.default.m_strGenericContinue;
+	kConfirmData.strCancel = class'UIUtilities_Text'.default.m_strGenericBack;
+	kConfirmData.fnCallback = OnDisplayConfirmMPAccountDialogAction;
+
+	Movie.Pres.UIRaiseDialog(kConfirmData);
+}
+
+simulated function OnDisplayConfirmMPAccountDialogAction(eUIAction eAction)
+{
+	if (eAction == eUIAction_Accept)
+	{
+		//Nothing happens
+	}
+	else
+	{	
+		BackButtonCallback(); //bsg-cballinger (7.12.16): Need to reset pending invites when backing out of confirmation dialog, or player will always be taken directly to the squad loadout view when first entering MP
+		ConsoleCommand("disconnect"); //should bring the player back to the main menu
+	}
+
+	//<bsg> TTP_5750_NONFUNCTIONAL_NAV_BUTTON_MP_INVITE jneal 06/28/16
+	//INS:
+	UpdateNavHelp();
+	//</bsg>
 }
 
 //==============================================================================
@@ -779,4 +1022,5 @@ DefaultProperties
 	MCName      = "theScreen";
 
 	SelectedIndex = -1;
+	bWaitingToCreateNewLoadout = false;
 }

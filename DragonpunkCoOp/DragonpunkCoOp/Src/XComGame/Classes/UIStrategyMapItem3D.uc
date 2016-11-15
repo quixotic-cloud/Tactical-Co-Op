@@ -33,6 +33,10 @@ simulated function UIStrategyMapItem3D InitMapItem3D()
 	return self;
 }
 
+function StaticMesh GetStaticMesh()
+{
+	return OverworldMeshs[ROOT_TILE].StaticMesh;
+}
 function SetStaticMesh(StaticMesh UIMesh)
 {
 	local int i;

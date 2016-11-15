@@ -20,6 +20,7 @@ var UIPersonnel_DropDown m_kPersonnelDropDown;
 
 var localized string DefaultStaffTitle; 
 
+var UIStaffSlot SelectedStaffSlot;
 simulated function UIStaffContainer InitStaffContainer(optional name InitName, optional string NewTitle = DefaultStaffTitle)
 {
 	InitPanel(InitName);
@@ -28,7 +29,46 @@ simulated function UIStaffContainer InitStaffContainer(optional name InitName, o
 
 	return self;
 }
+simulated function bool IsEmpty()
+{
+	local int i;
 
+	for (i = 0; i < StaffSlots.Length; ++i)
+	{
+		if (StaffSlots[i].IsSlotFilled())
+			return false;
+	}
+	return true;
+}
+
+
+simulated function OnLoseFocus()
+{
+	local int i;
+
+	super.OnLoseFocus();
+
+	if(m_kPersonnelDropDown != none)
+		m_kPersonnelDropDown.Hide();
+
+	for(i = 0; i < StaffSlots.Length; ++i)
+		StaffSlots[i].OnLoseFocus();
+}
+
+simulated function OnReceiveFocus()
+{
+	super.OnReceiveFocus();
+
+	if(StaffSlots.Length > 0)
+	{
+		if(SelectedStaffSlot != none)
+			SelectedStaffSlot.OnReceiveFocus();
+		else if(Navigator.GetSelected() != none)
+			Navigator.GetSelected().OnReceiveFocus();
+		else
+			StaffSlots[0].OnReceiveFocus();
+	}
+}
 
 public simulated function HideDropDown(optional UIStaffSlot StaffSlot)
 {
@@ -70,6 +110,7 @@ public simulated function ShowDropDown(UIStaffSlot StaffSlot)
 		m_kPersonnelDropDown.SetPosition(StaffSlot.X, StaffSlot.Y + StaffSlot.Height);
 		m_kPersonnelDropDown.Show();
 	}
+	SelectedStaffSlot = StaffSlot;
 }
 
 simulated function Refresh(StateObjectReference LocationRef, delegate<UIStaffSlot.OnStaffUpdated> onStaffUpdatedDelegate)
@@ -120,7 +161,8 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	if (super.OnUnrealCommand(cmd, arg))
 		return true;
 
-	if (m_kPersonnelDropDown != none)
+
+	if (m_kPersonnelDropDown != none && m_kPersonnelDropDown.bIsVisible)
 	{
 		return m_kPersonnelDropDown.OnUnrealCommand(cmd, arg);
 	}
@@ -148,7 +190,6 @@ function ProcessMouseEventsForTooltip(bool bShouldInterceptMouse)
 	else
 		MC.FunctionVoid("ignoreMouseEvents");
 }
-
 
 defaultproperties
 {

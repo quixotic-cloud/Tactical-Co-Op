@@ -54,6 +54,7 @@ simulated function BindLibraryItem()
 		List.Navigator.LoopSelection = false; 
 		List.Navigator.LoopOnReceiveFocus = true;
 
+		List.OnSelectionChanged = OnSelectionChanged;
 		IntelPanel = Spawn(class'UIPanel', LibraryPanel);
 		IntelPanel.bAnimateOnInit = false;
 		IntelPanel.bCascadeFocus = false;
@@ -64,20 +65,25 @@ simulated function BindLibraryItem()
 		ButtonGroup.InitPanel('ButtonGroup', '');
 
 		Button1 = Spawn(class'UIButton', ButtonGroup);
-		Button1.SetResizeToText(false);
-		Button1.InitButton('Button0', "");
+
+		Button1.InitButton('Button0', "",, eUIButtonStyle_NONE);
+		Button1.OnSizeRealized = OnButtonSizeRealized;
 
 		Button2 = Spawn(class'UIButton', ButtonGroup);
-		Button2.SetResizeToText(false);
-		Button2.InitButton('Button1', "");
+
+		Button2.InitButton('Button1', "",, eUIButtonStyle_NONE);
+		Button2.OnSizeRealized = OnButtonSizeRealized;
 
 		Button3 = Spawn(class'UIButton', ButtonGroup);
-		Button3.SetResizeToText(false);
-		Button3.InitButton('Button2', "");
+
+		Button3.InitButton('Button2', "",, eUIButtonStyle_NONE);
+		Button3.OnSizeRealized = OnButtonSizeRealized;
 
 		ConfirmButton = Spawn(class'UIButton', IntelPanel);
 		ConfirmButton.SetResizeToText(false);
-		ConfirmButton.InitButton('ConfirmButton', "", OnLaunchClicked);
+
+		ConfirmButton.InitButton('ConfirmButton', "", OnLaunchClicked, eUIButtonStyle_NONE);
+		ConfirmButton.OnSizeRealized = OnButtonSizeRealized;
 
 		ShadowChamber = Spawn(class'UIPanel', LibraryPanel);
 		ShadowChamber.InitPanel('ShadowChamber');
@@ -85,6 +91,10 @@ simulated function BindLibraryItem()
 		Navigator.LoopSelection = true;
 		Navigator.LoopOnReceiveFocus = true;
 	}
+}
+simulated function OnSelectionChanged(UIList ContainerList, int ItemIndex)
+{
+	UpdateGoldenPathButtonMessage(ContainerList.GetSelectedItem(), class'UIUtilities_Input'.const.FXS_L_MOUSE_IN);
 }
 
 simulated function BuildScreen()
@@ -104,10 +114,37 @@ simulated function BuildScreen()
 	// Add Interception warning and Shadow Chamber info 
 	super.BuildScreen();
 
+	Navigator.Clear();
+	Button1.OnLoseFocus();
+	Button2.OnLoseFocus();
+	Button3.OnLoseFocus();
+
+	Button1.SetResizeToText(true);
+	Button2.SetResizeToText(true);
+	Button1.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+	Button1.SetGamepadIcon(class 'UIUtilities_Input'.const.ICON_X_SQUARE);
+	Button2.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+	Button2.SetGamepadIcon(class 'UIUtilities_Input'.static.GetBackButtonIcon());
 	RefreshIntelOptionsPanel();
 
 	UpdateData();
 	UpdateGPButtonString("");
+	Navigator.Clear();
+	Navigator.AddControl(List);
+	Navigator.SetSelected(List);
+	List.SetSelectedIndex(0);
+}
+simulated function OnButtonSizeRealized()
+{
+	super.OnButtonSizeRealized();
+
+	Button1.SetX(-Button1.Width / 2.0);
+	Button2.SetX(-Button2.Width / 2.0);
+	LockedButton.SetX(185 - LockedButton.Width / 2.0);
+
+	Button1.SetY(10.0);
+	Button2.SetY(40.0);
+	LockedButton.SetY(125.0);
 }
 
 simulated function BuildMissionPanel()
@@ -151,9 +188,15 @@ simulated function BuildOptionsPanel()
 		LockedButton = Spawn(class'UIButton', LockedPanel);
 		LockedButton.SetResizeToText(false);
 		LockedButton.InitButton('ConfirmButton', "");
+		LockedButton.SetResizeToText(true);
+		LockedButton.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+		LockedButton.SetGamepadIcon(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+		LockedButton.OnSizeRealized = OnButtonSizeRealized;
 		LockedButton.SetText(m_strOK);
 		LockedButton.OnClickedDelegate = OnCancelClicked;
 		LockedButton.Show();
+
+		LockedButton.DisableNavigation();
 	}
 
 	Button1.SetBad(true);
@@ -296,6 +339,7 @@ simulated function UpdateTotalIntel()
 	else
 	{
 		Button1.EnableButton();
+		Button1.MC.FunctionVoid("setBad");
 	}
 }
 
@@ -319,6 +363,32 @@ simulated public function OnLaunchClicked(UIButton button)
 	}
 }
 
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	if (List.OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
+
+	switch(cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+		if (CanTakeMission() && Button1 != none && Button1.bIsVisible && !Button1.IsDisabled)
+		{
+			Button1.OnClickedDelegate(Button1);
+			return true;
+		}
+
+		break;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
 function FinalAssaultPopup()
 {
 	local TDialogueBoxData DialogData;

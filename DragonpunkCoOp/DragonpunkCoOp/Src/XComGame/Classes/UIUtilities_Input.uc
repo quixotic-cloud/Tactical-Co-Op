@@ -46,6 +46,14 @@ const FXS_DPAD_LEFT		    = 356;
 const FXS_ANY_INPUT         = 360; //Used as a marker for any input 
 const FXS_BUTTON_A_STEAM    = 361; //Used as a marker for any input 
 
+//<workshop> DIAGONAL_NAVIGATION kmartinez 2016-01-22
+//INS:
+const FXS_VIRTUAL_LSTICK_DIAG_UP_LEFT		= 361;
+const FXS_VIRTUAL_LSTICK_DIAG_UP_RIGHT		= 362;
+const FXS_VIRTUAL_LSTICK_DIAG_DOWN_RIGHT	= 363;
+const FXS_VIRTUAL_LSTICK_DIAG_DOWN_LEFT		= 364;
+//</workshop>
+
 const FXS_VIRTUAL_LSTICK_UP	    = 370;
 const FXS_VIRTUAL_LSTICK_DOWN   = 371;
 const FXS_VIRTUAL_LSTICK_LEFT   = 372;
@@ -202,7 +210,7 @@ const ICON_Y_TRIANGLE		= "Icon_Y_TRIANGLE";
 
 const ICON_START            = "Icon_START";
 const ICON_BACK_SELECT      = "Icon_BACK_SELECT";
-	
+
 const ICON_DPAD             = "Icon_DPAD";
 const ICON_DPAD_UP          = "Icon_DPAD_UP";
 const ICON_DPAD_DOWN        = "Icon_DPAD_DOWN";
@@ -221,6 +229,8 @@ const ICON_LSCLICK_L3       = "Icon_LSCLICK_L3";
 const ICON_RB_R1            = "Icon_RB_R1";
 const ICON_RT_R2            = "Icon_RT_R2";
 const ICON_RSCLICK_R3       = "Icon_RSCLICK_R3";
+
+const ICON_PREFIX_XBOX       = "C";
 
 const ICON_ABILITY_OVERWATCH = "Icon_OVERWATCH_HTML";
 
@@ -246,6 +256,10 @@ static function string HTML( string sIcon, optional int imgDimensions = 18, opti
 {
 	return( "<img src='" $ sIcon $ "' align='baseline' vspace='"$vspaceOffset$"' width='"$imgDimensions$"' height='"$imgDimensions$"'>" );
 }
+static function string HTML_SIZED(string sIcon, optional int imgWidth = 18, optional int imgHeight = 18, optional int vspaceOffset = -3)
+{
+	return("<img src='" $ sIcon $ "' align='baseline' vspace='"$vspaceOffset$"' width='"$imgWidth$"' height='"$imgHeight$"'>");
+}
 static function string HTML_MESSENGER( string sIcon )
 {
 	return( "<img src='" $ sIcon $ "' align='baseline' vspace='-5' width='25' height='25'>" );
@@ -270,21 +284,25 @@ static function string InsertGamepadIcons(string sSource)
 
 	//TODO: Import Steam icons, and look those up if steam controller is active. 
 
-	sResult = Repl(sSource, "%LS", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_LSTICK));
-	sResult = Repl(sResult, "%RS", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_RSTICK));
+	sResult = Repl(sSource, "%LS", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LSTICK));
+	sResult = Repl(sResult, "%RS", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RSTICK));
 	sResult = Repl(sResult, "%A", class'UIUtilities_Input'.static.HTML(GetAdvanceButtonIcon()));
 	sResult = Repl(sResult, "%B", class'UIUtilities_Input'.static.HTML(GetBackButtonIcon()));
-	sResult = Repl(sResult, "%X", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.Icon_X_SQUARE));
-	sResult = Repl(sResult, "%Y", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.Icon_Y_TRIANGLE));
-	sResult = Repl(sResult, "%RB", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_RB_R1));
-	sResult = Repl(sResult, "%RT", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_RT_R2));
-	sResult = Repl(sResult, "%LB", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_LB_L1));
-	sResult = Repl(sResult, "%LT", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_LT_L2));
-	sResult = Repl(sResult, "%RT", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_RT_R2));
-	sResult = Repl(sResult, "%DU", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_DPAD_UP));
-	sResult = Repl(sResult, "%DD", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_DPAD_DOWN));
-	sResult = Repl(sResult, "%DL", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_DPAD_LEFT));
-	sResult = Repl(sResult, "%DR", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.const.ICON_DPAD_RIGHT));
+	sResult = Repl(sResult, "%X", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE));
+	sResult = Repl(sResult, "%Y", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE));
+
+	sResult = Repl(sResult, "%RB", class'UIUtilities_Input'.static.HTML_SIZED(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RB_R1, 28, 18));
+	sResult = Repl(sResult, "%RT", class'UIUtilities_Input'.static.HTML_SIZED(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RT_R2, 28, 18));
+	sResult = Repl(sResult, "%LB", class'UIUtilities_Input'.static.HTML_SIZED(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LB_L1, 28, 18));
+	sResult = Repl(sResult, "%LT", class'UIUtilities_Input'.static.HTML_SIZED(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LT_L2, 28, 18));
+	sResult = Repl(sResult, "%RT", class'UIUtilities_Input'.static.HTML_SIZED(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RT_R2, 28, 18));
+
+	sResult = Repl(sResult, "%DU", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_DPAD_UP));
+	sResult = Repl(sResult, "%DD", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_DPAD_DOWN));
+	sResult = Repl(sResult, "%DL", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_DPAD_LEFT));
+	sResult = Repl(sResult, "%DR", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_DPAD_RIGHT));
+	sResult = Repl(sResult, "%L3", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LSCLICK_L3));
+	sResult = Repl(sResult, "%R3", class'UIUtilities_Input'.static.HTML(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RSCLICK_R3));
 
 	return sResult;
 }
@@ -294,20 +312,20 @@ static function string InsertGamepadIconsMessenger(string sSource)
 	local string sResult;
 
 	// TODO: Add all gamepad icons
-	sResult = Repl(sSource, "%LS", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_LSTICK));
-	sResult = Repl(sResult, "%RS", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_RSTICK));
+	sResult = Repl(sSource, "%LS", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LSTICK));
+	sResult = Repl(sResult, "%RS", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RSTICK));
 	sResult = Repl(sResult, "%A", class'UIUtilities_Input'.static.HTML_MESSENGER(GetAdvanceButtonIcon()));
 	sResult = Repl(sResult, "%B", class'UIUtilities_Input'.static.HTML_MESSENGER(GetBackButtonIcon()));
-	sResult = Repl(sResult, "%X", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.Icon_X_SQUARE));
-	sResult = Repl(sResult, "%Y", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.Icon_Y_TRIANGLE));
-	sResult = Repl(sResult, "%RB", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_RB_R1));
-	sResult = Repl(sResult, "%RT", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_RT_R2));
-	sResult = Repl(sResult, "%LB", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_LB_L1));
-	sResult = Repl(sResult, "%LT", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_LT_L2));
-	sResult = Repl(sResult, "%DU", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_DPAD_UP));
-	sResult = Repl(sResult, "%DD", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_DPAD_DOWN));
-	sResult = Repl(sResult, "%DL", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_DPAD_LEFT));
-	sResult = Repl(sResult, "%DR", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.const.ICON_DPAD_RIGHT));
+	sResult = Repl(sResult, "%X", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE));
+	sResult = Repl(sResult, "%Y", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE));
+	sResult = Repl(sResult, "%RB", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_RB_R1));
+	sResult = Repl(sResult, "%RT", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_RT_R2));
+	sResult = Repl(sResult, "%LB", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_LB_L1));
+	sResult = Repl(sResult, "%LT", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_LT_L2));
+	sResult = Repl(sResult, "%DU", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_DPAD_UP));
+	sResult = Repl(sResult, "%DD", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_DPAD_DOWN));
+	sResult = Repl(sResult, "%DL", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_DPAD_LEFT));
+	sResult = Repl(sResult, "%DR", class'UIUtilities_Input'.static.HTML_MESSENGER(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_DPAD_RIGHT));
 
 	return sResult;
 }
@@ -449,19 +467,43 @@ static function string MarkForKeybinding(string Source)
 static function string GetAdvanceButtonIcon()
 {
 	if( IsAdvanceButtonSwapActive() ) //TODO: get Korean setting 
-		return class'UIUtilities_Input'.const.ICON_B_CIRCLE; 
+		return GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_B_CIRCLE;
 	else
-		return class'UIUtilities_Input'.const.ICON_A_X; 
+		return GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_A_X;
 }
 static function string GetBackButtonIcon()
 {
 	if( IsAdvanceButtonSwapActive() ) //TODO: get Korean setting 
-		return class'UIUtilities_Input'.const.ICON_A_X; 
+		return GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_A_X; 
 	else
-		return class'UIUtilities_Input'.const.ICON_B_CIRCLE; 
+		return GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_B_CIRCLE; 
 }
 
-native static function bool IsAdvanceButtonSwapActive(); 
+//<workshop> SUPPORT_FOR_ACCEPT_AND_BACK_BUTTON_SWAP kmartinez 2015-10-26
+// INS:
+static function int GetAdvanceButtonInputCode()
+{
+	if( IsAdvanceButtonSwapActive() ) //TODO: get Korean setting 
+		return class'UIUtilities_Input'.const.FXS_BUTTON_B;
+	else
+		return class'UIUtilities_Input'.const.FXS_BUTTON_A;
+}
+
+static function int GetBackButtonInputCode()
+{
+	if( IsAdvanceButtonSwapActive() ) //TODO: get Korean setting 
+		return class'UIUtilities_Input'.const.FXS_BUTTON_A;
+	else
+		return class'UIUtilities_Input'.const.FXS_BUTTON_B;
+}
+//</workshop>
+
+native static function bool IsAdvanceButtonSwapActive();
+
+static function string GetGamepadIconPrefix()
+{
+	return ICON_PREFIX_XBOX;
+}
 
 DefaultProperties
 {

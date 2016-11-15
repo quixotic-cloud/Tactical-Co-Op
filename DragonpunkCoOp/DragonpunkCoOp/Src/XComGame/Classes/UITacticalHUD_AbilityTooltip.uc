@@ -109,7 +109,8 @@ simulated function ShowTooltip()
 }
 simulated function HideTooltip( optional bool bAnimateIfPossible = false )
 {
-	AbilityArea.ClearScroll();
+	//DISABLING SCROLL bsteiner 6/23/2016
+	//AbilityArea.ClearScroll();
 	super.HideTooltip(bAnimateIfPossible);
 }
 
@@ -190,9 +191,15 @@ simulated function RefreshSizeAndScroll()
 {
 	local int iCalcNewHeight;
 	local int MaxAbilityHeight;
-	
-	AbilityArea.ClearScroll();
 
+	/* //DISABLING SCROLL bsteiner 6/23/2016
+	AbilityArea.ClearScroll();
+	
+	// Since we are using the direct scroll controls, we need to reset the location of this clip manually. 
+	// (Other clips use scroll on teh flash side and do the reset there.) 
+	AbilityArea.SetY(Line.Y + ActionsPadding);
+	AbilityArea.RealizeLocation();
+*/
 	AbilityArea.height = Desc.Y + Desc.height + Cooldown.Height; 
 	iCalcNewHeight = AbilityArea.Y + AbilityArea.height; 
 	MaxAbilityHeight = MAX_HEIGHT - AbilityArea.Y; 
@@ -212,7 +219,7 @@ simulated function RefreshSizeAndScroll()
 	else
 		AbilityMask.SetSize(AbilityArea.width, MaxAbilityHeight - PADDING_BOTTOM); 
 
-	AbilityArea.AnimateScroll(AbilityArea.height, AbilityMask.height);
+	//AbilityArea.AnimateScroll(AbilityArea.height, AbilityMask.height);
 
 	BG.SetSize(width, height);
 	SetY( InitAnchorY - height );
@@ -239,7 +246,7 @@ defaultproperties
 {
 	width = 350;
 	height = 150; 
-	MAX_HEIGHT = 400; 
+	MAX_HEIGHT = 600; 
 
 	PADDING_LEFT	= 10;
 	PADDING_RIGHT	= 10;

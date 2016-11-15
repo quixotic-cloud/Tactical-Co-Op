@@ -215,6 +215,9 @@ simulated function UpdateNavHelp()
 	NavHelp.ClearButtonHelp();
 	NavHelp.AddBackButton(OnCancel);
 
+	if(`ISCONTROLLERACTIVE)
+		NavHelp.AddSelectNavHelp();
+
 	if( IsSoldierEligible == none )
 		IsSoldierEligible = CanCycleTo;
 
@@ -253,7 +256,7 @@ simulated function NextSoldier()
 
 simulated static function bool CanCycleTo(XComGameState_Unit NewUnit)
 {
-	return NewUnit.IsASoldier() && !NewUnit.IsDead();
+	return NewUnit.IsSoldier() && !NewUnit.IsDead();
 }
 
 simulated static function CycleToSoldier(StateObjectReference NewRef)
@@ -350,25 +353,25 @@ simulated function OnReceiveFocus()
 	}
 	else // Update normally
 	{
-	UpdateNavHelp();
-	UpdateData();
+		UpdateNavHelp();
+		UpdateData();
 
-	if(bIsIn3D) UIMovie_3D(Movie).ShowDisplay(DisplayTag);
+		if (bIsIn3D) UIMovie_3D(Movie).ShowDisplay(DisplayTag);
 
-	if(XComHeadquartersGame(class'Engine'.static.GetCurrentWorldInfo().Game) != none && `HQPRES != none)
-	{
-		`HQPRES.CAMLookAtNamedLocation(CameraTag, `HQINTERPTIME);
+		if (XComHeadquartersGame(class'Engine'.static.GetCurrentWorldInfo().Game) != none && `HQPRES != none)
+		{
+			`HQPRES.CAMLookAtNamedLocation(CameraTag, `HQINTERPTIME);
+		}
+		else
+		{
+			XComShellPresentationLayer(`PRESBASE).CAMLookAtNamedLocation(CameraTag, `HQINTERPTIME);
+		}
+		CustomizeManager.MoveCosmeticPawnOnscreen();
+		CustomizeManager.LastSetCameraTag = name(CameraTag);
+
+		// Make sure the list processes events from the BG (this gets overridden by the color selector).
+		ListBG.ProcessMouseEvents(List.OnChildMouseEvent);
 	}
-	else
-	{
-		XComShellPresentationLayer(`PRESBASE).CAMLookAtNamedLocation(CameraTag, `HQINTERPTIME);
-	}
-	CustomizeManager.MoveCosmeticPawnOnscreen();
-	CustomizeManager.LastSetCameraTag = name(CameraTag);
-
-	// Make sure the list processes events from the BG (this gets overridden by the color selector).
-	ListBG.ProcessMouseEvents(List.OnChildMouseEvent);
-}
 }
 
 simulated function Show()
@@ -390,6 +393,11 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 	if (ColorSelector != none && ColorSelector.OnUnrealCommand(cmd, arg))
 		return true;
+
+	if (List != none && List.OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
 
 	switch( cmd )
 	{

@@ -180,7 +180,7 @@ simulated function bool InShell()
 
 function UpdateBodyPartFilterForNewUnit(XComGameState_Unit NewUnit)
 {
-	BodyPartFilter.Set(EGender(Unit.kAppearance.iGender), ECharacterRace(Unit.kAppearance.iRace), Unit.kAppearance.nmTorso, !Unit.IsASoldier(), Unit.IsVeteran() || InShell());
+	BodyPartFilter.Set(EGender(Unit.kAppearance.iGender), ECharacterRace(Unit.kAppearance.iRace), Unit.kAppearance.nmTorso, !Unit.IsSoldier(), Unit.IsVeteran() || InShell());
 	BodyPartFilter.AddCharacterFilter(NewUnit.GetMyTemplateName());
 }
 
@@ -311,12 +311,25 @@ simulated function OpenNameInputBox(int optionIndex, string title, string text, 
 
 	m_iCustomizeNameType = optionIndex;
 
-	kData.strTitle = title;
-	kData.iMaxChars = maxCharacters;
-	kData.strInputBoxText = text;
-	kData.fnCallback = OnNameInputBoxClosed;
+	//if(!`GAMECORE.WorldInfo.IsConsoleBuild() || `ISCONTROLLERACTIVE )
+	//{
+		kData.strTitle = title;
+		kData.iMaxChars = maxCharacters;
+		kData.strInputBoxText = text;
+		kData.fnCallback = OnNameInputBoxClosed;
 
-	XComPresentationLayerBase(Outer).UIInputDialog(kData);
+		XComPresentationLayerBase(Outer).UIInputDialog(kData);
+/*	}
+	else
+	{
+		XComPresentationLayerBase(Outer).UIKeyboard( title, 
+			text, 
+			VirtualKeyboard_OnNameInputBoxAccepted, 
+			VirtualKeyboard_OnNameInputBoxCancelled,
+			false, 
+			maxCharacters
+		);
+	}*/
 }
 
 // TEXT INPUT BOX (PC)
@@ -356,6 +369,15 @@ function OnNameInputBoxClosed(string text)
 	CustomizeScreen = UICustomize(`SCREENSTACK.GetFirstInstanceOf(class'UICustomize'));
 	if(CustomizeScreen != none)
 		CustomizeScreen.Header.PopulateData(UpdatedUnitState);
+}
+function VirtualKeyboard_OnNameInputBoxAccepted(string text, bool bWasSuccessful)
+{
+	OnNameInputBoxClosed(bWasSuccessful ? text : "");
+}
+
+function VirtualKeyboard_OnNameInputBoxCancelled()
+{
+	OnNameInputBoxClosed("");
 }
 //==============================================================================
 
@@ -443,7 +465,7 @@ function bool ValidatePartSelection(string PartType, name PartSelection)
 	local int Index;	
 
 	//Retrieve a list of valid parts for the specified part type
-	BodyPartFilter.Set(EGender(UpdatedUnitState.kAppearance.iGender), ECharacterRace(UpdatedUnitState.kAppearance.iRace), UpdatedUnitState.kAppearance.nmTorso, !UpdatedUnitState.IsASoldier(), UpdatedUnitState.IsVeteran() || InShell());
+	BodyPartFilter.Set(EGender(UpdatedUnitState.kAppearance.iGender), ECharacterRace(UpdatedUnitState.kAppearance.iRace), UpdatedUnitState.kAppearance.nmTorso, !UpdatedUnitState.IsSoldier(), UpdatedUnitState.IsVeteran() || InShell());
 	PartManager.GetFilteredUberTemplates(PartType, BodyPartFilter, BodyPartFilter.FilterByTorsoAndArmorMatch, BodyParts);
 
 	//See if the part selection is in the list of filtered templates. If it is, the part selection is valid.
@@ -472,7 +494,7 @@ simulated function OnCategoryValueChange(int categoryIndex, int direction, optio
 	local X2BodyPartTemplate BodyPart;
 
 	//Set the body part filter with latest data so that the filters can operate	
-	BodyPartFilter.Set(EGender(UpdatedUnitState.kAppearance.iGender), ECharacterRace(UpdatedUnitState.kAppearance.iRace), UpdatedUnitState.kAppearance.nmTorso, !UpdatedUnitState.IsASoldier(), UpdatedUnitState.IsVeteran() || InShell());
+	BodyPartFilter.Set(EGender(UpdatedUnitState.kAppearance.iGender), ECharacterRace(UpdatedUnitState.kAppearance.iRace), UpdatedUnitState.kAppearance.nmTorso, !UpdatedUnitState.IsSoldier(), UpdatedUnitState.IsVeteran() || InShell());
 
 	switch(categoryIndex)
 	{
@@ -495,16 +517,6 @@ simulated function OnCategoryValueChange(int categoryIndex, int direction, optio
 			{
 				UpdatedUnitState.kAppearance.nmRightArm = BodyPart.DataName;
 			}
-
-			//No individual arms, pick a dual arms selection
-			if(BodyPart == none)
-			{
-				BodyPart = class'X2BodyPartTemplateManager'.static.GetBodyPartTemplateManager().GetRandomUberTemplate("Arms", BodyPartFilter, BodyPartFilter.FilterByTorsoAndArmorMatch);
-				if(BodyPart != none)
-				{
-					UpdatedUnitState.kAppearance.nmArms = BodyPart.DataName;
-				}
-		}
 		}
 
 		if(!ValidatePartSelection("Legs", UpdatedUnitState.kAppearance.nmLegs))
@@ -636,7 +648,7 @@ simulated function OnCategoryValueChange(int categoryIndex, int direction, optio
 			NewSoldier = CharacterGenerator.CreateTSoldier(RequestTemplate, EGender(UpdatedUnitState.kAppearance.iGender), UpdatedUnitState.GetCountryTemplate().DataName, -1, UpdatedUnitState.GetItemInSlot(eInvSlot_Armor).GetMyTemplateName());
 
 			// If the selected armor has a specific matching helmet, add it to the appearance
-			BodyPartFilter.Set(EGender(NewSoldier.kAppearance.iGender), ECharacterRace(NewSoldier.kAppearance.iRace), NewSoldier.kAppearance.nmTorso, !UpdatedUnitState.IsASoldier(), UpdatedUnitState.IsVeteran() || InShell());
+			BodyPartFilter.Set(EGender(NewSoldier.kAppearance.iGender), ECharacterRace(NewSoldier.kAppearance.iRace), NewSoldier.kAppearance.nmTorso, !UpdatedUnitState.IsSoldier(), UpdatedUnitState.IsVeteran() || InShell());
 			BodyPart = class'X2BodyPartTemplateManager'.static.GetBodyPartTemplateManager().GetRandomUberTemplate("Helmets", BodyPartFilter, BodyPartFilter.FilterByTorsoAndArmorMatch);
 			if (BodyPart != none)
 			{
@@ -1695,7 +1707,7 @@ function array<name> GetCategoryDLCNames(int catType)
 	if( PartType != "" )
 	{
 		//Retrieve a list of valid parts for the specified part type
-		BodyPartFilter.Set(EGender(UpdatedUnitState.kAppearance.iGender), ECharacterRace(UpdatedUnitState.kAppearance.iRace), UpdatedUnitState.kAppearance.nmTorso, !UpdatedUnitState.IsASoldier(), UpdatedUnitState.IsVeteran() || InShell());
+		BodyPartFilter.Set(EGender(UpdatedUnitState.kAppearance.iGender), ECharacterRace(UpdatedUnitState.kAppearance.iRace), UpdatedUnitState.kAppearance.nmTorso, !UpdatedUnitState.IsSoldier(), UpdatedUnitState.IsVeteran() || InShell());
 		PartManager.GetFilteredUberTemplates(PartType, BodyPartFilter, BodyPartFilter.FilterAny, BodyParts);
 
 		//See if the part has a DLC identified. 
@@ -1782,7 +1794,7 @@ function bool DoesCategoryHaveDLC( int catType, optional name DLCName = '')
 	if( PartType != "" )
 	{
 		//Retrieve a list of valid parts for the specified part type
-		BodyPartFilter.Set(EGender(UpdatedUnitState.kAppearance.iGender), ECharacterRace(UpdatedUnitState.kAppearance.iRace), UpdatedUnitState.kAppearance.nmTorso, !UpdatedUnitState.IsASoldier(), UpdatedUnitState.IsVeteran() || InShell());
+		BodyPartFilter.Set(EGender(UpdatedUnitState.kAppearance.iGender), ECharacterRace(UpdatedUnitState.kAppearance.iRace), UpdatedUnitState.kAppearance.nmTorso, !UpdatedUnitState.IsSoldier(), UpdatedUnitState.IsVeteran() || InShell());
 		PartManager.GetFilteredUberTemplates(PartType, BodyPartFilter, BodyPartFilter.FilterAny, BodyParts);
 
 		//See if the part has a DLC identified. 
@@ -1877,7 +1889,7 @@ simulated function int GetCategoryIndex(int catType)
 		Result = GetCategoryValue("Voice", UpdatedUnitState.kAppearance.nmVoice, BodyPartFilter.FilterByGenderAndCharacterAndNonSpecialized);
 		break;
 	case eUICustomizeCat_Gender:				 
-		Result = UpdatedUnitState.kAppearance.iGender;
+		Result = UpdatedUnitState.kAppearance.iGender-1;
 		break;
 	case eUICustomizeCat_Race:					 
 		Result = UpdatedUnitState.kAppearance.iRace;

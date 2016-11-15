@@ -19,6 +19,7 @@ enum EUILargeButtonStyle
 var float OffsetX;
 var float OffsetY;
 var public bool bHideUntilRealized;
+var public bool bDisplayAsNavHelp; //Hides the background and changes colors so it fits the 'NavHelp' look
 var string Title;               // supports HTML tags
 var EUILargeButtonStyle Type; 
 
@@ -30,6 +31,7 @@ simulated function UILargeButton InitLargeButton(optional name InitName, optiona
 
 	SetTitle(InitTitle);
 	SetType(InitType);
+	ShowBG(true);
 
 	return self;
 }
@@ -69,6 +71,20 @@ simulated function UILargeButton SetType(EUILargeButtonStyle NewType)
 	}
 
 	return self;
+}
+
+simulated function UILargeButton SetAsNavHelpDisplay(bool bIsNavHelp)
+{
+	bDisplayAsNavHelp = bIsNavHelp;
+	MC.FunctionBool("DisplayAsNavHelp", bDisplayAsNavHelp);
+	
+	return Self;
+}
+
+simulated function ShowBG(bool bShow)
+{
+	//Never hide the background of the large green button. 
+	MC.FunctionBool("ShowBG", true);
 }
 
 simulated function RefreshLocationBasedOnAnchor()

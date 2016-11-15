@@ -72,6 +72,10 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_kCurrentFrameInfoText.SetY(100);
 
 	m_kButtonContainer.AddOnInitDelegate(PositionButtonContainer);
+	if (`REPLAY.bInTutorial)
+	{
+		Navigator.Clear();
+	}
 }
 
 simulated function PositionButtonContainer( UIPanel Control )

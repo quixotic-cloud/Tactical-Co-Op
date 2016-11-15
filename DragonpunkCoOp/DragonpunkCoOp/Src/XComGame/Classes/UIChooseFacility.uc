@@ -59,7 +59,10 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	AS_SetHeaders(m_strListLabel, m_strRequirementsLabel);
 
 	m_HelpBar = Spawn(class'UINavigationHelp', self).InitNavHelp();
+	m_HelpBar.bIsVerticalHelp = `ISCONTROLLERACTIVE;
 	m_HelpBar.AddBackButton(OnCancel);
+	if(`ISCONTROLLERACTIVE)
+		m_HelpBar.AddSelectNavHelp();
 
 	// Game
 	m_arrFacilities = class'X2StrategyElementTemplateManager'.static.GetStrategyElementTemplateManager().GetBuildableFacilityTemplates();
@@ -83,6 +86,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	{
 		`HQPRES.UIPowerCoilShielded();
 	}
+	m_List.Navigator.SelectFirstAvailable();
 }
 
 simulated function int SortFacilities(X2FacilityTemplate A, X2FacilityTemplate B)

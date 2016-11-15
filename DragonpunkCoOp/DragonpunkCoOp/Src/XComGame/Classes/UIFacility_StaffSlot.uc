@@ -27,6 +27,16 @@ simulated function string GetNewLocationString(XComGameState_StaffSlot StaffSlot
 	return StaffSlotState.GetFacility().GetMyTemplate().DisplayName;
 }
 
+simulated function OnLoseFocus()
+{
+	super.OnLoseFocus();
+
+	if (`ISCONTROLLERACTIVE)
+	{
+		if (StaffContainer.m_kPersonnelDropDown != none)
+			StaffContainer.m_kPersonnelDropDown.Hide();
+	}
+}
 //==============================================================================
 
 defaultproperties

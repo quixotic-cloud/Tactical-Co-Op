@@ -35,6 +35,31 @@ simulated function OnClickRoomFunc( UIPanel kControl, int cmd )
 	}
 }
 
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	if (cmd == class'UIUtilities_Input'.const.FXS_BUTTON_A)
+	{
+		onRoomFunctionDelegate();
+		return true;
+	}
+	
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function OnReceiveFocus()
+{
+	MC.FunctionVoid("mouseIn");
+}
+
+simulated function OnLoseFocus()
+{
+	MC.FunctionVoid("mouseOut");
+}
 //==============================================================================
 
 defaultproperties

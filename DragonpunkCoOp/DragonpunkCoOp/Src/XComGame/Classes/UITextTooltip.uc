@@ -74,9 +74,55 @@ simulated function ShowTooltip()
 		PreviousDataIndex = DataIndex;
 		UpdateData();
 	}
-	super.ShowTooltip();
+	if(DataIndex != -1 )
+		super.ShowTooltip();
 }
 
+simulated function HideTooltip(optional bool bAnimateIfPossible)
+{
+	PreviousDataIndex = INDEX_NONE;
+	super.HideTooltip(bAnimateIfPossible);
+}
+
+simulated function SetFollowMouse(bool bShouldFollowMouse)
+{
+	bFollowMouse = bShouldFollowMouse;
+
+	if (DataIndex <= INDEX_NONE)
+	{
+		return;
+	}
+
+	TextTooltipData[DataIndex].bFollowMouse = bShouldFollowMouse;
+}
+
+simulated function SetDelay(float Delay)
+{
+	tDelay = Delay;
+
+	if (DataIndex <= INDEX_NONE)
+	{
+		return;
+	}
+
+	TextTooltipData[DataIndex].tDelay = Delay;
+}
+
+simulated function SetTooltipPosition(float NewX, float NewY)
+{
+	MC.BeginFunctionOp("SetLocation");
+	MC.QueueNumber(NewX);
+	MC.QueueNumber(NewY);
+	MC.EndOp();
+
+	if (DataIndex <= INDEX_NONE)
+	{
+		return;
+	}
+
+	TextTooltipData[DataIndex].X = NewX;
+	TextTooltipData[DataIndex].Y = NewY;
+}
 public function UpdateData()
 {
 	local bool bUseCachedData;

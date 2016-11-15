@@ -9,7 +9,7 @@
 
 class UIStrategyMapItem_Continent extends UIStrategyMapItem;
 
-var int m_iContinentLevel; 
+var int m_iContinentLevel;
 
 var public localized String m_strBonusAchieved;
 var public localized String m_strBonusHelp;
@@ -33,9 +33,16 @@ function GenerateTooltip(string NewTooltipHTML)
 
 	tooltipID = Movie.Pres.m_kTooltipMgr.AddNewTooltipTextBox(TooltipStr, 15, 0, string(MCPath), , false, , true);
 	Movie.Pres.m_kTooltipMgr.TextTooltip.SetMouseDelegates(TooltipID, UpdateTooltipText);
+	m_iTooltipDataIndex = tooltipID;
 
 	bHasTooltip = true;
 }
+
+simulated function string GetTooltipHtmlString()
+{
+	return GetTooltipString(MapPin_Tooltip);
+}
+
 
 //This is called on mouse in triggering the tooltip. The status may have changed but not updated the item yet, 
 //and so we need to rebuild the text each time. 

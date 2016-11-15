@@ -13,9 +13,12 @@ var localized string            m_strCharacterHeaderText;
 var localized string			m_strAdventPrefix;
 var localized string			m_strSoldierClassDivider;
 
+var localized string m_strAbilityInfo;
 var X2MPCharacterTemplate m_kCurrentCharacterTemplate;
 var UISoldierHeader SoldierHeader;
 var UINavigationHelp NavHelp;
+var XComGameState_Unit SelectedUnit;
+var UIAbilityInfoScreen AbilityInfoScreen;
 
 delegate OnAccept(X2MPCharacterTemplate kSelectedTemplate);
 delegate OnBack();
@@ -38,12 +41,20 @@ function InitCharacterTemplateSelector(delegate<OnAccept> InitOnAccept, delegate
 	PopulateData();
 	
 	//SetX(260); // center the screen
+	if(List != None)
+		List.SetSelectedIndex(0);
+	Navigator.SelectFirstAvailable();
 }
 
 simulated function UpdateNavHelp()
 {
 	NavHelp.ClearButtonHelp();
 	NavHelp.AddBackButton(Cancel);
+	if( `ISCONTROLLERACTIVE )
+	{
+		NavHelp.AddSelectNavHelp();
+		NavHelp.AddLeftHelp(m_strAbilityInfo, class'UIUtilities_Input'.const.ICON_LSCLICK_L3);
+	}
 }
 
 simulated function PopulateData()
@@ -148,6 +159,7 @@ function SelectCharacterTemplate(X2MPCharacterTemplate kCharacterTemplate)
 	SoldierHeader.strMPForceName = strDisplayText;
 	
 	SoldierHeader.PopulateData(TempUnit, , , SquadState);
+	SelectedUnit = TempUnit;
 }
 
 function AcceptCurrentTemplate()
@@ -168,10 +180,24 @@ function Cancel()
 		CloseScreen();
 }
 
+simulated function ShowAbilityInfoScreen()
+{
+	AbilityInfoScreen = Spawn(class'UIAbilityInfoScreen', Movie.Pres.ScreenStack.GetCurrentScreen());
+	AbilityInfoScreen.InitAbilityInfoScreen(XComPlayerController(Movie.Pres.Owner), Movie);
+	AbilityInfoScreen.SetGameStateUnit(SelectedUnit);
+	Movie.Pres.ScreenStack.Push(AbilityInfoScreen);
+}
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local bool bHandled;
 
+	if (AbilityInfoScreen != none && Movie.Pres.ScreenStack.IsInStack(class'UIAbilityInfoScreen'))
+	{
+		if (AbilityInfoScreen.OnUnrealCommand(cmd, arg))
+		{
+			return true;
+		}
+	}
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
 
@@ -189,6 +215,9 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
 			Cancel();
 			break;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_L3:
+			ShowAbilityInfoScreen();
+			break;
 		default:
 			bHandled = false;
 			break;
@@ -197,8 +226,23 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	return bHandled || super.OnUnrealCommand(cmd, arg);
 }
 
+simulated function OnReceiveFocus()
+{
+	super.OnReceiveFocus();
+
+	UpdateNavHelp();
+}
+
+simulated function OnLoseFocus()
+{
+	super.OnLoseFocus();
+
+	NavHelp.ClearButtonHelp();
+}
 defaultproperties
 {
+	InputState = eInputState_Consume;
+
 	CameraTag="UIDisplay_MPShell";
 	DisplayTag="UIDisplay_MPShell";
 	Package = "/ package/gfxMultiplayerCharacterSelector/MultiplayerCharacterSelector";

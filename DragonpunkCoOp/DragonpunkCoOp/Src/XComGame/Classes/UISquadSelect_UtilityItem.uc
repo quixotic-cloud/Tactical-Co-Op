@@ -27,7 +27,9 @@ simulated function UIPanel InitPanel(optional name InitName, optional name InitL
 {
 	super.InitPanel(InitName, InitLibID);
 	
-	Button = Spawn(class'UIButton', self).InitButton(,, OnButtonClicked);
+	//Button = Spawn(class'UIButton', self).InitButton(,, OnButtonClicked);
+	Button = Spawn(class'UIButton', self).InitButton(,, OnButtonClicked, eUIButtonStyle_NONE); //Default button style hides the entire button when mouse in inactive
+	Button.SetGamepadIcon(""); //Hides the nav-help gamepadicon
 	Button.bAnimateOnInit = false;
 	//Navigator.SetSelected(Button); 
 
@@ -153,8 +155,17 @@ simulated function OnReceiveFocus()
 {
 	if(!bIsFocused)
 	{
-		super.OnReceiveFocus();
-		GetParent(class'UISquadSelect_ListItem', true).OnReceiveFocus();
+		if(Movie.IsMouseActive())
+		{
+			super.OnReceiveFocus();
+			GetParent(class'UISquadSelect_ListItem', true).OnReceiveFocus();
+		}
+		else
+		{
+			//console version doesn't use normal navigation system
+			bIsFocused = true;
+			Button.MC.FunctionVoid("mouseIn");
+		}
 	}
 }
 
@@ -162,8 +173,17 @@ simulated function OnLoseFocus()
 {
 	if(bIsFocused)
 	{
-		super.OnLoseFocus();
-		GetParent(class'UISquadSelect_ListItem', true).OnLoseFocus();
+		if(Movie.IsMouseActive())
+		{
+			super.OnLoseFocus();
+			GetParent(class'UISquadSelect_ListItem', true).OnLoseFocus();
+		}
+		else
+		{
+			//console version doesn't use normal navigation system
+			bIsFocused = false;
+			Button.MC.FunctionVoid("mouseOut");
+		}
 	}
 }
 

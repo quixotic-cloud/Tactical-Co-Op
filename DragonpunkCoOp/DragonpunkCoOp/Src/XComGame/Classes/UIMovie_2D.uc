@@ -88,7 +88,6 @@ simulated function PushForceShowUI()
 {
 	ForceShowCount++;
 	Show();
-	bShownNormally = false;
 }
 
 simulated function PopForceShowUI()

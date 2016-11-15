@@ -98,24 +98,46 @@ simulated function BindLibraryItem()
 
 		Button1 = Spawn(class'UIButton', ButtonGroup);
 		Button1.SetResizeToText( false );
-		Button1.InitButton('Button0', "");
+		Button1.InitButton('Button0', "",, eUIButtonStyle_NONE);
+		Button1.OnSizeRealized = OnButtonSizeRealized;
 
 		Button2 = Spawn(class'UIButton', ButtonGroup);
 		Button2.SetResizeToText( false );
-		Button2.InitButton('Button1', "");
+		Button2.InitButton('Button1', "",, eUIButtonStyle_NONE);
+		Button2.OnSizeRealized = OnButtonSizeRealized;
 
 		Button3 = Spawn(class'UIButton', ButtonGroup);
 		Button3.SetResizeToText( false );
-		Button3.InitButton('Button2', "");
+		Button3.InitButton('Button2', "",, eUIButtonStyle_NONE);
+		Button3.OnSizeRealized = OnButtonSizeRealized;
 
 		ConfirmButton = Spawn(class'UIButton', LibraryPanel);
-		ConfirmButton.SetResizeToText( false );
-		ConfirmButton.InitButton('ConfirmButton', "", OnLaunchClicked);
+		if( `ISCONTROLLERACTIVE == false )
+		{
+			ConfirmButton.SetResizeToText(false);
+			ConfirmButton.InitButton('ConfirmButton', "", OnLaunchClicked);
+		}
+		else
+		{
+			//ConfirmButton.InitButton('ConfirmButton', "", OnLaunchClicked);
+			ConfirmButton.InitButton('ConfirmButton', "", OnLaunchClicked, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+			ConfirmButton.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+			ConfirmButton.OnSizeRealized = OnButtonSizeRealized;
+			ConfirmButton.SetX(1525.0);
+			ConfirmButton.SetY(709.0);
+			ConfirmButton.SetWidth(300);
+		}
+
+		ConfirmButton.DisableNavigation();
 
 		ShadowChamber = Spawn(class'UIPanel', LibraryPanel);
 		ShadowChamber.InitPanel('ShadowChamber');		
 		ShadowChamber.DisableNavigation();
 	}
+}
+simulated function OnButtonSizeRealized()
+{
+	ConfirmButton.SetX(1525.0 - ConfirmButton.Width / 2.0);
 }
 
 //Override this in child classes. 
@@ -153,6 +175,8 @@ simulated function RefreshNavigation()
 	else
 	{
 		Button1.DisableNavigation();
+		Button1.Hide();
+		Button1.Remove();
 	}
 
 	if( Button2.bIsVisible )
@@ -162,6 +186,8 @@ simulated function RefreshNavigation()
 	else
 	{
 		Button2.DisableNavigation();
+		Button2.Hide();
+		Button2.Remove();
 	}
 
 	if( Button3.bIsVisible )
@@ -171,6 +197,8 @@ simulated function RefreshNavigation()
 	else
 	{
 		Button3.DisableNavigation();
+		Button3.Hide();
+		Button3.Remove();
 	}
 
 	if( LockedPanel != none && LockedPanel.bIsVisible )
@@ -179,12 +207,19 @@ simulated function RefreshNavigation()
 		Button1.DisableNavigation();
 		Button2.DisableNavigation();
 		Button3.DisableNavigation();
+		Button1.Hide();
+		Button2.Hide();
+		Button3.Hide();
+		Button1.Remove();
+		Button2.Remove();
+		Button3.Remove();
 	}
 
 	LibraryPanel.bCascadeFocus = false;
 	LibraryPanel.SetSelectedNavigation();
 	ButtonGroup.bCascadeFocus = false;
 	ButtonGroup.SetSelectedNavigation();
+	ConfirmButton.DisableNavigation();
 
 	if( Button1.bIsNavigable )
 		Button1.SetSelectedNavigation();
@@ -199,6 +234,25 @@ simulated function RefreshNavigation()
 
 	if( ShadowChamber != none )
 		ShadowChamber.DisableNavigation();
+		
+	ButtonGroup.DisableNavigation();
+	Navigator.Clear();
+	if (Button1.bIsVisible)
+	{
+		Navigator.AddControl(Button1);
+	}
+
+	if (Button2.bIsVisible)
+	{
+		Navigator.AddControl(Button2);
+	}
+
+	if (Button3.bIsVisible)
+	{
+		Navigator.AddControl(Button3);
+	}
+
+	Navigator.LoopSelection = true;
 }
 
 simulated function BuildOptionsPanel(); //Overwritten in child classes if applicable. 
@@ -231,7 +285,11 @@ simulated function AddIgnoreButton()
 {
 	if(CanBackOut())
 	{
-		`HQPRES.m_kAvengerHUD.NavHelp.AddLeftHelp(m_strIgnore, "", OnCancelClickedNavHelp);
+		//<bsg> TTP_MISSION_UI_DOUBLE_CANCEL_NAV_BUTTONS jneal 6/28/16
+		//DEL:
+		//`HQPRES.m_kAvengerHUD.NavHelp.AddLeftHelp(m_strIgnore, "", OnCancelClickedNavHelp);
+		//`HQPRES.m_kAvengerHUD.NavHelp.AddLeftHelp(m_strIgnore, class'UIUtilities_Input'.static.GetBackButtonIcon(), OnCancelClickedNavHelp);
+		//</bsg>
 	}
 }
 
@@ -326,6 +384,7 @@ simulated function OnRemoved()
 	if(GetMission().GetMissionSource().DataName != 'MissionSource_Final' || class'XComGameState_HeadquartersXCom'.static.GetObjectiveStatus('T5_M3_CompleteFinalMission') != eObjectiveState_InProgress)
 	{
 		HQPRES().CAMRestoreSavedLocation();
+		`HQPRES.StrategyMap2D.ShowCursor();
 	}
 
 	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
@@ -495,7 +554,6 @@ simulated function bool CanBackOut()
 
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
-	local UIButton CurrentButton;
 	if(!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
 		return false;
 
@@ -505,20 +563,20 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 	case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
 
-		CurrentButton = UIButton(ButtonGroup.Navigator.GetSelected());
-		if( CurrentButton.bIsVisible && !CurrentButton.IsDisabled )
+
+
+		if (ConfirmButton != none && ConfirmButton.bIsVisible && !ConfirmButton.IsDisabled)
 		{
-			CurrentButton.Click();
-			
-			if( CanBackOut() )
-			{
-				CloseScreen();
-			}
+			ConfirmButton.OnClickedDelegate(ConfirmButton);
 			return true;
 		}
-		//If you don't have a current button, fall down and hit the Navigation system. 
-		break;
+		else if (Button1 != none && Button1.bIsVisible && !Button1.IsDisabled)
+		{
+			Button1.OnClickedDelegate(Button1);
+			return true;
+		}
 
+		//If you don't have a current button, fall down and hit the Navigation system. 
 	case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
 	case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:

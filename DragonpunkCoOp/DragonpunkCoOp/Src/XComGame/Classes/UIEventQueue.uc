@@ -36,11 +36,15 @@ simulated function UIEventQueue InitEventQueue()
 	
 	ExpandButton = Spawn(class'UIButton', self);
 	ExpandButton.InitButton('ExpandButtonMC', "", ToggleExpanded);
+	ExpandButton.DisableNavigation();
 
 	List = Spawn(class'UIList', self);
 	List.InitList('', -125, 0, Width, Height, , false);
+	List.Navigator.HorizontalNavigation = false;
 	List.bStickyHighlight = false;
 	HideList();
+
+	Navigator.HorizontalNavigation = false;
 
 	return self;
 }
@@ -178,12 +182,10 @@ simulated function HideList()
 simulated function DeactivateButtons()
 {
 	local int i; 
-	local UIEventQueue_ListItem ListItem; 
 	
 	for( i = 0; i < List.ItemCount; i++ )
 	{
-		ListItem = UIEventQueue_ListItem(List.GetItem(i));
-		ListItem.AS_SetButtonsEnabled(false, false, false);
+		List.GetItem(i).OnLoseFocus();
 	}
 }
 
@@ -201,10 +203,54 @@ simulated function ToggleExpanded(UIButton Button)
 	UIAvengerHUD(Screen).ShowEventQueue(bIsExpanded);
 }
 
+simulated function int GetListItemCount()
+{
+	return List.ItemCount;
+}
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	switch (cmd)
+	{
+		case class'UIUtilities_Input'.const.FXS_BUTTON_R3:
+			if (bIsVisible && ExpandButton.bIsVisible) 
+			{
+				ToggleExpanded(none);
+				return true;
+			}
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RTRIGGER:  
+			if(OnUpButtonClicked != none && List.SelectedIndex > 0)
+			{
+        		OnUpButtonClicked(List.SelectedIndex); 
+			}
+			break; 
+
+        case class'UIUtilities_Input'.const.FXS_BUTTON_LTRIGGER:    
+        	if(OnDownButtonClicked != none && List.SelectedIndex >= 0 && List.SelectedIndex < List.ItemCount - 1)
+        	{
+				OnDownButtonClicked(List.SelectedIndex);
+        	}
+        	break; 
+
+        case class'UIUtilities_Input'.const.FXS_BUTTON_L3:      
+        	if(OnCancelButtonClicked != none)
+        	{
+				OnCancelButtonClicked(List.SelectedIndex);
+        	}
+			break;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
 defaultproperties
 {
 	bIsExpanded = false;
-	LibID = "X2EventList"; 
+	LibID = "X2EventList";
 
 	Width = 355;
 	Height = 700; 

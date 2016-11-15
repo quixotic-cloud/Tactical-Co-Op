@@ -33,6 +33,10 @@ simulated function BuildScreen()
 	// Add Interception warning and Shadow Chamber info 
 	super.BuildScreen();
 
+	Navigator.Clear();
+	Button1.OnLoseFocus();
+	Button2.OnLoseFocus();
+	Button3.OnLoseFocus();
 	PlaySFX("Geoscape_Supply_Raid_Popup");
 	XComHQPresentationLayer(Movie.Pres).CAMSaveCurrentLocation();
 
@@ -44,6 +48,24 @@ simulated function BuildScreen()
 	{
 		XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(GetMission().Get2DLocation(), CAMERA_ZOOM);
 	}
+	// For this particular screen Button1, and Button2 are specifically getting used.
+	// INS:
+	Button1.SetResizeToText(true);
+	Button2.SetResizeToText(true);
+	Button1.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+	Button1.SetGamepadIcon(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+	Button2.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+	Button2.SetGamepadIcon(class 'UIUtilities_Input'.static.GetBackButtonIcon());
+}
+simulated function OnButtonSizeRealized()
+{
+	super.OnButtonSizeRealized();
+
+	Button1.SetX(-Button1.Width / 2.0);
+	Button2.SetX(-Button2.Width / 2.0);
+
+	Button1.SetY(10.0);
+	Button2.SetY(40.0);
 }
 
 simulated function BuildMissionPanel()
@@ -80,6 +102,25 @@ simulated function BuildOptionsPanel()
 	LibraryPanel.MC.QueueString("");
 
 	LibraryPanel.MC.EndOp();
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if(!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+		return false;
+
+	switch(cmd)
+	{
+	case class 'UIUtilities_Input'.const.FXS_BUTTON_A:
+	case class 'UIUtilities_Input'.const.FXS_KEY_ENTER:
+	case class 'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
+		if(Button1 != none && Button1.OnClickedDelegate != none)
+		{
+			Button1.OnClickedDelegate(Button1);
+			return true;
+		}
+	}
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 //-------------- EVENT HANDLING --------------------------------------------------------

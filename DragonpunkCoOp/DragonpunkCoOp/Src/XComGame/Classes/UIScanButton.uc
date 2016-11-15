@@ -45,6 +45,7 @@ var bool bExpandOnRealize; // Triggers the expansion call upon realize, after da
 
 var public delegate<OnClickDefault> onClickDefaultDelegate;
 var public delegate<OnClickFaction> onClickFactionDelegate;
+delegate OnSizeRealized();
 
 delegate OnClickDefault();
 delegate OnClickFaction();
@@ -61,6 +62,7 @@ simulated function OnInit()
 	super.OnInit();
 	
 	ShowScanIcon(bShowScanIcon, true);
+	SetButtonType(Type, true);
 
 	if( bDirty ) Realize();
 }
@@ -93,14 +95,21 @@ simulated function UIScanButton SetButtonState(EUIScanButtonState NewButtonState
 
 	return self;
 }
-simulated function UIScanButton SetButtonType(EUIScanButtonType NewType)
-{
-	// Adding an init check here, because this function gets hammered. See comment in SetButtonTypeAndState().
-	if( !bIsInited ) return self;
 
-	if( Type != NewType )
+simulated function EUIScanButtonType GetButtonType()
+{
+	return Type;
+}
+
+simulated function UIScanButton SetButtonType(EUIScanButtonType NewType, bool bForce = false)
+{
+	if( Type != NewType || bForce)
 	{
 		Type = NewType;
+
+		// Adding an init check here, because this function gets hammered. See comment in SetButtonTypeAndState().
+		if( !bIsInited ) return self;
+
 		MC.FunctionNum("setButtonType", Type);
 		bDirty = true;
 	}
@@ -217,7 +226,7 @@ simulated function UIScanButton Realize()
 	//animate expansion in should be called before realize
 	if( bExpandOnRealize )
 	{
-		MC.FunctionBool("setAnimateExpansionIn", true);
+		MC.FunctionBool("setAnimateExpansionIn", true); //bsg-jneal (7.20.16): removing initial expand animation on realize as it was triggering for everything, going to leave this here as a reminder in case we ever want it back
 		bExpandOnRealize = false;
 	}
 
@@ -275,18 +284,35 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 	}
 }
 
-function SetFactionTooltip(string tooltipHTML)
+simulated function OnCommand(string cmd, string arg)
+{
+	local array<string> sizeData;
+	if (cmd == "RealizeSize")
+	{
+		sizeData = SplitString(arg, ",");
+		Width = float(sizeData[0]);
+		Height = float(sizeData[1]);
+		if (OnSizeRealized != none)
+		{
+			OnSizeRealized();
+		}
+	}
+}
+
+function int SetFactionTooltip(string tooltipHTML)
 {
 	local int TooltipID; 
 	TooltipID = Movie.Pres.m_kTooltipMgr.AddNewTooltipTextBox(tooltipHTML, 15, 0, MCPath$".scanFactionButton", , false, , true, , , , , , 0.0 /*no delay*/);
 	Movie.Pres.m_kTooltipMgr.TextTooltip.SetUsePartialPath(TooltipID, true);
+	return TooltipID;
 }
 
-function SetScannerTooltip(string tooltipHTML)
+function int SetScannerTooltip(string tooltipHTML)
 {
 	local int TooltipID;
 	TooltipID = Movie.Pres.m_kTooltipMgr.AddNewTooltipTextBox(tooltipHTML, 15, 0, MCPath$".scanScannerButton", , false, , true, , , , , , 0.0 /*no delay*/);
 	Movie.Pres.m_kTooltipMgr.TextTooltip.SetUsePartialPath(TooltipID, true);
+	return TooltipID;
 }
 
 simulated function ClickButtonDefault()
@@ -306,6 +332,27 @@ simulated function ClickButtonFaction()
 		onClickFactionDelegate();
 }
 
+simulated function OnReceiveFocus()
+{
+	if (ButtonState == eUIScanButtonState_Default)
+	{
+		MC.FunctionVoid("onReceiveFocusDefault");
+	}
+
+	MC.FunctionVoid("onReceiveFocusScanner");
+	MC.FunctionVoid("onReceiveFocusFaction");
+}
+
+simulated function OnLoseFocus()
+{
+	if (ButtonState == eUIScanButtonState_Default)
+	{
+		MC.FunctionVoid("onLoseFocusDefault");
+	}
+
+	MC.FunctionVoid("onLoseFocusScanner");
+	MC.FunctionVoid("onLoseFocusFaction");
+}
 
 defaultproperties
 {

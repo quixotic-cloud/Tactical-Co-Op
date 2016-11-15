@@ -73,12 +73,29 @@ simulated function PopulateData()
 	ClassRowItem.ClassName = ClassTemplate.DataName;
 	ClassRowItem.SetRankData(class'UIUtilities_Image'.static.GetRankIcon(1, ClassTemplate.DataName), Caps(class'X2ExperienceConfig'.static.GetRankName(1, ClassTemplate.DataName)));
 		
-	AbilityTemplate2 = AbilityTemplateManager.FindAbilityTemplate(AbilityTree[0].AbilityName);
-	if (AbilityTemplate2 != none)
+	AbilityTree = ClassTemplate.GetAbilityTree(0);
+	AbilityTemplate1 = AbilityTemplateManager.FindAbilityTemplate(AbilityTree[0].AbilityName);
+	AbilityTemplate2 = AbilityTemplateManager.FindAbilityTemplate(AbilityTree[1].AbilityName);
+
+	bHasAbility1 = Unit.HasSoldierAbility(AbilityTemplate1.DataName);
+	bHasAbility2 = Unit.HasSoldierAbility(AbilityTemplate2.DataName);
+	if (bHasAbility1 && AbilityTemplate1 != none)
+	{
+		ClassRowItem.AbilityName2 = AbilityTemplate1.DataName;
+		AbilityName2 = Caps(AbilityTemplate1.LocFriendlyName);
+		AbilityIcon2 = AbilityTemplate1.IconImage;
+	}
+	else if(bHasAbility2 && AbilityTemplate2 != none)
 	{
 		ClassRowItem.AbilityName2 = AbilityTemplate2.DataName;
 		AbilityName2 = Caps(AbilityTemplate2.LocFriendlyName);
 		AbilityIcon2 = AbilityTemplate2.IconImage;
+	}
+	else
+	{
+		ClassRowItem.AbilityName2 = AbilityTemplate2.DataName;
+		AbilityName2 =class'UIUtilities_Text'.static.GetColoredText(m_strAbilityLockedTitle, eUIState_Disabled);
+		AbilityIcon2 = class'UIUtilities_Image'.const.UnknownAbilityIcon;
 	}
 
 	ClassRowItem.SetEquippedAbilities(true, true);
@@ -136,6 +153,7 @@ simulated function PopulateData()
 	class'UIUtilities_Strategy'.static.PopulateAbilitySummary(self, Unit);
 	List.SetSelectedIndex(-1);
 	PreviewRow(List, -1);
+	Navigator.SetSelected(ClassRowItem);
 }
 
 simulated function PreviewRow(UIList ContainerList, int ItemIndex)
@@ -214,4 +232,15 @@ simulated function PreviewRow(UIList ContainerList, int ItemIndex)
 	}
 
 	MC.EndOp();
+	
+	if (Rank == 0)
+	{
+		ClassRowItem.SetSelectedAbility(1);
+	}
+	else
+	{
+		UIArmory_PromotionItem(List.GetItem(ItemIndex)).SetSelectedAbility(SelectedAbilityIndex);
+	}
+
+	UpdateNavHelp();
 }

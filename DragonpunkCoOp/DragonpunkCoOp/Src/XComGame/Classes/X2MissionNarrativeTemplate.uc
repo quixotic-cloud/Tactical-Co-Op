@@ -15,6 +15,7 @@ var() name QuestItemTemplateName; // Allows you to make item specific narrative 
 var() privatewrite localized array<string> ObjectiveTextPools; // List of text lines to display in the objectives hud for this template.
 var() array<string> NarrativeMoments; // List of narrative moments for this template.
 
+var() privatewrite localized array<string> ConsoleObjectiveTextPools; // Console override text lines.
 var private localized string CouldNotFindTextMessage;
 var private localized string NoItemMessage;
 
@@ -49,7 +50,15 @@ function string GetObjectiveText(int TextLine)
 	ActiveQuestItem = MissionManager.GetQuestItemTemplateForMissionType(MissionType);
 	QuestItemTemplate = X2QuestItemTemplate(class'X2ItemTemplateManager'.static.GetItemTemplateManager().FindItemTemplate(ActiveQuestItem));
 
-	ObjText = ObjectiveTextPools[TextLine];
+	if (ConsoleObjectiveTextPools[TextLine] == "" || 
+		`XPROFILESETTINGS == none ? true : !`ISCONTROLLERACTIVE)
+	{
+		ObjText = ObjectiveTextPools[TextLine];
+	}
+	else
+	{
+		ObjText = ConsoleObjectiveTextPools[TextLine];
+	}	
 	while( InStr(ObjText, "%QUESTITEM%") != INDEX_NONE )
 	{
 		if (QuestItemTemplate == none)
@@ -70,6 +79,7 @@ function string GetObjectiveText(int TextLine)
 			QuestItemText = QuestItemTemplate.GetItemFriendlyName();
 		}
 		ObjText = Repl(ObjectiveTextPools[TextLine], "%QUESTITEM%", QuestItemText, false);
+		ObjText = Repl(ObjText, "%QUESTITEM%", QuestItemText, false);
 	}
 
 	if(InStr(ObjText, "%KEY:") != INDEX_NONE)
@@ -88,6 +98,7 @@ function string GetObjectiveText(int TextLine)
 			`Redscreen("Failed to find key binding localized for mission narrative text:\n"$ObjectiveTextPools[TextLine]);
 		}
 	}
+	ObjText = class'UIUtilities_Input'.static.InsertGamepadIcons(ObjText);
 			
 	return ObjText;
 }

@@ -39,6 +39,8 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	super.InitScreen(InitController, InitMovie, InitName);
 
 	ItemCard.Hide();
+	Navigator.SetSelected(List);
+	List.SetSelectedIndex(0);
 }
 
 simulated function PopulateData()

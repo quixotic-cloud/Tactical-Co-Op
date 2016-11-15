@@ -36,12 +36,31 @@ simulated function UIPanel InitAbilityItem(optional name InitName)
 	return self;
 }
 
+simulated function ClearData()
+{
+	if (!bIsInited)
+	{
+		return;
+	}
+
+	SetAvailable(false);	
+	SetCooldown("");
+	SetCharge("");
+	Icon.LoadIcon("");
+	Icon.EnableMouseAutomaticColor(class'UIUtilities_Colors'.const.NORMAL_HTML_COLOR, class'UIUtilities_Colors'.const.BLACK_HTML_COLOR);
+	Icon.SetAlpha(0.08f);
+	RefreshShine();
+	MC.FunctionBool("SetOverwatchButtonHelp", false);
+}
+
 simulated function UpdateData(int NewIndex, const out AvailableAction AvailableActionInfo)
 {
 	local XComGameState_BattleData BattleDataState;
 	local bool bCoolingDown;
 	local int iTmp;
 	local XComGameState_Ability AbilityState;   //Holds INSTANCE data for the ability referenced by AvailableActionInfo. Ie. cooldown for the ability on a specific unit
+	local bool OverwatchHelpVisible;
+	local bool ReloadHelpVisible;
 
 	Index = NewIndex; 
 
@@ -68,6 +87,29 @@ simulated function UpdateData(int NewIndex, const out AvailableAction AvailableA
 		// Set Antenna text, PC only
 		if(Movie.IsMouseActive())
 			SetAntennaText(Caps(AbilityState.GetMyFriendlyName()));
+
+		OverwatchHelpVisible = AbilityTemplate.DefaultKeyBinding == class'UIUtilities_Input'.const.FXS_KEY_Y &&
+			AvailableActionInfo.AvailableCode == 'AA_Success' &&
+			UITacticalHUD_AbilityContainer(Owner).GetAbilityStateByHotKey(class'UIUtilities_Input'.const.FXS_KEY_Y) == AbilityState &&
+			(!`REPLAY.bInTutorial || `TUTORIAL.IsNextAbility(AbilityTemplate.DataName));
+
+		ReloadHelpVisible = AbilityTemplate.DefaultKeyBinding == class'UIUtilities_Input'.const.FXS_KEY_R &&
+			AvailableActionInfo.AvailableCode == 'AA_Success' &&
+			UITacticalHUD_AbilityContainer(Owner).GetAbilityStateByHotKey(class'UIUtilities_Input'.const.FXS_KEY_R) == AbilityState &&
+			(!`REPLAY.bInTutorial || `TUTORIAL.IsNextAbility(AbilityTemplate.DataName));
+
+		if (OverwatchHelpVisible && `ISCONTROLLERACTIVE)
+		{
+			MC.FunctionBool("SetOverwatchButtonHelp", true);
+		}
+		else if (ReloadHelpVisible && `ISCONTROLLERACTIVE)
+		{
+			MC.FunctionBool("SetReloadButtonHelp", true);
+		}
+		else
+		{
+			MC.FunctionBool("SetOverwatchButtonHelp", false);
+		}
 	}
 
 	iTmp = AbilityState.GetCharges();
@@ -249,11 +291,8 @@ simulated function HideShine()
 
 simulated function SetAvailable(bool Available)
 {
-	if(IsAvailable != Available)
-	{
-		IsAvailable = Available;
-		MC.FunctionBool("SetAvailable", IsAvailable);
-	}
+	IsAvailable = Available;
+	MC.FunctionBool("SetAvailable", IsAvailable);
 }
 
 simulated function Show()

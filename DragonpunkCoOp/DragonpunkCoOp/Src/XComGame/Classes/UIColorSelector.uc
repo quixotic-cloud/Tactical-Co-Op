@@ -56,6 +56,7 @@ simulated function UIColorSelector InitColorSelector(optional name InitName,
 
 	CreateColorChips(initColors);
 
+	ChipContainer.Navigator.OnSelectedIndexChanged = OnSelectionIndexChanged;
 	return self; 
 }
 
@@ -179,6 +180,7 @@ simulated function SetInitialSelection()
 			ChipContainer.Navigator.SetSelected(ColorChips[0]);
 		}
 	}
+	ScrollToRow(UIColorChip(ChipContainer.Navigator.GetSelected()).Row);
 }
 
 simulated function float GetChipX( int iCol )
@@ -270,6 +272,30 @@ simulated function OnChildMouseEvent( UIPanel control, int cmd )
 		Scrollbar.OnMouseScrollEvent(1);
 }
 
+simulated function OnSelectionIndexChanged(int Index)
+{
+	ScrollToRow(UIColorChip(ChipContainer.Navigator.GetSelected()).Row);
+	OnPreviewColor(Index);
+}
+
+simulated function ScrollToRow(int iRow)
+{
+	local int MaxRow;
+	MaxRow = ColorChips[ColorChips.Length - 1].Row;
+
+	if (iRow < 0)
+	{
+		iRow = MaxRow;
+	}
+	
+	if (iRow > MaxRow)
+	{
+		iRow = 0;
+	}
+
+	Scrollbar.SetThumbAtPercent(iRow / float(MaxRow));
+}
+
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local UIPanel Chip;
@@ -278,7 +304,7 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		return false;
 
 	Chip = ChipContainer.Navigator.GetSelected();
-	if (Chip != none && Chip.Navigator.OnUnrealCommand(cmd, arg))
+	if (Chip != none && (Chip.Navigator.OnUnrealCommand(cmd, arg) || Chip.OnUnrealCommand(cmd, arg)))
 	{
 		return true;			
 	}

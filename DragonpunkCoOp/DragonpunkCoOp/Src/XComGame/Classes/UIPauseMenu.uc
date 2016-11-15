@@ -64,6 +64,9 @@ var int m_optExitGame;
 var int m_optQuitGame;
 var int m_optAcceptInvite;
 var bool bWasInCinematicMode;
+var protectedwrite UINavigationHelp NavHelp;
+delegate OnCancel();
+//</workshop>
 
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
 {
@@ -90,6 +93,20 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	XComTacticalController(PC).GetCursor().SetForceHidden(false);
 	`PRES.m_kUIMouseCursor.Show();
+	if (IsA('UIShellStrategy'))
+	{
+		NavHelp = InitController.Pres.GetNavHelp();
+	}
+	else if( XComHQPresentationLayer(Movie.Pres) != none)
+	{
+		NavHelp =`HQPRES.m_kAvengerHUD.NavHelp;
+	}
+	else
+	{
+		NavHelp = Spawn(class'UINavigationHelp', self).InitNavHelp();
+	}
+
+	UpdateNavHelp();
 }
 
 //----------------------------------------------------------------------------
@@ -104,9 +121,8 @@ simulated function OnInit()
 	
 	BuildMenu();
 	
-	SetHelp( 0, m_sCancel, 	 class'UIUtilities_Input'.static.GetBackButtonIcon());
-
 	SetSelected(List, 0);
+	List.SetSelectedIndex(0);
 
 	//If you've managed to fire up the pause menu while the state was transitioning to block input, get back out of here. 
 	bInputBlocked = XComTacticalInput(PC.PlayerInput) != none && XComTacticalInput(PC.PlayerInput).m_bInputBlocked;
@@ -117,6 +133,21 @@ simulated function OnInit()
 		OnUCancel();
 	}
 }
+
+simulated function UpdateNavHelp()
+{
+	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
+	NavHelp.AddBackButton(CloseScreen);
+
+	if( `ISCONTROLLERACTIVE )
+		NavHelp.AddSelectNavHelp();
+}
+
+/*simulated function bool IsGameComplete()
+{
+	return class'GameEngine'.static.GetOnlineSubsystem().GameDownloadInterface.IsGameComplete();
+}*/
 
 simulated event ModifyHearSoundComponent(AudioComponent AC)
 {
@@ -270,11 +301,18 @@ simulated public function OnChildClicked(UIList ContainerList, int ItemIndex)
 	}	
 }
 
+simulated function OnLoseFocus()
+{
+	super.OnLoseFocus();
+	NavHelp.ClearButtonHelp();
+}
 
 simulated function OnReceiveFocus() 
 {
 	super.OnReceiveFocus();
 	SetSelected(List, 0);
+	SetSelected(List, m_iCurrentSelection);
+	UpdateNavHelp();
 }
 
 simulated event Destroyed()
@@ -529,6 +567,10 @@ simulated public function OnUCancel()
 
 	if( `XWORLDINFO.GRI != none && `TACTICALGRI != none && `BATTLE != none )
 		`BATTLE.m_bInPauseMenu = false;
+	if (OnCancel != none)
+	{
+		OnCancel();
+	}
 
 	Movie.Pres.PlayUISound(eSUISound_MenuClose);
 	Movie.Stack.Pop(self);
@@ -674,7 +716,8 @@ simulated function BuildMenu()
 	UIListItemString(List.CreateItem()).InitListItem(m_sExitGame);
 
 	// no quit game on console or in MP. MP we only want exit so it will record a loss for you. -tsmith 
-	if( !WorldInfo.IsConsoleBuild() && kMPGRI == none )
+
+	if (`XPROFILESETTINGS != none )
 	{
 		m_optQuitGame= iCurrent++; 
 		//AS_AddOption(m_optQuitGame, m_sQuitGame, 0);
@@ -686,42 +729,6 @@ simulated function BuildMenu()
 	MC.FunctionVoid("AnimateIn");
 }
 
-
-/// ========== FLASH calls ========== 
-
-//Set the info in the standard help bar along the bottom of the screen 
-simulated function SetHelp(int index, string text, string buttonIcon)
-{
-	local ASValue myValue;
-	local Array<ASValue> myArray;
-
-	myValue.Type = AS_Number;
-	myValue.n = index;
-	myArray.AddItem( myValue );
-
-	myValue.Type = AS_String;
-	myValue.s = text;
-	myArray.AddItem( myValue );
-
-	myValue.Type = AS_String;
-	myValue.s = buttonIcon;
-	myArray.AddItem( myValue );
-
-	Invoke("SetHelp", myArray);
-}
-
-//simulated function AS_SetTitle( string Title )
-//{ Movie.ActionScriptVoid(MCPath$".SetTitle"); }
-
-//simulated  function AS_AddOption( int Index, string DisplayText, int iState )
-//{ Movie.ActionScriptVoid(MCPath$".AddOption"); }
-
-//simulated function AS_Selected( int iTarget )
-//{ Movie.ActionScriptVoid(MCPath$".SetListSelection"); }
-
-//simulated function AS_Clear()
-//{ Invoke("clear"); }
-
 simulated function OnRemoved()
 {
 	Movie.Stack.bCinematicMode = bWasInCinematicMode;
@@ -731,6 +738,12 @@ simulated function OnRemoved()
 simulated function OnExitButtonClicked(UIButton button)
 {
 	CloseScreen();
+}
+
+simulated function CloseScreen()
+{
+	super.CloseScreen();
+	NavHelp.ClearButtonHelp();
 }
 
 event Tick( float deltaTime )

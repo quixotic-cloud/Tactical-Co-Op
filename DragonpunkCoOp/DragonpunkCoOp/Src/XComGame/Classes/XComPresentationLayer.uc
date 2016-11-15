@@ -47,6 +47,7 @@ var public bool m_bIsDebugHideSelectedUnitDisc ; // Debug option to Hide the uni
 var XComMultiplayerUI           m_kMPInterface;
 
 //var protected PUIHUD            m_kProtoHUD;    // Specific ProtoUI HUD
+var protected bool				m_bZoomToggledIn;
 
 // TODO: Remove this when all proper UI screens are implemented. This is temp so that certain UI calls are blocking and spin wait.  -tsmith 
 var protected bool              HACK_bUIBusy;
@@ -298,6 +299,18 @@ simulated function ZoomCameraScroll( bool bZoomIn, optional float amount = CAMER
 	CameraStack.ZoomCameras(bZoomIn ? amount : -amount);
 }
 
+simulated function ToggleZoom()
+{
+	m_bZoomToggledIn = !m_bZoomToggledIn;
+	if (m_bZoomToggledIn)
+	{
+		ZoomCameraIn();
+	}
+	else
+	{
+		ZoomCameraOut();
+	}
+}
 //simulated function UITerrorInfoScreen()
 //{
 //	ScreenStack.Push( Spawn( class'UITerrorInfo', self ) );
@@ -1397,4 +1410,5 @@ defaultproperties
 	m_bIsDebugHideSelectedUnitDisc  = false;
 	m_bAllowEnemyArrowSystem = true;
 	m_strSuppressedIcon = "Icon_SUPRESSION_HTML";
+	m_bZoomToggledIn=true;
 }

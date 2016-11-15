@@ -33,6 +33,10 @@ simulated function BuildScreen()
 	// Add Interception warning and Shadow Chamber info
 	super.BuildScreen();
 
+	Navigator.Clear();
+	Button1.OnLoseFocus();
+	Button2.OnLoseFocus();
+	Button3.OnLoseFocus();
 	PlaySFX("Geoscape_UFO_Landed");
 	XComHQPresentationLayer(Movie.Pres).CAMSaveCurrentLocation();
 
@@ -44,6 +48,23 @@ simulated function BuildScreen()
 	{
 		XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(GetMission().Get2DLocation(), CAMERA_ZOOM);
 	}
+
+	Button1.SetResizeToText(true);
+	Button2.SetResizeToText(true);
+	Button1.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+	Button1.SetGamepadIcon(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+	Button2.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+	Button2.SetGamepadIcon(class 'UIUtilities_Input'.static.GetBackButtonIcon());
+}
+simulated function OnButtonSizeRealized()
+{
+	super.OnButtonSizeRealized();
+
+	Button1.SetX(-Button1.Width / 2.0);
+	Button2.SetX(-Button2.Width / 2.0);
+
+	Button1.SetY(10.0);
+	Button2.SetY(40.0);
 }
 
 simulated function BuildMissionPanel()

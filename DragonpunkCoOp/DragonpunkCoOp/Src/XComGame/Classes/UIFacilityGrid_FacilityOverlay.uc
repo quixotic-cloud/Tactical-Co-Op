@@ -17,6 +17,7 @@ struct TUIRoomData
 	var String strQueue;
 	var EUIState eBorderColor;
 	var int iAlpha;
+	var int iBackDropAlpha; // 0 - 100 alpha value.
 	var bool bHighlight;
 	var bool bClearing;
 	var bool bUnderConstruction;
@@ -60,6 +61,7 @@ var string Queue;
 var bool bUnderConstruction; 
 var bool m_bClearing;
 var bool bLocked;
+var privatewrite bool m_bCanCancelConstruction; //used to convert buttons to navhelp
 
 var localized string m_strEmpty;
 var localized string m_strHealth;
@@ -114,6 +116,8 @@ var localized string TooltipUpgrade;
 var localized string TooltipRemove;
 var localized string m_strShieldedPowerCoilTooltip;
 
+var private int BuildModeUnSelectedAlpha;
+var private int BuildModeUnSelectedBackGroundTextAlpha;
 //----------------------------------------------------------------------------
 // MEMBERS
 
@@ -192,7 +196,6 @@ simulated function InitLayout()
 simulated function InitActionButtons()
 {
 	local String strButton;
-	local UITextTooltip UpgradeTooltip, RemoveTooltip, CancelTooltip;
 
 	strButton = class'UIUtilities_Text'.static.GetColoredText(m_strUpgrade, eUIState_Good, 25);
 	UpgradeButton = Spawn(class'UIButton', self);
@@ -201,18 +204,8 @@ simulated function InitActionButtons()
 	UpgradeButton.Hide(); // start off hidden
 	SetHelperTooltip(UpgradeButton, TooltipUpgrade);
 	UpgradeButton.OnMouseEventDelegate = OnChildMouseEvent;
-
-	UpgradeTooltip = Spawn(class'UITextTooltip', Movie.Pres.m_kTooltipMgr);
-	UpgradeTooltip.Init();
-	UpgradeTooltip.bUsePartialPath = true;
-	UpgradeTooltip.tDelay = 0;
-	UpgradeTooltip.SetPosition(45, 0);
-	UpgradeTooltip.bRelativeLocation = true;
-	UpgradeTooltip.bFollowMouse = false;
-	UpgradeTooltip.sBody = TooltipUpgrade;
-	UpgradeTooltip.targetPath = string(UpgradeButton.MCPath);
-	UpgradeTooltip.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
-	UpgradeTooltip.ID = Movie.Pres.m_kTooltipMgr.AddPreformedTooltip(UpgradeTooltip);
+	UpgradeButton.SetTooltipText(TooltipUpgrade);
+	Movie.Pres.m_kTooltipMgr.TextTooltip.SetUsePartialPath(UpgradeButton.CachedTooltipId, true);
 
 	// ---------------
 
@@ -222,18 +215,8 @@ simulated function InitActionButtons()
 	RemoveButton.InitButton('OverlayRemoveButton', strButton, OnRemoveClicked, eUIButtonStyle_BUTTON_WHEN_MOUSE);
 	RemoveButton.Hide(); // start off hidden
 	RemoveButton.OnMouseEventDelegate = OnChildMouseEvent;
-
-	RemoveTooltip = Spawn(class'UITextTooltip', Movie.Pres.m_kTooltipMgr);
-	RemoveTooltip.Init();
-	RemoveTooltip.bUsePartialPath = true;
-	RemoveTooltip.tDelay = 0;
-	RemoveTooltip.SetPosition(0, 0);
-	RemoveTooltip.bRelativeLocation = true;
-	RemoveTooltip.bFollowMouse = false;
-	RemoveTooltip.sBody = TooltipRemove;
-	RemoveTooltip.targetPath = string(RemoveButton.MCPath);
-	RemoveTooltip.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_LEFT);
-	RemoveTooltip.ID = Movie.Pres.m_kTooltipMgr.AddPreformedTooltip(RemoveTooltip);
+	RemoveButton.SetTooltipText(TooltipRemove);
+	Movie.Pres.m_kTooltipMgr.TextTooltip.SetUsePartialPath(RemoveButton.CachedTooltipId, true);
 
 	//---------------
 
@@ -242,19 +225,9 @@ simulated function InitActionButtons()
 	CancelConstructionButton.bIsNavigable = false;
 	CancelConstructionButton.InitButton('OverlayCancelConstructionButton', strButton, OnCancelConstruction, eUIButtonStyle_BUTTON_WHEN_MOUSE);
 	CancelConstructionButton.Hide(); // start off hidden
+	CancelConstructionButton.SetTooltipText(TooltipCancelConstruction);
+	Movie.Pres.m_kTooltipMgr.TextTooltip.SetUsePartialPath(CancelConstructionButton.CachedTooltipId, true);
 	CancelConstructionButton.OnMouseEventDelegate = OnChildMouseEvent;
-
-	CancelTooltip = Spawn(class'UITextTooltip', Movie.Pres.m_kTooltipMgr);
-	CancelTooltip.Init();
-	CancelTooltip.bUsePartialPath = true;
-	CancelTooltip.tDelay = 0;
-	CancelTooltip.SetPosition(45, 0);
-	CancelTooltip.bRelativeLocation = true;
-	CancelTooltip.bFollowMouse = false;
-	CancelTooltip.sBody = TooltipCancelConstruction;
-	CancelTooltip.targetPath = string(CancelConstructionButton.MCPath);
-	CancelTooltip.SetAnchor(class'UIUtilities'.const.ANCHOR_TOP_RIGHT);
-	CancelTooltip.ID = Movie.Pres.m_kTooltipMgr.AddPreformedTooltip(CancelTooltip);
 }
 
 simulated function SetHelperTooltip( UIPanel TargetPanel, string Text)
@@ -367,6 +340,7 @@ simulated function UpdateTutorialLocked()
 	kData.bLocked = true;
 	kData.eBorderColor = eUIState_Disabled;
 	kData.iAlpha = 0;
+	kData.iBackDropAlpha = -1;
 
 	if( bIsFocused )
 	{
@@ -384,6 +358,7 @@ simulated function UpdateEmptyRoom()
 
 	kData.eBorderColor = eUIState_Good;
 
+	kData.iBackDropAlpha = -1;
 	if( IsBuildMode() )
 	{
 		if( bIsFocused )
@@ -395,7 +370,15 @@ simulated function UpdateEmptyRoom()
 		}
 		else
 		{
-			kData.iAlpha = 75;
+			if( `ISCONTROLLERACTIVE )
+			{
+				kData.iAlpha = BuildModeUnSelectedAlpha;
+				kData.iBackDropAlpha = BuildModeUnSelectedBackGroundTextAlpha;
+			}
+			else
+			{
+				kData.iAlpha = 75;
+			}
 		}
 	}
 	else
@@ -423,15 +406,26 @@ simulated function UpdateClearingRoom()
 
 	kData.bClearing = true;
 	kData.iAlpha = 75;
+	kData.iBackDropAlpha = -1;
 
 	ClearRoomProject = Room.GetClearRoomProject();
 	if( ClearRoomProject != none )
 	{
 		if (Room.GetClearRoomProject().MakingProgress())
 		{
+			if (bIsFocused)
+			{
+				kData.bHighlight = true;
 			kData.eBorderColor = eUIState_Warning;
 			kData.strTitle = Room.GetClearingInProgressLabel();
 			kData.strLabel = class'UIUtilities_Text'.static.GetTimeRemainingString(GetRoom().GetClearRoomProject().GetCurrentNumHoursRemaining());
+			}
+			else
+			{
+				kData.eBorderColor = eUIState_Warning;
+				kData.strTitle = Room.GetClearingInProgressLabel();
+				kData.strLabel = class'UIUtilities_Text'.static.GetTimeRemainingString(GetRoom().GetClearRoomProject().GetCurrentNumHoursRemaining());
+			}
 		}
 		else
 		{
@@ -449,6 +443,10 @@ simulated function UpdateClearingRoom()
 		if( bIsFocused )
 		{
 			kData.iAlpha = 100;
+		}
+		else
+		{
+			kData.iBackDropAlpha = BuildModeUnSelectedBackGroundTextAlpha;
 		}
 	}
 	else
@@ -472,6 +470,7 @@ simulated function UpdateLockedRoom()
 	kData.bLocked = true;
 	kData.eBorderColor = eUIState_Disabled;
 
+	kData.iBackDropAlpha = -1;
 	Room = GetRoom();
 
 	if (IsBuildMode())
@@ -486,7 +485,15 @@ simulated function UpdateLockedRoom()
 		}
 		else
 		{
-			kData.iAlpha = 75;
+			if( `ISCONTROLLERACTIVE )
+			{
+				kData.iAlpha = BuildModeUnSelectedAlpha;
+				kData.iBackDropAlpha = BuildModeUnSelectedBackGroundTextAlpha;
+			}
+			else
+			{
+				kData.iAlpha = 75;
+			}
 		}
 	}
 	else
@@ -513,6 +520,7 @@ simulated function UpdateFeatureRoom()
 
 	kData.eBorderColor = eUIState_Normal;
 
+	kData.iBackDropAlpha = -1;
 	Room = GetRoom();
 
 	if( IsBuildMode() )
@@ -562,7 +570,15 @@ simulated function UpdateFeatureRoom()
 		}
 		else
 		{
-			kData.iAlpha = 75;
+			if( `ISCONTROLLERACTIVE )
+			{
+				kData.iAlpha = BuildModeUnSelectedAlpha;
+				kData.iBackDropAlpha = BuildModeUnSelectedBackGroundTextAlpha;
+			}
+			else
+			{
+				kData.iAlpha = 75;
+			}
 
 			if (Room.HasShieldedPowerCoil()) // if the special feature is a cleared, set the border color to green
 			{
@@ -605,6 +621,7 @@ simulated function UpdateConstructionFacility()
 	kData.eBorderColor = eUIState_Warning;
 	kData.iAlpha = 75;
 	kData.bUnderConstruction = true;
+	kData.iBackDropAlpha = -1;
 
 	kData.strTitle = GetFacility().GetMyTemplate().DisplayName;
 
@@ -661,6 +678,7 @@ simulated function UpdateFacility()
 
 	Facility = GetFacility();
 	kData.eBorderColor = eUIState_Normal;
+	kData.iBackDropAlpha = -1;
 
 	if( Facility.DisplayStaffingInfo() )
 	{
@@ -672,25 +690,37 @@ simulated function UpdateFacility()
 	if( IsBuildMode() )
 	{
 		kData.strTitle = GetFacility().GetMyTemplate().DisplayName;
-		kData.bHighlight = true;
+		//WAS: do we need this switch? bsteiner 
+		//kData.bHighlight = true;
+		kData.bHighlight = false;
 		kData.bShowUpgrade = Facility.CanUpgrade();
 		kData.bShowRemove = true;
 
 		if( Facility.CanUpgrade() )
 		{
 			kData.bHighlight = true;
+			kData.bHighlight = false;
 			kData.bShowUpgrade = true;
 			kData.eBorderColor = eUIState_Normal;
 		}
 
 		if( bIsFocused )
 		{
+			kData.bHighlight = true;
 			kData.iAlpha = 100;
 			kData.bShowRemove = true;
 		}
 		else
 		{
-			kData.iAlpha = 50;
+			if( `ISCONTROLLERACTIVE )
+			{
+				kData.iAlpha = BuildModeUnSelectedAlpha;
+				kData.iBackDropAlpha = BuildModeUnSelectedBackGroundTextAlpha;
+			}
+			else
+			{
+				kData.iAlpha = 50;
+			}
 		}
 	}
 	else
@@ -722,6 +752,7 @@ simulated function UpdateCoreFacility()
 
 	Facility = GetFacility();
 	kData.eBorderColor = eUIState_Normal;
+	kData.iBackDropAlpha = -1;
 
 	if (Facility.DisplayStaffingInfo())
 	{
@@ -734,6 +765,7 @@ simulated function UpdateCoreFacility()
 	{
 		kData.bShowUpgrade = Facility.CanUpgrade();
 		kData.bShowRemove = Facility.CanRemove();
+		kData.strTitle = GetFacility().GetMyTemplate().DisplayName;
 	}
 	else
 	{
@@ -769,6 +801,7 @@ simulated function UpdateGridUI(TUIRoomData kData)
 	{
 		SetHighlighted(kData.bHighlight);
 		SetBorderAlpha(kData.iAlpha);
+		SetTextBackDropAlpha(kData.iBackDropAlpha);
 	}
 	else
 	{
@@ -794,19 +827,31 @@ simulated function UpdateGridUI(TUIRoomData kData)
 
 	if( kData.bShowCancel )
 	{
-		CancelConstructionButton.Show();
+		if( `ISCONTROLLERACTIVE ) 
+		{
+		
+			m_bCanCancelConstruction = true;
+		}
+		else
+		{
+			CancelConstructionButton.Show();
+		}
 	}
 	else
 	{
+		m_bCanCancelConstruction = false;
 		CancelConstructionButton.Hide();
 	}
-	if( kData.bShowRemove )
+	if( `ISCONTROLLERACTIVE == false ) 
 	{
-		RemoveButton.Show();
-	}
-	else
-	{
-		RemoveButton.Hide();
+		if( kData.bShowRemove )
+		{
+			RemoveButton.Show();
+		}
+		else
+		{
+			RemoveButton.Hide();
+		}
 	}
 	if( kData.bShowUpgrade )
 	{
@@ -926,6 +971,11 @@ simulated function OnConfirm()
 
 	if( IsBuildMode() )
 	{
+	        if (Facility != none && Facility.CanUpgrade())
+	        {
+				OnUpgradeClicked(none);
+		}
+		else
 		if( IsAvailableForConstruction(Room) )
 		{
 			`HQPRES.CAMLookAtRoom(Room, `HQINTERPTIME);
@@ -978,6 +1028,12 @@ simulated function bool IsAvailableForConstruction(XComGameState_HeadquartersRoo
 simulated function bool IsAvailableForClearing(XComGameState_HeadquartersRoom Room)
 {
 	return Room.HasSpecialFeature() && Room.ConstructionBlocked && !Room.ClearingRoom && !Room.Locked;
+}
+
+//Adding means to detect if construction/upgrades can be canceled
+simulated function bool IsCancelAvailable()
+{
+	return m_bCanCancelConstruction;
 }
 
 simulated function OnCancelConstruction(UIButton kButton)
@@ -1127,6 +1183,10 @@ simulated public function CancelConstructionDialogueCallback(eUIAction eAction, 
 		XComHQ.HandlePowerOrStaffingChange();
 		`HQPRES.m_kAvengerHUD.UpdateResources();
 		UpdateData();
+		m_bCanCancelConstruction = false;
+		//Updating the navhelp for UIBuildFacilties, if active
+		if(Movie.Pres.ScreenStack.GetScreen(class'UIBuildFacilities') != None)
+			UIBuildFacilities(Movie.Pres.ScreenStack.GetScreen(class'UIBuildFacilities')).UpdateNavHelp();
 	}
 }
 
@@ -1152,6 +1212,9 @@ simulated public function CancelClearRoomDialogueCallback(eUIAction eAction, UIC
 		XComHQ.HandlePowerOrStaffingChange();
 		`HQPRES.m_kAvengerHUD.UpdateResources();
 		UpdateData();
+		//Updating the navhelp for UIBuildFacilties, if active
+		if(Movie.Pres.ScreenStack.GetScreen(class'UIBuildFacilities') != None)
+			UIBuildFacilities(Movie.Pres.ScreenStack.GetScreen(class'UIBuildFacilities')).UpdateNavHelp();
 	}
 }
 
@@ -1180,6 +1243,10 @@ simulated public function RemoveFacilityDialogueCallback(eUIAction eAction, UICa
 
 		// force avenger rooms to update
 		`GAME.GetGeoscape().m_kBase.SetAvengerVisibility(true);
+		if(Movie.Pres.ScreenStack.IsInStack(class'UIBuildFacilities'))
+		{
+			UIBuildFacilities(Movie.Pres.ScreenStack.GetScreen(class'UIBuildFacilities')).UpdateNavHelp();
+		}
 	}
 }
 
@@ -1196,6 +1263,11 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
 		if(`HQPRES.m_bCanPause)
 		{
+			if (class'UIUtilities_Strategy'.static.IsInTutorial(true))
+			{
+				if(bLocked)
+					bHandled = false;
+			}
 			OnConfirm();
 		}
 		break;
@@ -1212,6 +1284,11 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 simulated function SetBorderAlpha(float NewAlpha)
 {
 	MC.FunctionNum("setBorderAlpha", NewAlpha);
+}
+
+simulated function SetTextBackDropAlpha(float NewAlpha)
+{
+	MC.FunctionNum("setTextBackDropAlpha", NewAlpha);
 }
 
 simulated function UIPanel SetSize(float NewWidth, float NewHeight)
@@ -1511,6 +1588,9 @@ defaultproperties
 	bIsNavigable = true;
 	bAlignRight = false; 
 
+
+	BuildModeUnSelectedAlpha = 40;
+	BuildModeUnSelectedBackGroundTextAlpha = 85;
 	Status = "UNINITIALIZED"
 	Queue = "UNINITIALIZED"
 	Label = "UNINITIALIZED"

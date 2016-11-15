@@ -7,6 +7,7 @@ var UIButton RenameButton;
 var OnlineSaveGame SaveGame;
 
 var int         Index;
+var int			ID; 
 var bool        bIsSaving;
 var UIPanel		ButtonBG;
 var name		ButtonBGLibID;
@@ -42,7 +43,6 @@ simulated function UIPanel InitPanel(optional name InitName, optional name InitL
 
 simulated function UISaveLoadGameListItem InitSaveLoadItem(int listIndex, OnlineSaveGame save, bool bSaving, optional delegate<OnClickedDelegate> AcceptClickedDelegate, optional delegate<OnClickedDelegate> DeleteClickedDelegate, optional delegate<OnClickedDelegate> RenameClickedDelegate, optional delegate<OnMouseInDelegate> MouseInDelegate)
 {
-	local int ID;
 	local XComOnlineEventMgr OnlineEventMgr;
 
 	OnlineEventMgr = `ONLINEEVENTMGR;
@@ -66,12 +66,24 @@ simulated function UISaveLoadGameListItem InitSaveLoadItem(int listIndex, Online
 	
 	AcceptButton = Spawn(class'UIButton', ButtonBG);
 	AcceptButton.bIsNavigable = false;
-	AcceptButton.InitButton('Button0', GetAcceptLabel(ID == -1), ID == -1 ? RenameClickedDelegate : AcceptClickedDelegate);
+	AcceptButton.InitButton('Button0', GetAcceptLabel(ID == -1), ID == -1 ? RenameClickedDelegate : AcceptClickedDelegate); 
+	if (`ISCONTROLLERACTIVE)
+	{
+		AcceptButton.SetStyle(eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+		AcceptButton.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+		AcceptButton.SetVisible(bIsFocused);
+	}
 	AcceptButton.OnMouseEventDelegate = OnChildMouseEvent;
 
 	DeleteButton = Spawn(class'UIButton', ButtonBG);
 	DeleteButton.bIsNavigable = false;
-	DeleteButton.InitButton('Button1', m_sDeleteLabel, DeleteClickedDelegate);
+	DeleteButton.InitButton('Button1', GetDeleteLabel(), DeleteClickedDelegate);
+	if (`ISCONTROLLERACTIVE) 
+	{
+		DeleteButton.SetStyle(eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+		DeleteButton.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+		DeleteButton.SetVisible(bIsFocused);
+	}
 	DeleteButton.OnMouseEventDelegate = OnChildMouseEvent;
 	
 	if(bIsSaving && ID == -1)
@@ -95,6 +107,16 @@ simulated function OnInit()
 	super.OnInit();
 
 	UpdateData(SaveGame);
+	if (`ISCONTROLLERACTIVE) 
+	{
+		// Initially when UpdateData gets called, it invokes the actionscript's UpdateData function
+		// that decides it's a good idea to unhighlight the button.
+		if( bIsFocused )
+		{
+			OnReceiveFocus();
+			UIPanel(Owner).Navigator.SetSelected(self);
+		}
+	}
 }
 
 function bool ImageCheck()
@@ -134,7 +156,24 @@ simulated function string GetAcceptLabel( bool bIsNewSave )
 		acceptLabel = m_sLoadLabel;
 	}
 
+	/*if( bIsFocused && `ISCONTROLLERACTIVE )
+	{
+		acceptLabel = class'UIUtilities_Input'.static.InsertGamepadIcons("%A" @ acceptLabel);
+	}*/
 	return acceptLabel;
+}
+
+simulated function string GetDeleteLabel()
+{
+	local string deleteLabel;
+
+	deleteLabel = m_sDeleteLabel;
+
+	/*if( bIsFocused && `ISCONTROLLERACTIVE )
+	{
+		deleteLabel = class'UIUtilities_Input'.static.InsertGamepadIcons("%Y" @ deleteLabel);
+	}*/
+	return deleteLabel; 
 }
 
 simulated function OnChildMouseEvent(UIPanel control, int cmd)
@@ -149,9 +188,14 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 	{
 		switch( cmd )
 		{
-		case class'UIUtilities_Input'.const.FXS_L_MOUSE_IN:
+		case class'UIUtilities_Input'.const.FXS_L_MOUSE_IN :
 			`SOUNDMGR.PlaySoundEvent("Play_Mouseover");
+			//ShowHighlight();
 			break;
+		//case class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT :
+		//case class'UIUtilities_Input'.const.FXS_L_MOUSE_DRAG_OUT :
+		//	HideHighlight();
+		//	break;
 		case class'UIUtilities_Input'.const.FXS_L_MOUSE_DOUBLE_UP:
 			if(AcceptButton != none)
 				AcceptButton.Click();
@@ -173,7 +217,13 @@ simulated function ShowHighlight()
 	DeleteButton.OnLoseFocus();
 	AcceptButton.OnLoseFocus();
 	AcceptButton.SetText(GetAcceptLabel(Index == 0));
-	DeleteButton.SetText(m_sDeleteLabel);
+	DeleteButton.SetText(GetDeleteLabel());
+
+	if (`ISCONTROLLERACTIVE)
+	{
+		AcceptButton.Show();
+		DeleteButton.SetVisible(!(bIsSaving && ID == -1));
+	}
 }
 
 simulated function HideHighlight()
@@ -183,7 +233,13 @@ simulated function HideHighlight()
 	AcceptButton.OnLoseFocus();
 	DeleteButton.OnLoseFocus();
 	AcceptButton.SetText(GetAcceptLabel( Index == 0 ));
-	DeleteButton.SetText(m_sDeleteLabel);
+	DeleteButton.SetText(GetDeleteLabel());
+	
+	if(`ISCONTROLLERACTIVE)
+	{
+		AcceptButton.Hide();
+		DeleteButton.SetVisible(!(bIsSaving && ID == -1));
+	}
 }
 
 simulated function UpdateData(OnlineSaveGame save)
@@ -336,6 +392,44 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	return super.OnUnrealCommand(cmd, arg);
 }
 
+simulated function OnReceiveFocus()
+{
+	if (`ISCONTROLLERACTIVE == false)
+	{
+		super.OnReceiveFocus();
+	}
+	else
+	{
+		MC.FunctionVoid("mouseIn");
+
+		AcceptButton.SetText(GetAcceptLabel(Index == 0));
+		AcceptButton.OnReceiveFocus();
+		AcceptButton.Show();
+
+		if (!(Index == 0 && bIsSaving)) //BET 2016-04-20 - Don't show delete button on "new save" option
+		{
+			DeleteButton.SetText(GetDeleteLabel());
+			DeleteButton.OnReceiveFocus();
+			DeleteButton.SetVisible(!(bIsSaving && ID == -1));
+		}
+	}
+}
+
+simulated function OnLoseFocus()
+{
+	if (`ISCONTROLLERACTIVE == false)
+	{
+		super.OnLoseFocus();
+	}
+	else
+	{
+		MC.FunctionVoid("mouseOut");
+		AcceptButton.Hide();
+		DeleteButton.Hide();
+		AcceptButton.OnLoseFocus();
+		DeleteButton.OnLoseFocus();
+	}
+}
 
 defaultproperties
 {

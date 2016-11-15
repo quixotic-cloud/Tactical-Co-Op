@@ -78,6 +78,7 @@ static function X2AbilityTemplate CreateSlashAbility(optional Name AbilityName =
 	UnitPropertyCondition.ExcludeRobotic = true;
 	UnitPropertyCondition.ExcludeAlive = false;
 	UnitPropertyCondition.ExcludeDead = false;
+	UnitPropertyCondition.FailOnNonUnits = true;
 	ParthenogenicPoisonEffect.TargetConditions.AddItem(UnitPropertyCondition);
 	Template.AddTargetEffect(ParthenogenicPoisonEffect);
 

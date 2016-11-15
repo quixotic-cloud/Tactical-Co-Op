@@ -50,20 +50,25 @@ simulated function BuildScreen()
 
 	Button1 = Spawn(class'UIButton', ButtonGroup);
 	Button1.SetResizeToText(false);
-	Button1.InitButton('Button0', m_strBuy);
+
+	Button1.InitButton('Button0', m_strBuy,, eUIButtonStyle_HOTLINK_BUTTON);
+	Button1.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 
 	Button2 = Spawn(class'UIButton', ButtonGroup);
 	Button2.SetResizeToText(false);
-	Button2.InitButton('Button1', m_strSell);
+	Button2.InitButton('Button1', m_strSell,, eUIButtonStyle_HOTLINK_BUTTON);
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
 	
 	RefreshButtons();
 	
 	Button3 = Spawn(class'UIButton', ButtonGroup);
 	Button3.SetResizeToText(false);
-	Button3.InitButton('Button2', "");
+	Button3.InitButton('Button2', "",, eUIButtonStyle_HOTLINK_BUTTON);
 
 	ImageTarget = Spawn(class'UIImage', LibraryPanel).InitImage('MarketMenuImage');
 	ImageTarget.LoadImage(m_strImage);
+
+	Navigator.Clear();
 
 	//-----------------------------------------------
 
@@ -211,6 +216,13 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	bHandled = true;
 	switch( cmd )
 	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		OnBuyClicked(none);
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+		OnSellClicked(none);
+		break;
 	case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
 	case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:

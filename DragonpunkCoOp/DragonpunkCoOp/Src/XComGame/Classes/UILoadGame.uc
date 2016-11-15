@@ -61,9 +61,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 {
 	super.InitScreen(InitController, InitMovie, InitName);
 	
-	NavHelp = InitController.Pres.GetNavHelp();
-	if(NavHelp == none)
-		NavHelp = Spawn(class'UINavigationHelp',self).InitNavHelp();
+	NavHelp = GetNavHelp(); 
 	NavHelp.ClearButtonHelp();
 	NavHelp.AddBackButton(OnCancel);
 
@@ -110,6 +108,22 @@ simulated function OnInit()
 	{
 		List.Navigator.SetSelected(List.GetItem(0));
 	}
+}
+
+simulated function UINavigationHelp GetNavHelp()
+{
+	local UINavigationHelp Result;
+	Result = PC.Pres.GetNavHelp();
+	if( Result == None )
+	{
+		if( `PRES != none ) // Tactical
+		{
+			Result = Spawn(class'UINavigationHelp', Movie.Stack.GetScreen(class'UIMouseGuard')).InitNavHelp();
+		}
+		else if( `HQPRES != none ) // Strategy
+			Result = `HQPRES.m_kAvengerHUD.NavHelp;
+	}
+	return Result;
 }
 
 simulated function OnReadSaveGameListStarted()
@@ -626,6 +640,7 @@ simulated function SetSelected( int iTarget )
 
 simulated function SetSelection(int currentSelection)
 {
+	local int i;
 	if( currentSelection == m_iCurrentSelection )
 	{
 		return;
@@ -634,6 +649,10 @@ simulated function SetSelection(int currentSelection)
 	if (m_iCurrentSelection >=0 && m_iCurrentSelection < m_arrListItems.Length)
 	{
 		m_arrListItems[m_iCurrentSelection].HideHighlight();
+	}
+	for (i = 0; i < m_arrListItems.Length; i++)
+	{
+		m_arrListItems[i].OnLoseFocus();	
 	}
 
 	m_iCurrentSelection = currentSelection;
@@ -651,6 +670,12 @@ simulated function SetSelection(int currentSelection)
 	{
 		m_arrListItems[m_iCurrentSelection].ShowHighlight();
 	}
+	if( `ISCONTROLLERACTIVE )
+	{
+		m_arrListItems[m_iCurrentSelection].OnReceiveFocus();
+
+		List.Scrollbar.SetThumbAtPercent(float(m_iCurrentSelection) / float(m_arrListItems.Length - 1));
+	}
 }
 
 simulated function BuildMenu()
@@ -667,10 +692,11 @@ simulated function BuildMenu()
 		m_arrListItems[i].ProcessMouseEvents(List.OnChildMouseEvent);
 	}
 	
-	m_iCurrentSelection = 0;
+	m_iCurrentSelection = -1;
+	SetSelection(0);
 }
 
-simulated function int GetSaveID(int iIndex)
+simulated function  int GetSaveID(int iIndex)
 {
 	if (iIndex >= 0 && iIndex < m_arrSaveGames.Length)
 		return `ONLINEEVENTMGR.SaveNameToID(m_arrSaveGames[iIndex].Filename);

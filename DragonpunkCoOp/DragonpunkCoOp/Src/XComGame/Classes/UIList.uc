@@ -31,6 +31,10 @@ var public int					        BGPaddingBottom;
 var int					ScrollbarPadding; // if Scrollbar is not none, this value will get added to width / height when calling GetTotalWidth() / GetTotalHeight()
 var float				TotalItemSize;
 
+var bool bLoopSelection;
+//Complements the hack in "SAFEGUARD_TO_PREVENT_FOCUS_LOSS" in UINavigator.
+//There are places where this was the correct behavior to begin with. -bet
+var bool bPermitNavigatorToDefocus;
 var delegate<OnItemSelectedCallback>    OnSelectionChanged;
 var delegate<OnItemSelectedCallback>    OnItemClicked;
 var delegate<OnItemSelectedCallback>    OnItemDoubleClicked; // this must be triggered from UIControls within this
@@ -82,7 +86,8 @@ simulated function CreateItemContainer()
 	Navigator.RemoveControl(ItemContainer);
 
 	Navigator.OnSelectedIndexChanged = NavigatorSelectionChanged;
-	Navigator.LoopSelection = true;
+	//Navigator.LoopSelection = true;
+	Navigator.LoopSelection = bLoopSelection;
 }
 
 // Create a UIPanel of the specified type and add it to the ItemContainer.
@@ -221,6 +226,22 @@ simulated function bool HasItem(UIPanel Item)
 	return GetItemIndex(Item) != INDEX_NONE;
 }
 
+simulated function bool AllItemsAreDisabled()
+{
+	local UIListItemString Item;
+	local int i;	
+
+	for(i=0; i<ItemCount; i++)
+	{
+		Item = UIListItemString(GetItem(i));
+		if(Item != None && !Item.bDisabled)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
 // Traverse the ownership chain looking an item contained in this list, returns the Index of said item, or -1 if not found.
 simulated function int GetItemIndex(UIPanel Control)
 {
@@ -250,6 +271,10 @@ simulated function UIPanel GetFocusedItem()
 
 simulated function UIPanel GetSelectedItem()
 {
+	if( ItemContainer == None || SelectedIndex < 0 || SelectedIndex >= GetItemCount() )
+	{
+		return None;
+	}
 	return ItemContainer.ChildPanels[SelectedIndex];
 }
 
@@ -731,6 +756,21 @@ simulated function DebugControl()
 {
 	Spawn(class'UIPanel', self).InitPanel(, class'UIUtilities_Controls'.const.MC_GenericPixel).SetSize(width, height).SetAlpha(20);
 }
+simulated function OnLoseFocus()
+{
+	super.OnLoseFocus();
+}
+
+simulated function EnableNavigation()
+{
+	super.EnableNavigation();
+}
+
+simulated function DisableNavigation()
+{
+	super.DisableNavigation();
+}
+
 
 defaultproperties
 {
@@ -755,4 +795,6 @@ defaultproperties
 	bSelectFirstAvailable = true;
 
 	bShouldPlayGenericUIAudioEvents = false
+	bLoopSelection = true;
+	bPermitNavigatorToDefocus = false;
 }

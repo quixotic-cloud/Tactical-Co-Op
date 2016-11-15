@@ -31,6 +31,7 @@ var float                   m_fRightMouseHoldTime;
 var XComOnlineProfileSettings m_ProfileSettings;
 var() float                 ScrollSpeedUnitsPerSecond;
 
+var bool bWasHUDVisible;
 var bool m_bPrevBorderHidden;
 
 function bool IsKeyPressed(TacticalBindableCommands command)
@@ -141,6 +142,28 @@ simulated function bool ActivateAbilityByHotKey(int ActionMask, int KeyCode)
 	}
 
 	TacticalHUD.m_kAbilityHUD.DirectConfirmAbility(AbilityIndex, true);
+	return true;
+}
+
+simulated function bool ActivateAbilityByName(int ActionMask, name AbilityName)
+{
+	local UITacticalHUD TacticalHUD;
+	local int AbilityIndex;
+
+	if ((ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) == 0)
+	{
+		return false;
+	}
+
+	TacticalHUD = XComPresentationLayer(XComTacticalController(Outer).Pres).GetTacticalHUD();
+	AbilityIndex = TacticalHUD.m_kAbilityHUD.GetAbilityIndexByName(AbilityName);
+	if (AbilityIndex == INDEX_NONE)
+	{
+		PlaySound(SoundCue'SoundUI.NegativeSelection2Cue', true , true);
+		return false;
+	}
+
+	TacticalHUD.m_kAbilityHUD.DirectConfirmAbility(AbilityIndex);
 	return true;
 }
 
@@ -619,10 +642,14 @@ state InReplayPlayback
 
 	function bool DPad_Right( int ActionMask )
 	{
+		if (( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0)
+			XComTacticalController(Outer).YawCamera(-90.0);
 		return false;
 	}
 	function bool DPad_Left( int ActionMask )
 	{
+		if (( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0)
+			XComTacticalController(Outer).YawCamera(90.0);
 		return false;
 	}
 	function bool DPad_Up( int ActionMask )
@@ -853,11 +880,214 @@ state InReplayPlayback
 Begin: 
 }
 
+// This state is exactly the same as state "UsingTargetingMethod" except that I brought back camera rotation
+// and I removed the ability to press the Y button for Overwatch shortcut.
+state UsingSecondaryTargetingMethod
+{
+	simulated function bool PostProcessCheckGameLogic( float DeltaTime )
+	{
+		super.PostProcessCheckGameLogic(DeltaTime);
+
+		Controller_CheckForWindowScroll();
+		Mouse_CheckForWindowScroll(DeltaTime);
+		Mouse_FreeLook();
+		Mouse_CheckForFreeAim();
+
+		XComCamera(PlayerCamera).PostProcessInput();
+
+		return true;
+	}
+
+	simulated function bool LMouse(int ActionMask)
+	{
+		local UITacticalHUD TacticalHUD;
+		local X2TargetingMethod TargetingMethod;
+
+		if((ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0)
+		{
+			// check for left mouse clicks. It's very difficult to trap these properly in a movie screen, so process them here
+			TacticalHUD = XComPresentationLayer(XComTacticalController(Outer).Pres).GetTacticalHUD();
+			TargetingMethod = TacticalHUD.GetTargetingMethod();
+			if(TargetingMethod != none && TargetingMethod.AllowMouseConfirm())
+			{
+				TacticalHUD.m_kAbilityHUD.ConfirmAbility();
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	simulated function Mouse_CheckForFreeAim()
+	{
+		local XComPresentationLayer pres;
+		local IMouseInteractionInterface MouseTarget; 
+		local XCom3DCursor Cursor; 
+		local XComHUD HUD; 
+		local XComUnitPawn kPawn; 
+		local XGUnit kTargetUnit;
+		local Vector kPickPoint;
+
+		pres = XComPresentationLayer(XComTacticalController(Outer).Pres); 
+
+		HUD = GetXComHUD();
+		if( HUD == none ) return; 
+
+		// update the free aim cursor location
+		if( pres.Get2DMovie().IsMouseActive() && pres.GetTacticalHUD().IsMenuRaised())
+		{ 
+			MouseTarget = GetMouseInterfaceTarget();		
+			if( MouseTarget == none ) return;
+
+			Cursor = XComTacticalController(Outer).GetCursor();
+
+			// try to find a unit to lock on to
+			kPawn = XComUnitPawn(MouseTarget);	
+			if( kPawn != none )
+			{
+				kTargetUnit = XGUnit(kPawn.GetGameUnit());
+			}
+
+			if( kTargetUnit != none ) 
+			{
+				// if we're highlighting a unit, lock the targeting cursor to it
+				Cursor.CursorSetLocation( kTargetUnit.GetLocation(), false ); 
+			}
+			else if(GetAdjustedMousePickPoint(kPickPoint, false, false))
+			{
+				XComTacticalController(Outer).GetCursor().CursorSetLocation(kPickPoint, false);
+			}			
+		}
+	}
+
+	function bool Key_Q( int ActionMask ){ return Dpad_Left( ActionMask );}
+	function bool Key_E( int ActionMask ){ return Dpad_Right( ActionMask );}
+	function bool Key_F( int ActionMask ){ return Dpad_Up( ActionMask );}
+	function bool Key_C( int ActionMask ){ return Dpad_Down( ActionMask );}
+
+	function bool Key_W( int ActionMask ){ return ArrowUp( ActionMask );}
+	function bool Key_A( int ActionMask ){ return ArrowLeft( ActionMask );}
+	function bool Key_S( int ActionMask ){ return ArrowDown( ActionMask );}
+	function bool Key_D( int ActionMask ){ return ArrowRight( ActionMask );}
+
+	function bool DPad_Right( int ActionMask )
+	{
+		if (( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0)
+		{
+			XComTacticalController(Outer).YawCamera(-90.0);
+		}
+		return true;
+	}
+
+	function bool DPad_Left( int ActionMask )
+	{
+		if (( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0)
+		{
+			XComTacticalController(Outer).YawCamera(90.0);
+		}
+		return true;
+	}
+
+	simulated function bool ArrowUp( int ActionMask )
+	{
+		// Only pay attention to presses or repeats
+		if ( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0 
+			|| ( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PREHOLD_REPEAT) != 0
+			|| ( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT) != 0)
+		{
+			// Adjust Cursor Height
+			if(IsKeyPressed(eTBC_CursorUp))
+			{
+				DPad_Up(ActionMask);
+				return true;
+			}
+
+			XComCamera(PlayerCamera).ScrollCamera( 0, GetScrollSpeedInUnitsPerSecond() * SIGNAL_REPEAT_FREQUENCY );
+			return true;
+		}
+
+		return false;
+	}
+	simulated function bool ArrowDown( int ActionMask )
+	{
+		// Only pay attention to presses or repeats
+		if ( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0 
+			|| ( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PREHOLD_REPEAT) != 0
+			|| ( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT) != 0)
+		{
+			// Adjust Cursor Height
+			if(IsKeyPressed(eTBC_CursorDown))
+			{
+				DPad_Down(ActionMask);
+				return true;
+			}
+
+			XComCamera(PlayerCamera).ScrollCamera( 0, -GetScrollSpeedInUnitsPerSecond() * SIGNAL_REPEAT_FREQUENCY );
+			return true;
+		}
+
+		return false;
+	}
+
+	simulated function bool ArrowLeft( int ActionMask )
+	{
+		// Only pay attention to presses or repeats
+		if ( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0 
+			|| ( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PREHOLD_REPEAT) != 0
+			|| ( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT) != 0)
+		{
+			// Rotate Camera
+			if(IsKeyPressed(eTBC_CamRotateLeft))
+			{
+				DPad_Left(ActionMask);
+				return true;
+			}
+
+			XComCamera(PlayerCamera).ScrollCamera( -GetScrollSpeedInUnitsPerSecond() * SIGNAL_REPEAT_FREQUENCY, 0 );
+			return true;
+		}
+
+		return false;
+	}
+
+	simulated function bool ArrowRight( int ActionMask )
+	{
+		// Only pay attention to presses or repeats
+		if ( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0 
+			|| ( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PREHOLD_REPEAT) != 0
+			|| ( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_POSTHOLD_REPEAT) != 0)
+		{
+			// Rotate Camera
+			if(IsKeyPressed(eTBC_CamRotateRight))
+			{
+				DPad_Right(ActionMask);
+				return true;
+			}
+
+			XComCamera(PlayerCamera).ScrollCamera( GetScrollSpeedInUnitsPerSecond() * SIGNAL_REPEAT_FREQUENCY, 0 );
+			return true;
+		}
+
+		return false;
+	}
+}
 
 // UITacticalHUD_AbilityContainer will handle most targeting method specific input work. Just do normal camera adjustment and scroll logic here.
 // This is the state we are in when handling targeting an ability selected on the hud
 state UsingTargetingMethod
 {
+
+	event BeginState( name nmPrevState )
+	{
+		local XCom3DCursor Cursor;
+
+		super.BeginState(nmPrevState);
+
+		Cursor = `CURSOR;
+		Cursor.m_bCustomAllowCursorMovement = false;
+		Cursor.m_bAllowCursorAscensionAndDescension = false;
+	}
+	
 	simulated function bool PostProcessCheckGameLogic( float DeltaTime )
 	{
 		super.PostProcessCheckGameLogic(DeltaTime);
@@ -942,6 +1172,37 @@ state UsingTargetingMethod
 	function bool Key_S( int ActionMask ){ return ArrowDown( ActionMask );}
 	function bool Key_D( int ActionMask ){ return ArrowRight( ActionMask );}
 
+	function bool X_Button(int ActionMask)
+	{
+		return ActivateAbilityByHotKey(ActionMask, class'UIUtilities_Input'.const.FXS_KEY_R);
+	}
+	
+	function bool Y_Button(int ActionMask)
+	{				
+		return ActivateAbilityByHotKey(ActionMask, class'UIUtilities_Input'.const.FXS_KEY_Y);
+	}
+	
+	function bool Stick_R3(int ActionMask)
+	{
+		if (!UITacticalHUD(Get2DMovie().Pres.ScreenStack.GetScreen(class'UITacticalHUD')).SkyrangerButton.bIsVisible)
+		{
+			return false;
+		}
+
+		if (`REPLAY.bInTutorial)
+		{
+			if (`TUTORIAL.IsNextAbility('PlaceEvacZone'))
+			{
+				return ActivateAbilityByName(ActionMask, 'PlaceEvacZone');
+			}
+			else
+			{
+				return false;
+			}
+		}
+
+		return ActivateAbilityByName(ActionMask, 'PlaceEvacZone');
+	}
 	function bool DPad_Up( int ActionMask )
 	{
 		local XCom3DCursor Cursor;
@@ -1180,17 +1441,17 @@ state Multiplayer_Inactive
 	}
 	function bool Trigger_Left( float fTrigger, int ActionMask )
 	{	
-		if (( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0)
-		{
-			XComPresentationLayer(XComTacticalController(Outer).Pres).ZoomCameraOut();
-			return false;
-		}
+		//if (( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0)
+		//{
+		//	XComPresentationLayer(XComTacticalController(Outer).Pres).ZoomCameraOut();
+		//	return false;
+		//}
 
-		if (( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0)
-		{
-			XComPresentationLayer(XComTacticalController(Outer).Pres).ZoomCameraIn();
-			return false;
-		}
+		//if (( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0)
+		//{
+		//	XComPresentationLayer(XComTacticalController(Outer).Pres).ZoomCameraIn();
+		//	return false;
+		//}
 
 		return false;
 	}
@@ -1454,6 +1715,17 @@ state Cinematic
 			}
 		}
 	}
+	//The outer PostProcessCheckGameLogic does nothing and returns false, causing joystick events not to be processed.
+	//This is a problem when we're hacking, as we're in the Cinematic state here but need those stick events for the hacking UI.
+	simulated function bool PostProcessCheckGameLogic( float DeltaTime )
+	{	
+		if( `XENGINE != none && `XENGINE.IsMoviePlaying(class'Engine'.static.GetLastMovieName()) )
+		{
+			return false;
+		}
+
+		return true;
+	}
 }
 
 // This state controls input when the unit is pathing.
@@ -1462,8 +1734,13 @@ state ActiveUnit_Moving
 	event BeginState( name nmPrevState )
 	{
 		local XGUnit ActiveUnit;
+		local XCom3DCursor Cursor;
+		local XComTutorialMgr TutorialMgr;
 
 		super.BeginState(nmPrevState);
+		Cursor = `CURSOR;
+		Cursor.m_bCustomAllowCursorMovement = true;
+		Cursor.m_bAllowCursorAscensionAndDescension = true;
 
 		// show the pathing pawn and pathing tile border
 		ActiveUnit = GetActiveUnit();
@@ -1477,11 +1754,37 @@ state ActiveUnit_Moving
 			XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).SetIsMouseActive(true);
 		}
 		
-		SetPathingUIVisible(true, true);
+		if( `ISCONTROLLERACTIVE == false )
+		{
+			SetPathingUIVisible(true, true);
+			XComTacticalController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).HideInputButtonRelatedHUDElements(false);
+		}
+		else
+		{
+			//show here
+			if(`REPLAY.bInTutorial)
+			{
+				TutorialMgr = XComTutorialMgr(`REPLAY);
+				if(TutorialMgr != None)
+				{
+					SetPathingUIVisible(true, true);
+					XComTacticalController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).HideInputButtonRelatedHUDElements(false);
+				}
+			}
+			else
+			{
+				SetPathingUIVisible(true, true);
+				XComTacticalController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).HideInputButtonRelatedHUDElements(false);
+			}
+		}
+		
+		//putting call here because the handling is in this class
+		UITacticalHUD(Get2DMovie().Pres.ScreenStack.GetScreen(class'UITacticalHUD')).UpdateNavHelp();
 	}
 
 	event EndState(Name NextStateName)
 	{
+		local XComTutorialMgr TutorialMgr;
 		super.EndState(NextStateName);
 
 		CancelMousePathing();
@@ -1490,6 +1793,18 @@ state ActiveUnit_Moving
 		{
 			// don't hide the ui for one frame if we're just going into active movement on another unit. It will flicker.
 			SetPathingUIVisible(false, false);
+			if(`REPLAY.bInTutorial)
+			{
+				TutorialMgr = XComTutorialMgr(`REPLAY);
+				if(TutorialMgr != None)
+				{
+					XComTacticalController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).HideInputButtonRelatedHUDElements(true);
+				}
+			}
+			else
+			{
+				XComTacticalController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).HideInputButtonRelatedHUDElements(true);
+			}
 		}
 	}
 
@@ -1542,6 +1857,7 @@ state ActiveUnit_Moving
 		local XComGameState_Unit ActiveUnitState;
 		local XComPresentationLayer Pres; 
 		local XCom3DCursor Cursor;
+		local XComTutorialMgr TutorialMgr;
 		local bool HideRibbon;
 		local bool HideBorder;
 
@@ -1566,14 +1882,24 @@ state ActiveUnit_Moving
 		VisualizationManager = `XCOMVISUALIZATIONMGR;
 		HideBorder = VisualizationManager.IsActorBeingVisualized(GetActiveUnit()) 
 			|| ActiveUnitState.NumActionPointsForMoving() == 0
-			|| ActiveUnitState.GetCurrentStat(eStat_Mobility) == 0;
+			|| ActiveUnitState.GetCurrentStat(eStat_Mobility) == 0
+			|| Cursor.m_bCustomAllowCursorMovement == false; //DISPLAYING_GAMEPAD_BUTTON_IN_TACTICAL_UI_ONLY_WHEN_APPROPRIATE kmartinez 2016-03-28
 		HideBorder = HideBorder || (ActiveUnitState.NumActionPointsForMoving() == 0) || ActiveUnitState.bRemovedFromPlay;
 		HideBorder = HideBorder || VisualizationManager.VisualizerBlockingAbilityActivation();
 
 		// determine pathing ribbon hide
-		HideRibbon = HideBorder || `CAMERASTACK.ActiveCameraHidesPath() || TestMouseConsumedByFlash();
+		HideRibbon = HideBorder || Cursor.m_bCustomAllowCursorMovement == false || `CAMERASTACK.ActiveCameraHidesPath() || TestMouseConsumedByFlash();
 
 		HideBorder = HideBorder || `CAMERASTACK.ActiveCameraHidesBorder();
+		if(`REPLAY.bInTutorial)
+		{
+			TutorialMgr = XComTutorialMgr(`REPLAY);
+			if(TutorialMgr != None)
+			{
+				HideRibbon = !TutorialMgr.bIsTutorialAllowingControls;
+				HideBorder = !TutorialMgr.bIsTutorialAllowingControls;
+			}
+		}
 
 		if(!HideBorder && m_bPrevBorderHidden)
 		{
@@ -1657,31 +1983,48 @@ state ActiveUnit_Moving
 
 	function bool A_Button( int ActionMask )
 	{
-		if( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0 )
+		if( `ISCONTROLLERACTIVE() )
 		{
-			m_bReceivedPress = true;
-		}
-		// IF( Button was held down )
-		else if( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_HOLD) != 0 )
-		{
-			if( !m_bReceivedPress ) return true;
-
-			if( XComTacticalController(Outer).CheatManager != none && class'Engine'.static.IsConsoleAllowed() )
+			if( XComTacticalController(Outer).m_kPathingPawn.CursorOnOriginalUnit() )
 			{
-				XComTacticalController(Outer).ServerTeleportActiveUnitTo(XComCheatManager(XComTacticalController(Outer).CheatManager).GetCursorLoc());
-				m_bReceivedPress = false;
+				return false;
 			}
-			return true;
+		
+			return RMouse(ActionMask);
 		}
 		else
-		if( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0 )
 		{
-			m_bReceivedPress = false;
+			if( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0 )
+			{
+				m_bReceivedPress = true;
+			}
+			// IF( Button was held down )
+			else if( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_HOLD) != 0 )
+			{
+				if( !m_bReceivedPress ) return true;
+
+				if( XComTacticalController(Outer).CheatManager != none && class'Engine'.static.IsConsoleAllowed() )
+				{
+					XComTacticalController(Outer).ServerTeleportActiveUnitTo(XComCheatManager(XComTacticalController(Outer).CheatManager).GetCursorLoc());
+					m_bReceivedPress = false;
+				}
+				return true;
+			}
+			else
+			if( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0 )
+			{
+				m_bReceivedPress = false;
+			}
 		}
 		return false;
 	}
 	function bool B_Button( int ActionMask )
 	{
+		if (XComTacticalController(Outer).m_kPathingPawn.Waypoints.Length > 0)
+		{
+			XComTacticalController(Outer).m_kPathingPawn.ClearAllWaypoints();
+			XComTacticalController(Outer).m_kPathingPawn.SetWaypointModifyMode(false);
+		}
 		return false;
 	}
 	
@@ -1691,39 +2034,30 @@ state ActiveUnit_Moving
 	}
 	function bool X_Button( int ActionMask )
 	{
-		local XGUnit kActiveUnit;
-		kActiveUnit = GetActiveUnit();
-
-		if( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0 )
+		if( `ISCONTROLLERACTIVE() )
 		{
-			// Rotate through a unit's equippable weapons
-			if(WorldInfo.NetMode == NM_Standalone)
-			{
-				if(kActiveUnit.CycleWeapons())
-				{
-					`PRES.PlayUISound(eSUISound_MenuSelect);
-				}
-			}
-			else
-			{
-				// MP: we don't allow certain UI interactions such as switching weapons while in the shot hud.
-				// we cant just check UITacticalHUD::IsMenuRaised() because that gets called from the
-				// XGAction_Fire Execute state and there is a slight delay between the input and when
-				// that actually happens that would allow other UI interactions to take place and could hang the game. -tsmith 
-				if(!XComTacticalController(Outer).m_bInputInShotHUD && !XComTacticalController(Outer).m_bInputSwitchingWeapons)
-				{
-					if(kActiveUnit.CycleWeapons())
-					{
-						`PRES.PlayUISound(eSUISound_MenuSelect);
-						XComTacticalController(Outer).m_bInputSwitchingWeapons = true;
-					}
-				}
-			}
-			XComPresentationLayer(XComTacticalController(Outer).Pres).GetTacticalHUD().m_kInventory.ForceUpdate();
-			return true;
+			
+			return ActivateAbilityByHotKey(ActionMask, class'UIUtilities_Input'.const.FXS_KEY_R);
 		}
+		else
+		{
 
-		return false;
+			if ((ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0)
+			{
+				XComTacticalController(Outer).m_kPathingPawn.SetWaypointModifyMode(true);
+
+				ClickToAddOrRemoveWaypoint();
+
+				if (XComTacticalController(Outer).m_kPathingPawn.Waypoints.Length <= 0)
+				{
+					XComTacticalController(Outer).m_kPathingPawn.SetWaypointModifyMode(false);
+				}
+
+				return true;
+			}
+
+			return false;
+		}
 	}
 
 	function bool Key_R( int ActionMask )
@@ -1736,7 +2070,12 @@ state ActiveUnit_Moving
 	}
 	function bool Y_Button( int ActionMask )
 	{				
-		return ActivateAbilityByHotKey(ActionMask, class'UIUtilities_Input'.const.FXS_KEY_Y);
+		// For consistency, 2K asked for consistency between PC and Console, so we should be able to switch to a different unit and Overwatch while the first unit is pathing. (kmartinez)
+		if (`ISCONTROLLERACTIVE() == false || (!`XCOMVISUALIZATIONMGR.VisualizerBlockingAbilityActivation() ))// && !`XCOMVISUALIZATIONMGR.VisualizerBusy()))
+		{
+			return ActivateAbilityByHotKey(ActionMask, class'UIUtilities_Input'.const.FXS_KEY_Y);
+		}
+		return false;
 	}
 	function bool Mouse4( int ActionMask )
 	{
@@ -1961,17 +2300,38 @@ state ActiveUnit_Moving
 		return false;
 	}
 
+	
+
 	function bool Stick_R3( int ActionMask )
-	{
-		return false;
+	{		if (!UITacticalHUD(Get2DMovie().Pres.ScreenStack.GetScreen(class'UITacticalHUD')).SkyrangerButton.bIsVisible)
+		{
+			return false;
+		}
+
+		if(`REPLAY.bInTutorial)
+		{
+			//we can't place an evac zone till we reach a certain point in the tutorial.
+			if(`TUTORIAL.IsNextAbility('PlaceEvacZone'))
+				return ActivateAbilityByName(ActionMask, 'PlaceEvacZone');
+			else
+				return false;
+		}
+		
+		return ActivateAbilityByName(ActionMask, 'PlaceEvacZone');
 	}
 	function bool Stick_L3( int ActionMask )
 	{
-		//RAM - hold the left stick to toggle move protection - moved from 'B' as it is a highly used button
-		if((ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_HOLD ) != 0)
+		local UITacticalCharInfoScreen TactCharScreen;
+		local UIMovie Movie; 
+		Movie = Get2DMovie();
+		if (!Movie.Pres.ScreenStack.IsInStack(class'UITacticalCharInfoScreen'))
 		{
+			TactCharScreen = Spawn(class'UITacticalCharInfoScreen', Movie.Pres.ScreenStack.GetCurrentScreen());
+			TactCharScreen.InitCharacterInfoScreen(XComPlayerController(Movie.Pres.Owner), Movie);
+			Movie.Pres.ScreenStack.Push(TactCharScreen);
+
 			return true;
-		}		 
+		}
 
 		return false;
 	}
@@ -1986,11 +2346,13 @@ state ActiveUnit_Moving
 
 	function bool DPad_Right( int ActionMask )
 	{ 
-		return false;
+
+		return Key_E(ActionMask);
 	}
 	function bool DPad_Left( int ActionMask )
 	{ 
-		return false;
+
+		return Key_Q(ActionMask);
 	}
 
 	function bool Key_E( int ActionMask )
@@ -2039,7 +2401,8 @@ state ActiveUnit_Moving
 	}
 	function bool Back_Button( int ActionMask )
 	{
-		if ( ButtonIsDisabled(class'UIUtilities_Input'.const.FXS_BUTTON_SELECT ) )
+
+		if(`TUTORIAL != None)
 			return true;
 
 		if( ( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0 )
@@ -2097,13 +2460,21 @@ state ActiveUnit_Moving
 	{
 		if (( ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0)
 		{
-			// CAMERA_ZOOM_REMOVED
-			//if(WorldInfo.IsConsoleBuild())
-				//XComPresentationLayer(XComTacticalController(Outer).Pres).ZoomCameraIn(); //reset camera in case we're zoomed out
-            if( `BATTLE.m_kDesc != none )
-			    XComPresentationLayer(XComTacticalController(Outer).Pres).UIPauseMenu();
-            else
-                XComPresentationLayer(XComTacticalController(Outer).Pres).UIPauseMenu();
+			if( `ISCONTROLLERACTIVE() )
+			{
+				bWasHUDVisible = XComTacticalController(Outer).GetPres().GetTacticalHUD().bIsVisible;
+				XComTacticalController(Outer).GetPres().GetTacticalHUD().Hide();
+				XComPresentationLayer(XComTacticalController(Outer).Pres).UIPauseMenu();
+				UIPauseMenu(Get2DMovie().Pres.ScreenStack.GetScreen(class'UIPauseMenu')).OnCancel = OnPauseMenuCancel;
+			
+			}
+			else
+			{
+		            if( `BATTLE.m_kDesc != none )
+					    XComPresentationLayer(XComTacticalController(Outer).Pres).UIPauseMenu();
+		            else
+		                XComPresentationLayer(XComTacticalController(Outer).Pres).UIPauseMenu();
+			}
 			return true;
 		}
 		return false;
@@ -2176,6 +2547,17 @@ state ActiveUnit_Moving
 		if((ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_PRESS) != 0)
 		{
 			m_fRightMouseHoldTime += 0.001; // give it just a little bit to indicate the button is held
+			return true;
+		}
+
+		// bsg-mfawcett(10.03.16): support for waypoints when using controller
+		if( (ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_HOLD) != 0 )
+		{
+			if( m_fRightMouseHoldTime > 0.0 )
+			{
+				ClickToAddOrRemoveWaypoint();
+				m_fRightMouseHoldTime = 0.0f;   // reset to 0 so that we do not trigger a move
+			}
 			return true;
 		}
 
@@ -2637,9 +3019,20 @@ function ClickToAddOrRemoveWaypoint()
 {
 	local Vector kPickPoint;
 
-	if(GetAdjustedMousePickPoint(kPickPoint, GetActiveUnit().m_bIsFlying, true))
+	if (`ISCONTROLLERACTIVE )
 	{
-		XComTacticalController(Outer).m_kPathingPawn.AddOrRemoveWaypoint(kPickPoint);
+
+		XComTacticalController(Outer).m_kPathingPawn.AddOrRemoveWaypoint(
+			`XWORLD.GetPositionFromTileCoordinates(XComTacticalController(Outer).m_kPathingPawn.LastCursorTile));
+	}
+	else
+	{
+	
+		if(GetAdjustedMousePickPoint(kPickPoint, GetActiveUnit().m_bIsFlying, true))
+		{
+			XComTacticalController(Outer).m_kPathingPawn.AddOrRemoveWaypoint(kPickPoint);
+		}	
+
 	}
 }
 
@@ -2889,6 +3282,13 @@ function bool ClickLoot(IMouseInteractionInterface MouseTarget)
 	return false;
 }
 
+simulated function OnPauseMenuCancel()
+{
+	if (bWasHUDVisible)
+	{
+		XComTacticalController(Outer).GetPres().GetTacticalHUD().Show();
+	}
+}
 // Overriden in 'Multiplayer_GameOver' state
 event Cleanup();
 

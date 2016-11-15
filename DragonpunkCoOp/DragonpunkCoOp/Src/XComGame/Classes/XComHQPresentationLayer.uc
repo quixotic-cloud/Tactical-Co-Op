@@ -50,6 +50,62 @@ var localized string m_strRoomLockedText;
 var localized string m_strPreviewBuildTitle;
 var localized string m_strPreviewBuildText;
 
+// ParabolicFacilityTransition means we are moving from one facility to another in a camera swoop,
+// in a parabolic fashion, with the 'Base' camera position in the middle.  It is required to
+// look up the second facility we are moving to, so we can pre-calculate our camera path.
+var private bool					  m_bParabolic;						// Means we're in a facility-to-base-to-facility parabolic camera movement, as opposed to a linear movement (such 'base' to facility).
+enum ParabolicFacilityTransitionType
+{
+	FTT_None,                                                           // Camera is not performing a parabolic transition.
+	FTT_Parabolic_In,                                                   // Moving from facility to 'base' in a facility-to-base-to-facility camera movement.  (The first half of the parabola.)
+	FTT_Parabolic_Out,                                                  // Moving from 'base' to facility in a facility-to-base-to-facility camera movement.
+};
+var private ParabolicFacilityTransitionType	m_eParabolicFacilityTransitionType;	
+
+var private bool m_bGeoscapeTransition; // Transitions from base to strategy map, or strategy map to base, require special camera transitions.
+
+var private vector					  m_ParabolicFacilityTransition_Focus;
+var private rotator				 	  m_ParabolicFacilityTransition_Rotation;
+var private float				 	  m_ParabolicFacilityTransition_ViewDistance;
+var private float				 	  m_ParabolicFacilityTransition_FOV;
+var private PostProcessSettings  	  m_ParabolicFacilityTransition_PPSettings;
+var private float				 	  m_ParabolicFacilityTransition_PPOverrideAlpha;
+
+// We queue narrative events (that play trigger fades and movies) so they wait until a camera swoop is finished.
+struct QueuedNarrative
+{
+	var XComGameState_Objective Objective;
+	var Object EventData;
+	var Object EventSource;
+	var XComGameState GameState;
+	var Name EventID;
+
+};
+var private array<QueuedNarrative> m_QueuedNarratives;
+
+// We queue the expanding of the UIAvengerShortcuts list until the camera reaches the destination room.
+struct QueuedListExpansion
+{
+	var int eCat;           // The index of the category tab.
+	var bool bShow;         // If true, we are queuing a show; otherwise, we are queuing a hide.
+	var bool bAllShortcuts; // If true, show or hide all shortcuts; if false, just show or hide the list.
+};
+var private array<QueuedListExpansion> m_QueuedListExpansions;
+var private bool m_bQueueListExpansion; // Whether to queue list expansion or not - depends on whether the same or a different tab was selected.
+
+// We queue screen movies (UIScreens with the Flash movie) to not load and initialize until the camera transition finishes, to prevent camera transition hitches.
+struct QueuedScreenMovie
+{
+	var UIFacility Facility;
+	var UIMovie Movie;
+};
+var private array<QueuedScreenMovie> m_QueuedScreenMovies;
+var bool m_bAvengerListExpansionDone; // Trigger when the Avenger shortcut list expansion is done.
+
+var float fCameraSwoopDelayTime; // Delay after a bumper is pressed, before the parabolic camera swoop begins.
+
+var StaticMesh m_overworldCursorMesh;
+
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //                             INITIALIZATION
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -391,6 +447,7 @@ function UIEnterStrategyMap(bool bSmoothTransitionFromSideView = false)
 	m_kAvengerHUD.HideEventQueue();
 	m_kFacilityGrid.Hide();
 	m_kAvengerHUD.Shortcuts.Hide();
+	m_kAvengerHUD.ToDoWidget.Hide();
 }
 
 private function StrategyMap_StartTransitionEnter()
@@ -502,7 +559,14 @@ private function StrategyMap_FinishTransitionEnter()
 	}
 	else
 	{
-		`EARTH.SetViewLocation(XComHQ.Get2DLocation());
+		if (StrategyMap2D.HasLastSelectedMapItem())
+		{
+			StrategyMap2D.SelectLastSelectedMapItem();
+		}
+		else
+		{
+			`EARTH.SetViewLocation(XComHQ.Get2DLocation());
+		}
 	}
 	
 	if (m_bEnableFlightModeAfterStrategyMapEnter)
@@ -548,6 +612,7 @@ private function StrategyMap_TriggerGeoscapeEntryEvent()
 			GeoscapeEntryEvent();
 		}
 	}
+	EndGeoscapeCameraTransition();
 }
 
 function DisableFlightModeAndTriggerGeoscapeEvent()
@@ -558,6 +623,8 @@ function DisableFlightModeAndTriggerGeoscapeEvent()
 
 function GeoscapeEntryEvent()
 {
+	local XComGameStateHistory History;
+	local XComGameState_HeadquartersResistance ResHQ;
 	local XComGameState_CampaignSettings CampaignState;
 	local XComGameState NewGameState;
 
@@ -566,13 +633,26 @@ function GeoscapeEntryEvent()
 	`XEVENTMGR.TriggerEvent('OnGeoscapeEntry', , , NewGameState);
 	`XCOMGAME.GameRuleset.SubmitGameState(NewGameState);
 	
-	CampaignState = XComGameState_CampaignSettings(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_CampaignSettings'));
-	if (CampaignState.bSuppressFirstTimeNarrative)
+	History = `XCOMHISTORY;
+	ResHQ = XComGameState_HeadquartersResistance(History.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersResistance'));
+	if( !ResHQ.bFirstPOISpawned )
 	{
-		// Trigger the event to spawn a POI the first time the player enters the Geoscape
-		NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("Trigger First Time POI Event");
-		`XEVENTMGR.TriggerEvent('SpawnFirstPOI', , , NewGameState);
-		`XCOMGAME.GameRuleset.SubmitGameState(NewGameState);
+		CampaignState = XComGameState_CampaignSettings(History.GetSingleGameStateObjectForClass(class'XComGameState_CampaignSettings'));
+		if( CampaignState.bSuppressFirstTimeNarrative || ResHQ.bFirstPOIActivated )
+		{
+			// When beginner VO is turned off, trigger the event to spawn a POI the first time the player enters the Geoscape
+			// When beginner VO is enabled, check to see if Central's dialogue has been completed, and spawn POI if it has, because it wasn't generated for some reason
+			ResHQ.AttemptSpawnRandomPOI();
+		}
+		else
+		{
+			// Central's dialogue has not been completed yet, so flag ResHQ as activated so if the POI doesn't spawn, it will on the next Geoscape entry
+			NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("Flag ResHQ First POI Activated");
+			ResHQ = XComGameState_HeadquartersResistance(NewGameState.CreateStateObject(class'XComGameState_HeadquartersResistance', ResHQ.ObjectID));
+			NewGameState.AddStateObject(ResHQ);
+			ResHQ.bFirstPOIActivated = true;
+			`XCOMGAME.GameRuleset.SubmitGameState(NewGameState);
+		}
 	}
 
 	m_bBlockNarrative = false; // Turn off the narrative block in case it never got reset
@@ -588,6 +668,7 @@ function GeoscapeEntryEvent()
 
 function ExitStrategyMap(bool bSmoothTransitionFromSideView = false)
 {
+	BeginGeoscapeCameraTransition();
 	m_kXComStrategyMap.ExitStrategyMap();
 	
 	m_bCanPause = false; // Do not let the player cause the game during the exit transition
@@ -627,6 +708,8 @@ private function StrategyMap_FinishTransitionExit()
 	// while the camera moved, and so the UI elements wouldn't get a trigger to update. 
 	m_kFacilityGrid.Show();
 	m_kAvengerHUD.Show();
+	
+	`GAME.GetGeoscape().Pause();
 
 	m_bCanPause = true; // Allow the player to pause the game again
 
@@ -687,6 +770,7 @@ private function StrategyMap_FinishTransitionExit()
 	{
 		m_bBlockNarrative = false; // Turn off the block now that the transition is complete
 	}
+	EndGeoscapeCameraTransition();
 }
 
 function CameraTransitionToCIC ()
@@ -1702,13 +1786,6 @@ simulated function UIFortressReveal()
 	Alert.SoundToPlay = "Geoscape_CouncilMonthlySummaryPopup";
 	Alert.EventToTrigger = 'OnFortressRevealAlert';
 	ScreenStack.Push(Alert);
-}
-simulated function UIResistanceGifts()
-{
-	local UIResistanceGifts kScreen;
-
-	kScreen = Spawn(class'UIResistanceGifts', self);
-	ScreenStack.Push(kScreen);
 }
 simulated function UIAdventOperations(bool bResistanceReport, optional bool bShowActiveEvents = false)
 {
@@ -3224,7 +3301,7 @@ simulated function POICompleteCB(EUIAction eAction, UIAlert AlertData, optional 
 		UISupplyDropReminder();
 	}
 
-	if (eAction == eUIAction_Accept)
+	if (eAction == eUIAction_Cancel)
 	{
 		class'UIUtilities_Strategy'.static.GetXComHQ().ReturnToResistanceHQ();
 
@@ -3275,7 +3352,7 @@ simulated function UIResourceCacheCompleteAlert()
 
 simulated function ResourceCacheCompleteCB(EUIAction eAction, UIAlert AlertData, optional bool bInstant = false)
 {
-	if (eAction == eUIAction_Accept)
+	if (eAction == eUIAction_Cancel)
 	{
 		class'UIUtilities_Strategy'.static.GetXComHQ().ReturnToResistanceHQ(false, true);
 
@@ -3449,9 +3526,6 @@ simulated function UILowEngineers()
 	local XComGameState_HeadquartersXCom XComHQ;
 	local UIAlert kAlert;
 
-	XComHQ = class'UIUtilities_Strategy'.static.GetXComHQ();
-
-	kAlert = Spawn(class'UIAlert', self);
 
 	// Flag the warning alert as having been seen and show it, otherwise do nothing
 	if (!XComHQ.bHasSeenLowEngineersPopup)
@@ -3461,14 +3535,18 @@ simulated function UILowEngineers()
 		NewGameState.AddStateObject(XComHQ);
 		XComHQ.bHasSeenLowEngineersPopup = true;
 		`XCOMGAME.GameRuleset.SubmitGameState(NewGameState);
+		//Moved the spawn on the alert to inside the bHasSeenLowEngineersPopup check to avoid accidentally spawning double alerts
+		XComHQ = class'UIUtilities_Strategy'.static.GetXComHQ();
 
+		kAlert = Spawn(class'UIAlert', self);;
 		kAlert.EventToTrigger = 'WarningNeedMoreEngineers';
-	}
+
 	
-	kAlert.eAlert = eAlert_LowEngineers;
-	kAlert.fnCallback = LowWarningCB;
-	kAlert.SoundToPlay = "Geoscape_DoomIncrease";
-	ScreenStack.Push(kAlert);
+		kAlert.eAlert = eAlert_LowEngineers;
+		kAlert.fnCallback = LowWarningCB;
+		kAlert.SoundToPlay = "Geoscape_DoomIncrease";
+		ScreenStack.Push(kAlert);
+	}
 }
 
 simulated function LowWarningCB(EUIAction eAction, UIAlert AlertData, optional bool bInstant = false)
@@ -3833,6 +3911,37 @@ reliable client function CAMZoom( float fZoom )
 	m_kCamera.Zoom( fZoom );
 }
 
+reliable client function LookAtSelectedRoom(XComGameState_HeadquartersRoom RoomStateObject, 
+	optional float InterpTime = 2.0)
+{
+	local int GridIndex;
+	local int RoomRow;
+	local int RoomColumn;
+	local string CameraName;
+	local XComGameState_FacilityXCom FacilityStateObject;
+
+	if (RoomStateObject.MapIndex >= 3 && RoomStateObject.MapIndex <= 14)
+	{
+		GridIndex = RoomStateObject.MapIndex - 3;
+		RoomRow = (GridIndex / 3) + 1;
+		RoomColumn = (GridIndex % 3) + 1;
+
+		CameraName = "AddonCam" $ "_R" $ RoomRow $ "_C" $ RoomColumn;
+	}
+	else
+	{
+		FacilityStateObject = 
+			XComGameState_FacilityXCom(`XCOMHISTORY.GetGameStateForObjectID(RoomStateObject.Facility.ObjectID));
+		CameraName = "UIDisplayCam_"$FacilityStateObject.GetMyTemplateName();
+	}
+
+	m_kFacilityGrid.LookAtSelectedRoom();
+	GetCamera().SetInitialFocusToCamera(name(CameraName));
+}
+//<workshop> PARABOLIC_CAMERA_FACILITY_TRANSITION AMS 2015/11/05
+//INS:
+// NOTE_TO_INTEGRATOR: The sister function is CAMSetFacilityTransitionForRoom, all changes should be duplicated there.
+//</workshop>
 function CAMLookAtRoom(XComGameState_HeadquartersRoom RoomStateObject, optional float fInterpTime = 2 )
 {	
 	local int GridIndex;
@@ -3842,6 +3951,7 @@ function CAMLookAtRoom(XComGameState_HeadquartersRoom RoomStateObject, optional 
 	local XComGameState_FacilityXCom FacilityStateObject;
 	local XComHeadquartersCheatManager CheatMgr;
 
+	`log("CAMLookAtRoom" @ RoomStateObject @ fInterpTime,,'DebugHQCamera');
 
 	if( RoomStateObject.MapIndex >= 3 && RoomStateObject.MapIndex <= 14 )
 	{
@@ -3884,12 +3994,15 @@ function CAMLookAtRoom(XComGameState_HeadquartersRoom RoomStateObject, optional 
 
 reliable client function CAMLookAtHorizon( vector2d v2LookAt )
 {
+	`log("CAMLookAtHorizon",,'DebugHQCamera');
 	m_kCamera.LookAtHorizon( v2LookAt );
 }
 
+// NOTE_TO_INTEGRATOR: The sister function is CAMSetFacilityTransitionForNamedLocation, all changes should be duplicated there.
 reliable client function CAMLookAtNamedLocation( string strLocation, optional float fInterpTime = 2, optional bool bSkipBaseViewTransition )
 {
 	// Pan Camera to active room
+	`log("CAMLookAtNamedLocation" @ strLocation @ fInterpTime,,'DebugHQCamera');
 	GetCamera().StartRoomViewNamed(name(strLocation), ForceCameraInterpTime < 0.0f ? fInterpTime : ForceCameraInterpTime, bSkipBaseViewTransition);
 }
 
@@ -3904,10 +4017,12 @@ function PopCameraInterpTime()
 	ForceCameraInterpTime = -1.0f;
 }
 
+// NOTE_TO_INTEGRATOR: The sister function is CAMSetFacilityTransitionForHQTile, all changes should be duplicated there.
 // Look at an expansion tile
 reliable client function CAMLookAtHQTile( int x, int y, optional float fInterpTime = 2 )
 {
 	local string strLocation, strRow, strColumn;
+	`log("CAMLookAtHQTile" @ x @ y @ fInterpTime,,'DebugHQCamera');
 
 	strLocation = "AddonCam";
 
@@ -3921,6 +4036,468 @@ reliable client function CAMLookAtHQTile( int x, int y, optional float fInterpTi
 	GetCamera().StartRoomViewNamed( name(strLocation), fInterpTime );
 }
 
+// PARABOLIC_CAMERA_FACILITY_TRANSITION AMS 2015/11/05
+// FacilityTransition means we are moving from one facility to another in a camera swoop,
+// in a parabolic fashion, with the 'Base' camera position in the middle.  It is required to
+// look up the second facility we are moving to, so we can pre-calculate our camera path.
+//INS:
+
+// Sets the facility destination, based on the FacilityRef of the room we are moving to, and
+// tell the camera that we are moving from the first facility towards the 'Base' camera position.
+reliable client function SetFacilityTransition(StateObjectReference FacilityRef, bool Parabolic)
+{
+	`log("SetFacilityTransition "$FacilityRef.ObjectID,,'DebugHQCamera');
+
+	CAMSetFacilityTransitionForRoom(GetFacilityAvenger(FacilityRef).GetRoom());
+
+	m_eParabolicFacilityTransitionType = FTT_Parabolic_In;
+	m_bParabolic = Parabolic;
+
+}
+
+// Transitions between base to strategy map, or strategy map to base, require two camera transitions, so we call these from the triggered events.
+reliable client function BeginGeoscapeCameraTransition()
+{
+	`log("XComHQPresentationLayer::BeginGeoscapeCameraTransition",,'DebugHQCamera');
+	m_bGeoscapeTransition = true;
+}
+
+// Transitions between base to strategy map, or strategy map to base, require two camera transitions, so we call these from the triggered events.
+reliable client function EndGeoscapeCameraTransition()
+{
+	`log("XComHQPresentationLayer::EndGeoscapeCameraTransition",,'DebugHQCamera');
+	m_bGeoscapeTransition = false;
+	ReachedFacilityTransition();
+}
+
+reliable client function OnCameraInterpolationComplete()
+{
+	local XComHeadquartersCamera Camera;
+
+	Camera = GetCamera();
+	`log("XComHQPresentationLayer::OnCameraInterpolationComplete" @ `ShowVar(m_bParabolic) @ `ShowVar(m_bGeoscapeTransition) @ `ShowVar(Camera.CurrentRoom),,'DebugHQCamera');
+
+	if (m_bParabolic) // From facility to 'base' to facility.
+	{
+		if (EnteringParabolicFacilityTransition()) // Halfway through the parabolic camera transition.
+		{
+			`log("was EnteringParabolicFacilityTransition",,'DebugHQCamera');
+			
+			m_eParabolicFacilityTransitionType = FTT_Parabolic_Out; // Finished the first half of the parabola, now onto the second.
+
+			PlayQueuedNarrative(); // Start playing the queued narrative now that we're half-way through the parabolic camera transition.
+		}
+		else if (`HQPRES.ExitingParabolicFacilityTransition()) // Finished the parabolic camera transition.
+		{
+			`log("was ExitingParabolicFacilityTransition",,'DebugHQCamera');
+		
+			// The .001 seconds allow any processor-heavy UI initialization triggered by ReachedFacilityTransition to happen
+			// next frame, so the camera can fully-reach the destination before any hitches occur.
+			SetTimer( 0.001f, false, 'ReachedFacilityTransition' );
+		}
+	}
+	else if (m_bGeoscapeTransition) // Transitions between base to strategy map, or strategy map to base, require special camera transitions.
+	{
+		m_kCamera.Camera().bHasOldCameraState = false; // Tell the HQCamera to stop interpolating, because the camera transition is done.
+
+		// Note: The call to ReachedFacilityTransform happens in EndGeoscapeCameraTransition().
+	}
+	else // From 'base' to facility.
+	{
+		// The .001 seconds allow any processor-heavy UI initialization triggered by ReachedFacilityTransition to happen
+		// next frame, so the camera can fully-reach the destination before any hitches occur.
+		SetTimer( 0.001f, false, 'ReachedFacilityTransition' );
+	}
+}
+
+// Tells the camera we have reached the end of the facility transition.
+reliable client function ReachedFacilityTransition()
+{
+	`log("ReachedFacilityTransition",,'DebugHQCamera');
+
+	// If there is a queued fade-to-black or movie, play it. 
+	PlayQueuedNarrative();
+	PlayQueuedListExpansions();
+	PlayQueuedScreenMovie();
+	
+	m_eParabolicFacilityTransitionType = FTT_None;
+	m_bParabolic = false;
+	m_bQueueListExpansion = false;
+
+	m_kCamera.Camera().bHasOldCameraState = false; // Tell the HQCamera to stop interpolating, because the camera transition is done.
+
+	//<workshop> RESOURCE_HEADER_DISPLAYING_IN_GEOSCAPE_FIX kmartinez 2016-06-15
+	//INS:
+	// We're updating the resources here, because we don't display them unless we're done transitioning.(kmartinez)
+	m_kAvengerHUD.UpdateResources();
+	`HQPRES.GetUIComm().RefreshAnchorListener();
+	//</workshop>
+}
+
+reliable client function XComGameState_FacilityXCom GetFacilityAvenger(StateObjectReference FacilityRef)
+{
+	return XComGameState_FacilityXCom(`XCOMHISTORY.GetGameStateForObjectID(FacilityRef.ObjectID));
+}
+
+// Means the camera is swooping from the first facility to the 'Base' camera position. (First half of the parabola.)
+reliable client function bool EnteringParabolicFacilityTransition()
+{
+	return m_bParabolic && m_eParabolicFacilityTransitionType == FTT_Parabolic_In;
+}
+
+// Means the camera has reached the 'Base' camera position and is swooping to the second facility. (Second half of the parabola.)
+reliable client function bool ExitingParabolicFacilityTransition()
+{
+	return m_bParabolic && m_eParabolicFacilityTransitionType == FTT_Parabolic_Out;
+}
+
+
+// Block user input when the camera is transitioning or fullscreen video is playing.
+reliable client function bool NonInterruptiveEventsOccurring()
+{
+	local XComHeadquartersCamera Camera;
+
+	Camera = GetCamera();
+
+	return m_bParabolic ||                                   // handles transition between rooms
+		m_bGeoscapeTransition ||                             // handles transition to / from strategy map
+	    (Camera != None && (Camera.IsMoving() && Camera.bHasOldCameraState) && 
+		 Camera.CurrentRoom != 'UIDisplayCam_CIC' &&
+		 Camera.CurrentRoom != 'UIBlueprint_CustomizeMenu' &&
+		 Camera.CurrentRoom != 'UIBlueprint_CustomizeHead' &&
+		 Camera.CurrentRoom != 'UIBlueprint_CustomizeLegs' &&
+		 Camera.CurrentRoom != 'FacilityBuildCam' &&
+		 Camera.CurrentRoom != 'PreM_UIDisplayCam_SquadSelect' && 
+		 Camera.CurrentRoom != 'UIDisplayCam_ResistanceScreen' && 
+		 Camera.CurrentRoom != 'Base') ||                    // handle any camera movement to / from rooms
+	    (`XENGINE.IsAnyMoviePlaying() && 
+		 !class'XComEngine'.static.IsLoadingMoviePlaying()); // blocks HQ and screen input while a movie (other than the loading screen) is playing
+}
+
+// Because the new strategy camera code is suspected of a bug, this will help diagnose, in that case, why
+// non-interruptive events are occurring, if indeed this system is the one blocking events.
+reliable client function DiagnoseWhyNonInterruptiveEventsAreOccurring()
+{
+	local XComHeadquartersCamera Camera;
+	local bool bCameraIsMoving;
+	local bool bIsAnyMoviePlaying;
+	
+	Camera = GetCamera();
+	bCameraIsMoving = Camera.IsMoving();
+	bIsAnyMoviePlaying = `XENGINE.IsAnyMoviePlaying();
+	`log("XXX DiagnoseWhyNonInterruptiveEventsAreOccurring" @ `ShowVar(m_bParabolic) @ `ShowVar(m_bGeoscapeTransition) @ `ShowVar(bCameraIsMoving) @ `ShowVar(Camera.bHasOldCameraState) @ `ShowVar(Camera) @ `ShowVar(Camera.CurrentRoom) @ `ShowVar(bIsAnyMoviePlaying));
+}
+
+function EventListenerReturn OnNarrativeEventTrigger(XComGameState_Objective Objective, Object EventData, Object EventSource, XComGameState GameState, Name EventID)
+{
+	local QueuedNarrative NewQueuedNarrative;
+
+	`log("XComHQPresentationLayer::OnNarrativeEventTrigger:" @ Objective @ EventData @ EventSource @ GameState @ EventID,,'DebugHQCamera');
+
+	// If the camera is moving between facilities, queue it to play after the transition.
+	// Otherwise, just play the fade.
+	if (m_bParabolic)
+	{
+		NewQueuedNarrative.Objective = Objective;
+		NewQueuedNarrative.EventData = EventData;
+		NewQueuedNarrative.EventSource = EventSource;
+		NewQueuedNarrative.GameState = GameState;
+		NewQueuedNarrative.EventID = EventID;
+		m_QueuedNarratives.AddItem(NewQueuedNarrative);
+
+		`log("Adding Queued Narrative",,'DebugHQCamera');
+		return ELR_NoInterrupt;
+		//</workshop>
+	}
+
+	return Objective.DoNarrativeEventTrigger(EventData, EventSource, GameState, EventID);
+}
+
+// Play all queued movies, then empty the queue.
+simulated function PlayQueuedNarrative()
+{
+	local int i;
+	local QueuedNarrative NewQueuedNarrative;
+
+	`log("PlayQueuedNarrative",,'DebugHQCamera');
+
+	for (i = 0; i < m_QueuedNarratives.Length; ++i)
+	{
+		NewQueuedNarrative = m_QueuedNarratives[i];
+		
+		NewQueuedNarrative.Objective.DoNarrativeEventTrigger(NewQueuedNarrative.EventData, NewQueuedNarrative.EventSource, NewQueuedNarrative.GameState, NewQueuedNarrative.EventID);
+	}
+	m_QueuedNarratives.Length = 0;
+}
+
+// Show or hide avenger shortcut list, or all shortcuts, according to the arguments we stored.
+// eCat - the index of the category tab
+// bShow - if true, we are queuing a show; otherwise, we are queuing a hide
+// bAllShortcuts - if true, show or hide all shortcuts; if false, just show or hide the list
+simulated private function DoAvengerListExpansion(int eCat, bool bShow, bool bAllShortcuts)
+{
+	if (bShow)
+	{
+		if (bAllShortcuts)
+			m_kAvengerHUD.Shortcuts.DoShow();
+		else
+			m_kAvengerHUD.Shortcuts.DoShowList(eCat);
+	}
+	else
+	{
+		if (bAllShortcuts)
+			m_kAvengerHUD.Shortcuts.DoHide();
+		else
+			m_kAvengerHUD.Shortcuts.DoHideList();
+	}
+}
+
+// Show avenger shortcut list, or queue the list expansion of the camera is in transit.
+// eCat - the index of the category tab
+// bShow - if true, we are queuing a show; otherwise, we are queuing a hide
+// bAllShortcuts - if true, show or hide all shortcuts; if false, just show or hide the list
+simulated function ShowAvengerShortcutList(int eCat, bool bShow, bool bAllShortcuts)
+{
+	local QueuedListExpansion NewQueuedListExpansion;
+
+	`log("XComHQPresentationLayer::ShowAvengerShortcutList:" @ eCat,,'DebugHQCamera');
+
+	if (!bShow)
+	{
+		// Do the hiding now, since hiding should always be immediate, even if there's a 
+		// camera transition.  However, queue it as well, since hides and shows often come in sets
+		// and it may need to be reapplied to the end of a show-hide queue.
+		DoAvengerListExpansion(eCat, bShow, bAllShortcuts);
+	}
+
+	// If the camera is moving between facilities, queue it to play after the transition.
+	// Also, note m_bQueueListExpansion handles the case in which we select a new category the frame before
+	// the camera transition has started, and the events still need to be queued.
+	// Otherwise, just do the list expansion event.
+	if (m_bQueueListExpansion || NonInterruptiveEventsOccurring() )
+	{
+		NewQueuedListExpansion.eCat = eCat;
+		NewQueuedListExpansion.bShow = bShow;
+		NewQueuedListExpansion.bAllShortcuts = bAllShortcuts;
+		m_QueuedListExpansions.AddItem(NewQueuedListExpansion);
+
+		// Testing: 
+		//   bShow - so we can set m_bAvengerListExpansionDone when list expansions are waiting to be done.
+		//   NonInterruptiveEventsOccurring() - so this does not trigger during the loading screen and prevent loading.     
+		if (bShow) // && NonInterruptiveEventsOccurring())
+			m_bAvengerListExpansionDone = false;
+
+		`log("Adding Queued List Expansion" @ NewQueuedListExpansion.eCat @ NewQueuedListExpansion.bShow @ NewQueuedListExpansion.bAllShortcuts,,'DebugHQCamera');
+		return;
+	}
+
+	// If not queued, just show or hide the list immediately.
+	`log("Showing avenger shortcut list (non-queued)",,'DebugHQCamera');
+	if (bShow)
+	{
+		DoAvengerListExpansion(eCat, bShow, bAllShortcuts);
+	}
+}
+
+simulated function ClearQueuedListExpansions()
+{
+	m_QueuedListExpansions.Length = 0;
+}
+
+// Play all queued avenger shortcut list expansions, then empty the queue.
+simulated function PlayQueuedListExpansions()
+{
+	local int i;
+	local QueuedListExpansion NewQueuedListExpansion;
+	local bool bDoShowListFound;
+	local bool bDoShowFound;
+	
+	`log("PlayQueuedListExpansions",,'DebugHQCamera');
+
+	// Optimize the m_QueuedListExpansions by filtering out all but the last DoShowList,
+	// as it is the most expensive, and the index it takes indicates the index of the list 
+	// item to be selected - obviously no more than one can be selected.
+	// Also Remove all but the last DoShow.
+	for (i = m_QueuedListExpansions.Length - 1; i >= 0; --i)
+	{
+		NewQueuedListExpansion = m_QueuedListExpansions[i];
+
+		if (NewQueuedListExpansion.bShow && !NewQueuedListExpansion.bAllShortcuts)
+		{
+			if (!bDoShowListFound)
+			{
+				bDoShowListFound = true; // The last DoShowList of the list has been encountered.
+			}
+			else
+			{
+				m_QueuedListExpansions.Remove(i, 1); // A redundant DoShowList has been found, remove it.
+			}
+		}
+		else if (NewQueuedListExpansion.bShow && NewQueuedListExpansion.bAllShortcuts)
+		{
+			if (!bDoShowFound)
+			{
+				bDoShowFound = true; // The last DoShow of the list has been encountered.
+			}
+			else
+			{
+				m_QueuedListExpansions.Remove(i, 1); // A redundant DoShow has been found, remove it.
+			}
+		}
+	}
+
+	for (i = 0; i < m_QueuedListExpansions.Length; ++i)
+	{
+		NewQueuedListExpansion = m_QueuedListExpansions[i];
+
+		`log("Playing queued list expansion" @ NewQueuedListExpansion.eCat,,'DebugHQCamera');
+		DoAvengerListExpansion(NewQueuedListExpansion.eCat, NewQueuedListExpansion.bShow, NewQueuedListExpansion.bAllShortcuts);
+	}
+	m_QueuedListExpansions.Length = 0;
+
+	// Allow .5 seconds for the list expansion to complete before triggering that it is done.
+	if (!m_bAvengerListExpansionDone)
+		SetTimer(0.5, false, 'TriggerAvengerListExpansionDone');
+}
+
+function TriggerAvengerListExpansionDone()
+{
+	`log("TriggerAvengerListExpansionDone",,'DebugHQCamera');
+	m_bAvengerListExpansionDone = true;
+}
+
+function bool CrewSpawningShouldWaitForPendingListExpansion()
+{
+	return !m_bAvengerListExpansionDone && !`XENGINE.IsAnyMoviePlaying() && !class'XComEngine'.static.IsLoadingMoviePlaying();
+}
+
+// Notifies us when an Avenger shortcut tab is selected, so we can know whether to queue Avenger list expansion or not.
+function SelectAvengerShortcut(int NewShortcutTab, int CurrentShortcutTab)
+{
+	// Queue list expansion events in this case, since we will be transition from one room to another within a frame or two.
+	m_bQueueListExpansion = (NewShortcutTab != CurrentShortcutTab);
+}
+
+// Load a UI screen, or queue its loading while the camera is in transit.
+// Screen - the UIScreen
+// Movie - the Flash movie
+simulated function LoadUIScreen(UIScreen Screen, UIMovie Movie)
+{
+	local UIFacility Facility;
+	//local QueuedScreenMovie ScreenMovie;
+	
+	`log("LoadUIScreen" @ `ShowVar(Screen) @ `ShowVar(Movie),,'DebugHQCamera');
+
+	Facility = UIFacility(Screen);
+	/*if (Facility != None && !Facility.bInstantInterp) //Disabled this change for instant transitions, as it broke many UIAlert callbacks - BET 2016-06-28
+	{
+		// Queue the loading and initialization of the UIScreen and the associated Flash movie.
+		ScreenMovie.Facility = Facility;
+		ScreenMovie.Movie = Movie;
+		m_QueuedScreenMovies.AddItem(ScreenMovie);
+	}
+	else
+	{*/
+		ScreenStack.LoadUIScreen(Screen, Movie);
+	/*}*/
+	if( Facility != None ) // bsg-dforrest (7.15.16): null access warnings
+	{
+		// Play the camera transition right away.
+		Facility.HQCamLookAtThisRoom();
+	}	
+}
+
+// Play all queued screen movies, then empty the queue.
+simulated function PlayQueuedScreenMovie()
+{
+	local int i;
+	local QueuedScreenMovie ScreenMovie;
+
+	`log("PlayQueuedScreenMovie",,'DebugHQCamera');
+
+	for (i = 0; i < m_QueuedScreenMovies.Length; ++i)
+	{
+		ScreenMovie = m_QueuedScreenMovies[i];
+
+		`log("Playing queued ScreenMovie:" @ `ShowVar(ScreenMovie.Facility) @ `ShowVar(ScreenMovie.Movie),,'DebugHQCamera');
+		ScreenStack.LoadUIScreen(ScreenMovie.Facility, ScreenMovie.Movie);
+	}
+	m_QueuedScreenMovies.Length = 0;
+}
+
+// Gets all the camera properties of the second facility we are moving toward.
+function GetFacilityTransition(out vector out_Focus, out rotator out_Rotation, out float out_ViewDistance, out float out_FOV, out PostProcessSettings out_PPSettings, out float out_PPOverrideAlpha)
+{
+	out_Focus 			= m_ParabolicFacilityTransition_Focus;
+	out_Rotation 		= m_ParabolicFacilityTransition_Rotation;
+	out_ViewDistance 	= m_ParabolicFacilityTransition_ViewDistance;
+	out_FOV 			= m_ParabolicFacilityTransition_FOV;
+	out_PPSettings 		= m_ParabolicFacilityTransition_PPSettings;
+	out_PPOverrideAlpha = m_ParabolicFacilityTransition_PPOverrideAlpha;
+}
+
+// NOTE: The sister function to CAMLookAtNamedLocation, except it sets the second facility camera properties.
+reliable client function private CAMSetFacilityTransitionForNamedLocation( string strLocation )
+{
+	`log("CAMSetFacilityTransitionForNamedLocation" @ strLocation,,'DebugHQCamera');
+
+	GetCamera().GetViewFromCameraName(none, name(strLocation), m_ParabolicFacilityTransition_Focus, m_ParabolicFacilityTransition_Rotation, m_ParabolicFacilityTransition_ViewDistance, m_ParabolicFacilityTransition_FOV, m_ParabolicFacilityTransition_PPSettings, m_ParabolicFacilityTransition_PPOverrideAlpha );
+}
+
+// NOTE: The sister function to CAMLookAtHQTile, except it sets the second facility camera properties.
+reliable client function private CAMSetFacilityTransitionForHQTile( int x, int y )
+{
+	local string strLocation, strRow, strColumn;
+
+
+	`log("CAMSetFacilityTransitionForHQTile" @ x @ y,,'DebugHQCamera');
+
+	strLocation = "AddonCam";
+
+	strRow = "_R"$y;
+	strColumn = "_C"$x;
+
+	strLocation $= strRow;
+	strLocation $= strColumn;
+
+	// Pan Camera to specified base tile
+	GetCamera().GetViewFromCameraName( none, name(strLocation), m_ParabolicFacilityTransition_Focus, m_ParabolicFacilityTransition_Rotation, m_ParabolicFacilityTransition_ViewDistance, m_ParabolicFacilityTransition_FOV, m_ParabolicFacilityTransition_PPSettings, m_ParabolicFacilityTransition_PPOverrideAlpha );
+}
+
+// NOTE: The sister function to CAMLookAtRoom, except it sets the second facility camera properties.
+reliable client function private CAMSetFacilityTransitionForRoom( XComGameState_HeadquartersRoom RoomStateObject)
+{
+	local int GridIndex;
+	local int RoomRow;
+	local int RoomColumn;
+	local string CameraName;
+	local XComGameState_FacilityXCom FacilityStateObject;
+
+	`log("CAMSetFacilityTransitionForRoom" @ RoomStateObject ,,'DebugHQCamera');
+
+	if( RoomStateObject.MapIndex >= 3 && RoomStateObject.MapIndex <= 14 )
+	{
+		//If this room is part of the build facilities grid, use the grid location
+		//to look at it
+
+		GridIndex = RoomStateObject.MapIndex - 3;
+		RoomRow = (GridIndex / 3) + 1;
+		RoomColumn = (GridIndex % 3) + 1;
+
+		CAMSetFacilityTransitionForHQTile( RoomColumn, RoomRow );
+	}
+	else
+	{
+		FacilityStateObject = XComGameState_FacilityXCom(`XCOMHISTORY.GetGameStateForObjectID(RoomStateObject.Facility.ObjectID));
+
+		CameraName = "UIDisplayCam_"$FacilityStateObject.GetMyTemplateName();
+
+		//This room is one of the default facilities, or special - use the custom named camera
+		CAMSetFacilityTransitionForNamedLocation(CameraName );
+	}
+}
+//</workshop>
+
 defaultproperties
 {
 	m_eUIMode = eUIMode_Strategy;
@@ -3929,4 +4506,9 @@ defaultproperties
 	ForceCameraInterpTime = -1.0
 
 	m_bExitFromSimCombat = false
+	fCameraSwoopDelayTime = -1.0
+	m_bAvengerListExpansionDone = true;
+
+	// hack to prevent hitchiness in Geoscape view
+	m_overworldCursorMesh = StaticMesh'XB0_XCOM2_OverworldIcons.IconSelection''
 }

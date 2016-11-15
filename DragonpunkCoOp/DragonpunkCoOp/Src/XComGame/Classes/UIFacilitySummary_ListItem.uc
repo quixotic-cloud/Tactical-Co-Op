@@ -74,16 +74,22 @@ simulated function UpdateData(StateObjectReference _FacilityRef)
 		ConstructionDate, StatusMessage, QueueMessage);
 }
 
-simulated function OnReceiveFocus()
+simulated function bool OnUnrealCommand(int cmd, int arg)
 {
-	super.OnReceiveFocus();
-	UpdateData(FacilityRef);
-}
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
 
-simulated function OnLoseFocus()
-{
-	super.OnLoseFocus();
-	UpdateData(FacilityRef);
+	switch (cmd)
+	{
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
+			OnButtonClicked(none);
+			break;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 simulated function OnButtonClicked(UIButton kButton)

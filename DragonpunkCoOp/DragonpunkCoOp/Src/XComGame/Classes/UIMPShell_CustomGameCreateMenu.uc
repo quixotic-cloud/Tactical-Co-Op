@@ -92,6 +92,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 			return true;
 	}
 
+	if (MenuList.GetSelectedItem().OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
 	return super.OnUnrealCommand(cmd, arg);
 }
 
@@ -100,6 +104,20 @@ simulated function OnReceiveFocus()
 	super.OnReceiveFocus();
 	UpdateNavHelp();
 	UpdateLobbyTypeSpinner();
+	UpdateGamepadFocus();
+}
+simulated function UpdateGamepadFocus()
+{
+	if(MenuList != None)
+	{		
+		Navigator.SetSelected(MenuList);
+		MenuList.SetSelectedIndex(0, true);
+	}	
+}
+
+simulated function OnFirstListItemInited(UIPanel Panel)
+{
+	UpdateGamepadFocus();
 }
 
 function UpdateNavHelp()
@@ -195,6 +213,9 @@ function UpdateLobbyTypeSpinner()
 		LobbyTypeSpinner.UpdateDataSpinner(m_strLobbyTypeSpinnerText, m_kMPShellManager.m_arrLobbyTypeData[m_iSpinnerInt_LobbyType].strText, OnLobbyTypeSpinnerChangedCallback);
 		m_kMPShellManager.OnlineGame_SetNetworkType(m_kMPShellManager.m_arrLobbyTypeData[m_iSpinnerInt_LobbyType].iLobbyType);
 	}
+	// Waiting to give focus until first list item is ready (must wait for internal slider initialization)
+	if(LobbyTypeSpinner.Spinner != none)
+		LobbyTypeSpinner.Spinner.AddOnInitDelegate(OnFirstListItemInited);
 }
 
 function OnMapPlotTypeSpinnerChangedCallback(UIListItemSpinner spinnerControl, int direction)
@@ -312,7 +333,10 @@ function PasswordDialog_OnCancel(string strUserInput)
 function LaunchGameButtonCallback()
 {
 	`log(self $ "::" $ GetFuncName(),, 'uixcom_mp');
-	`SCREENSTACK.Push(Spawn(class'UIMPShell_SquadLoadoutList_CustomGameCreate', Movie.Pres));
+	if (!`SCREENSTACK.IsInStack(class'UIMPShell_SquadLoadoutList_CustomGameCreate'))
+	{
+		`SCREENSTACK.Push(Spawn(class'UIMPShell_SquadLoadoutList_CustomGameCreate', Movie.Pres));
+	}
 }
 
 function BackButtonCallback()

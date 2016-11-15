@@ -125,12 +125,18 @@ var UIScreenListener		ScreenListener;
 var UIPanel					CategoryBG; 
 var int CachedListItemSelection; 
 
+var UIGamepadIcons LeftBumperIcon;
+var UIGamepadIcons RightBumperIcon;
+var bool bHasShortcutTabAttention;
+var int InRoomCurrentShortcutTabHighlightIndex;		//not the current category, but the current tab we have selected.
 var array<UIAvengerShortcutMessageCategory> Categories;
+// CurrentCategory now refers to what room we are physically in, as opposed to the shortcut tab that we have selected, -1 means we're not in any room.
 var int							 CurrentCategory; 
 
 var int	RequestedNewCategory; // Used while checking for interruption 
 
 var bool ShouldShowWhenRealized;
+const BUMPER_CAMERA_SWOOP_DELAY = 0.5f;
 
 delegate MsgCallback(optional StateObjectReference Facility);
 
@@ -228,7 +234,30 @@ simulated function UIAvengerShortcuts InitShortcuts(optional name InitName)
 	
 	// ---------------------------------------------------------
 
+	if( !Movie.IsMouseActive() )
+		SpawnNavHelpIcons();
 	return self;
+}
+simulated function SpawnNavHelpIcons()
+{
+	local float IconSizeRatio;
+	local float newHeight;
+	local float newWidth;
+
+	//original icon ratio that was used before.
+	IconSizeRatio = 71.5 / 44;
+	newHeight = 35;
+	newWidth = newHeight * IconSizeRatio;
+
+	LeftBumperIcon = Spawn(class'UIGamepadIcons',Self);
+	LeftBumperIcon.InitGamepadIcon('NavBtn_Left', class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LB_L1);
+	LeftBumperIcon.SetSize(newWidth, newHeight);//71.5, 44);
+	LeftBumperIcon.SetY(8);
+
+	RightBumperIcon = Spawn(class'UIGamepadIcons',Self);
+	RightBumperIcon.InitGamepadIcon('NavBtn_Right', class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RB_R1);
+	RightBumperIcon.SetSize(newWidth, newHeight);//71.5, 44);
+	RightBumperIcon.SetY(8);
 }
 
 simulated function UpdateCategories()
@@ -329,6 +358,8 @@ simulated function OnCategoryButtonSizeRealized()
 
 	// Center to the category list along the bottom of the screen.
 	SetX(CurrentCatX * -0.5); 
+	LeftBumperIcon.SetX(-38.0 - LeftBumperIcon.Width / 2.0 - class'UIGamepadIcons'.const.X_OFFSET);
+	RightBumperIcon.SetX(CurrentCatX + 38.0 - RightBumperIcon.Width / 2.0 - class'UIGamepadIcons'.const.X_OFFSET);
 	RealizeListPosition();
 	if( ShouldShowWhenRealized )
 		super.Show();
@@ -336,17 +367,33 @@ simulated function OnCategoryButtonSizeRealized()
 
 simulated function Show()
 {
+	`HQPRES.ShowAvengerShortcutList(-1, true, true);
+}
+
+simulated function DoShow()
+{
 	ShouldShowWhenRealized = true;
 	UpdateCategories();
 }
 
 simulated function Hide()
 {
+	`HQPRES.ShowAvengerShortcutList(-1, false, true);
+
+	HideList();
+}
+simulated function DoHide()
+{
 	super.Hide();
 	ShouldShowWhenRealized = false;
 }
 
 simulated function ShowList( optional int eCat = -1 )
+{
+	`HQPRES.ShowAvengerShortcutList(eCat, true, false);
+}
+
+simulated function DoShowList( int eCat )
 {
 	local int i; 
 	local string TooltipText;
@@ -373,7 +420,10 @@ simulated function ShowList( optional int eCat = -1 )
 	{
 		if( i == eCat )
 		{
-			Categories[i].Button.AnimateShine(true);
+			if (!Categories[eCat].Button.IsDisabled)
+			{
+				Categories[i].Button.AnimateShine(true);
+			}
 			Navigator.SetSelected(Categories[i].Button);
 		}
 		else
@@ -383,6 +433,10 @@ simulated function ShowList( optional int eCat = -1 )
 		}
 	}
 
+	if (Categories[eCat].Button.IsDisabled)
+	{
+		return;
+	}
 	for( i = 0; i < Categories[eCat].Messages.length; i++ )
 	{
 		ListItem = Spawn(class'UIListItemString', List.itemContainer).InitListItem(Categories[eCat].Messages[i].Label).SetDisabled(Categories[eCat].Messages[i].bDisabled);
@@ -409,6 +463,7 @@ simulated function ShowList( optional int eCat = -1 )
 	Padding.bIsNavigable = false;
 	Padding.InitPanel();
 	Padding.SetHeight(SubmenuYOffset);
+	Padding.DisableNavigation();
 	RealizeListPosition();
 	
 	if( Categories[eCat].Messages.length > 0 )
@@ -426,6 +481,8 @@ simulated function ShowList( optional int eCat = -1 )
 		List.Hide();
 		CachedListItemSelection = INDEX_NONE; 
 	}
+	List.SetSelectedIndex(List.GetItemCount() - 2);
+	Movie.Pres.StopDistort();
 }
 function RealizeListPosition()
 {
@@ -445,14 +502,24 @@ function RealizeListPosition()
 
 simulated function HideList()
 {
+	`HQPRES.ShowAvengerShortcutList(-1, false, false);
+}
+
+simulated function DoHideList()
+{
 	local int i;
 	for( i = 0; i < Categories.length; i++ )
 	{
 		Categories[i].Button.AnimateShine(false);
+		if (CurrentCategory != i)
+		{
+			Categories[i].Button.OnLoseFocus();
+		}
 	}
 
 	Movie.Pres.m_kTooltipMgr.HideTooltipsByPartialPath(string(MCPath));
 	List.Hide();
+	//CurrentCategory = -1;
 }
 
 simulated function SelectCategoryForFacilityScreen(UIFacility FacilityScreen, optional bool bForce)
@@ -464,6 +531,8 @@ simulated function SelectCategoryForFacilityScreen(UIFacility FacilityScreen, op
 		CurrentCategory = Index;
 		ShowList(CurrentCategory);
 	}
+
+	InRoomCurrentShortcutTabHighlightIndex = CurrentCategory;
 }
 
 //------------------------------------------------------
@@ -490,11 +559,52 @@ simulated function OnListItemCallback(UIList ContainerList, int ItemIndex)
 	}
 }
 
+simulated function SelectCategoryButtonOnly(int iNewCat)
+{
+	if( Categories[iNewCat].Button.IsDisabled )
+	{
+		if(InRoomCurrentShortcutTabHighlightIndex >= 0)
+		{
+			Categories[InRoomCurrentShortcutTabHighlightIndex].Button.AnimateShine(false);
+			Categories[InRoomCurrentShortcutTabHighlightIndex].Button.OnLoseFocus();
+			HighlightShortcutButton(InRoomCurrentShortcutTabHighlightIndex, false);
+			Categories[InRoomCurrentShortcutTabHighlightIndex].Button.AnimateShine(false);
+		}
+		InRoomCurrentShortcutTabHighlightIndex = iNewCat;
+		HighlightShortcutButton(InRoomCurrentShortcutTabHighlightIndex, true);
+		Categories[InRoomCurrentShortcutTabHighlightIndex].Button.AnimateShine(false);
+	}
+	else
+	{
+		InRoomCurrentShortcutTabHighlightIndex = iNewCat;
+		if(InRoomCurrentShortcutTabHighlightIndex != CurrentCategory)
+		{
+			Categories[CurrentCategory].Button.OnLoseFocus();
+			Categories[CurrentCategory].Button.AnimateShine(false);
+			HideList();
+			//We might be able to get away with disabling navigation from the very beginning since we handle it OnUnrealCommand()
+			List.DisableNavigation();
+		}
+		else
+		{
+			ShowList(CurrentCategory);
+		}
+		HighlightShortcutButton(InRoomCurrentShortcutTabHighlightIndex, true);
+		Navigator.SetSelected(Categories[InRoomCurrentShortcutTabHighlightIndex].Button);
+	}
+}
 simulated function SelectCategory(int iNewCat)
 {
+	`log("SelectCategory "$iNewCat,,'DebugHQCamera');
+
+	`HQPRES.SelectAvengerShortcut(iNewCat, CurrentCategory);
 	// do not process the input if the button should be disabled
 	if( Categories[iNewCat].Button.IsDisabled )
 	{
+		Categories[CurrentCategory].Button.AnimateShine(false);
+		Categories[CurrentCategory].Button.OnLoseFocus();
+		CurrentCategory = iNewCat;
+		Navigator.SetSelected(Categories[iNewCat].Button);
 		return;
 	}
 
@@ -986,8 +1096,15 @@ function SelectFacilityHotlink(StateObjectReference FacilityRef)
 	CurrentScreen = UIFacility(Movie.Stack.GetCurrentScreen());
 	if( CurrentScreen == none || CurrentScreen.FacilityRef != FacilityRef )
 	{		
+		`log("SelectFacilityHotlink",,'DebugHQCamera');
+		`log("  MCPath="$MCPath,,'DebugHQCamera');
+		`HQPRES.SetFacilityTransition(FacilityRef, false);
+
+		`log("  SelectFacilityHotlink1",,'DebugHQCamera');
 		`HQPRES.ClearUIToHUD(true);
+		`log("  SelectFacilityHotlink2",,'DebugHQCamera');
 		FacilityState = XComGameState_FacilityXCom(`XCOMHISTORY.GetGameStateForObjectID(FacilityRef.ObjectID));
+		`log("  SelectFacilityHotlink3",,'DebugHQCamera');
 		FacilityState.GetMyTemplate().SelectFacilityFn(FacilityRef);
 	}
 }
@@ -1039,6 +1156,8 @@ function ViewScientistsHotlink(StateObjectReference FacilityRef)
 
 function SelectChooseResearch(StateObjectReference FacilityRef)
 {
+	if(!class'XComGameState_HeadquartersXCom'.static.IsObjectiveCompleted('T0_M1_WelcomeToLabs'))
+		return;
 	SelectFacilityHotlink(FacilityRef);
 
 	// get to personnel view, once we're on a labs screen. 
@@ -1170,28 +1289,139 @@ simulated function EUIState GetUrgencyColor(int iCat)
 
 }
 
+simulated function UnHighlightAllShortcuts()
+{
+	local int i;
+	for(i = 0; i < Categories.Length; ++i)
+	{
+		Categories[i].Button.AnimateShine(false);
+	}
+	Navigator.OnLoseFocus();
+}
+simulated function HighlightShortcutButton(int index, bool bHighlight)
+{
+	if (!Categories[index].Button.IsDisabled)
+	{
+		Categories[index].Button.AnimateShine(bHighlight);
+	}
+
+	if(bHighlight)
+		Navigator.SetSelected(Categories[index].Button);
+	else
+	{
+		Categories[index].Button.OnLoseFocus();
+		Navigator.OnLoseFocus();
+	}
+}
+
+simulated function HighlightRoomButton(StateObjectReference RoomReference)
+{
+	local int i;
+
+	Navigator.OnLoseFocus();
+
+	for (i = 0; i < Categories.Length; i++)
+	{
+		if (Categories[i].HotLinkRef == RoomReference)
+		{
+			HighlightShortcutButton(i, true);
+		}
+	}
+}
+
 //==============================================================================
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local int iTargetCat;
+	//<workshop> AVENGER_ROOM_TRANSITION_CHANGES kmartinez 2016-04-01
+	//INS:
+	local bool bHandled;
+	//</workshop>
+	
+	//<workshop> SCI 2016/5/23
+	//INS:
+	if (!bIsVisible)
+	{
+		return false;
+	}
+	//</workshop>
 
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
 
+
 	iTargetCat = -1;
+
+	//<workshop> AVENGER_ROOM_TRANSITION_CHANGES kmartinez 2016-04-01
+	//INS:
+	bHandled = true;
+	//</workshop>
 
 	switch( cmd )
 	{
 		case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
-			iTargetCat = (CurrentCategory + 1) % Categories.Length;
+			//<workshop> Fixed locked navigation SCI 2015/11/16
+			//WAS:
+			//iTargetCat = (CurrentCategory + 1) % Categories.Length;
+			if (HasShadowChamber())
+			{
+				//<workshop> AVENGER_ROOM_TRANSITION_CHANGES kmartinez 2016-04-01
+				//WAS:
+				//iTargetCat = (CurrentCategory + 1) % Categories.Length;
+				iTargetCat = (InRoomCurrentShortcutTabHighlightIndex + 1) % Categories.Length;
+				//</workshop>
+			}
+			else
+			{
+				//<workshop> AVENGER_ROOM_TRANSITION_CHANGES kmartinez 2016-04-01
+				//WAS:
+				//iTargetCat = (CurrentCategory + 1) % (Categories.Length - 1);
+				iTargetCat = (InRoomCurrentShortcutTabHighlightIndex + 1) % (Categories.Length - 1);
+				//</workshop>
+			}
+			//</workshop>
+			//<BSG> TTP_5913_ADDED_MISSING_SHORCUT_SOUND_WHEN_ZOOMED_IN JHilton 07.06.2016
+			`XSTRATEGYSOUNDMGR.PlaySoundEvent("Play_Mouseover");
+			//</BSG>
 			break;
 		case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
-			iTargetCat = CurrentCategory - 1;
+			//<workshop> AVENGER_ROOM_TRANSITION_CHANGES kmartinez 2016-04-01
+			//WAS:
+			//iTargetCat = CurrentCategory - 1;
+			iTargetCat = InRoomCurrentShortcutTabHighlightIndex - 1;
+			//</workshop>
 			if (iTargetCat < 0)
 			{
-				iTargetCat = Categories.Length - 1;
+				//<workshop> Fixed locked navigation SCI 2015/11/16
+				//WAS:
+				//iTargetCat = Categories.Length - 1;
+				if (HasShadowChamber())
+				{
+					iTargetCat = Categories.Length - 1;
+				}
+				else
+				{
+					iTargetCat = Categories.Length - 2;
+				}		
+				//</workshop>
+			}
+			//<BSG> TTP_5913_ADDED_MISSING_SHORCUT_SOUND_WHEN_ZOOMED_IN JHilton 07.06.2016
+			`XSTRATEGYSOUNDMGR.PlaySoundEvent("Play_Mouseover");
+			//</BSG>
+			break;
+
+			//<workshop> AVENGER_ROOM_TRANSITION_CHANGES kmartinez 2016-04-01
+			// This is when we actually make the request to transition to the next room
+			//INS:
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+			if(!List.bIsVisible && InRoomCurrentShortcutTabHighlightIndex != CurrentCategory)
+			{
+				`HQPRES.fCameraSwoopDelayTime = BUMPER_CAMERA_SWOOP_DELAY;
+				SelectCategory(InRoomCurrentShortcutTabHighlightIndex);
+				return true;
 			}
 			break;
+			//</workshop>
 			
 		case class'UIUtilities_Input'.const.FXS_KEY_1:
 			XComHQPresentationLayer(Movie.Pres).m_kAvengerHUD.NavHelp.HotlinkToGeoscape();
@@ -1217,6 +1447,13 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 			iTargetCat = -1;
 			break;
+
+		//<workshop> AVENGER_ROOM_TRANSITION_CHANGES kmartinez 2016-04-01
+		//INS:
+		default:
+			bHandled = false;
+			break;
+		//</workshop>
 	}
 
 	// if we aren't visible don't change categories because it will pull us from the geoscape
@@ -1227,14 +1464,49 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	if( iTargetCat > -1 && iTargetCat < Categories.Length )
 	{
 		SelectCategory(iTargetCat);
+		
 		return true;
+	
 	}
-
+	
 	if (super.OnUnrealCommand(cmd, arg))
 		return true;
 	
-	return List.OnUnrealCommand(cmd, arg);
+	//<workshop> AVENGER_ROOM_TRANSITION_CHANGES kmartinez 2016-04-01
+	//WAS:
+	//return List.OnUnrealCommand(cmd, arg);
+	// Since we're manually hiding and unhiding the list, it's not always
+	// appropriate to send input to the list anymore.
+	if(List.bIsVisible && InRoomCurrentShortcutTabHighlightIndex == CurrentCategory)
+	{
+		if(List.OnUnrealCommand(cmd, arg))
+		{
+			ResetAndClearTabShortcutFunctionality();
+			return true;
+		}
+		return false;
+	}
+	else
+	{
+		return bHandled;
+	}
+	//</workshop>
 }
+
+//<workshop> AVENGER_ROOM_TRANSITION_CHANGES kmartinez 2016-04-01
+//INS:
+simulated function ResetAndClearTabShortcutFunctionality()
+{
+	//we can't put away the list if it's open, and we can't unhighlight the same
+	//button that's part of the list.
+	if(!List.bIsVisible)
+	{
+		UnHighlightAllShortcuts();
+		InRoomCurrentShortcutTabHighlightIndex = -1;
+	}
+	bHasShortcutTabAttention = false;
+}
+//</workshop>
 
 //==============================================================================
 
@@ -1277,11 +1549,14 @@ function OnReturnFromInterrupt( bool bContinueNav )
 	local UIAvengerShortcutMessageCategory Category;
 	local delegate<MsgCallback> MsgCallback;
 
+	`log("OnReturnFromInterrupt",,'DebugHQCamera');
 	if( bContinueNav )
 	{
 		if( RequestedNewCategory != CurrentCategory || !List.bIsVisible )
 		{
 			CurrentCategory = RequestedNewCategory;
+			InRoomCurrentShortcutTabHighlightIndex = CurrentCategory;
+			`HQPRES.m_kFacilityGrid.SelectRoomByReference(Categories[CurrentCategory].HotLinkRef);
 			RequestedNewCategory = -1;
 			CachedListItemSelection = -1;
 			ShowList(CurrentCategory);
@@ -1298,6 +1573,7 @@ function OnReturnFromInterrupt( bool bContinueNav )
 	else
 	{
 		RequestedNewCategory = -1;
+		InRoomCurrentShortcutTabHighlightIndex = CurrentCategory;
 	}
 }
 
@@ -1444,4 +1720,7 @@ defaultproperties
 	bIsNavigable	= true; 
 	bCascadeFocus = false; 
 	ShouldShowWhenRealized = false;
+	CurrentCategory = -1;
+	InRoomCurrentShortcutTabHighlightIndex = -1;
+	bHasShortcutTabAttention = false;
 }

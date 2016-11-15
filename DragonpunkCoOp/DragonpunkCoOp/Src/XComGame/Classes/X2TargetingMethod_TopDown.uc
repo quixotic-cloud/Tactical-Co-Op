@@ -44,6 +44,11 @@ function NextTarget()
 	DirectSetTarget(LastTarget + 1);
 }
 
+function PrevTarget()
+{
+	DirectSetTarget(LastTarget - 1);
+}
+
 function int GetTargetIndex()
 {
 	return LastTarget;
@@ -59,17 +64,24 @@ function DirectSetTarget(int TargetIndex)
 	local XGUnit TargetedPawn;
 	local vector TargetedLocation;
 	local XComWorldData World;
+	local int NewTarget;
 
 	World = `XWORLD;
-
-	// advance the target counter
-	LastTarget = TargetIndex % Action.AvailableTargets.Length;
 
 	// put the targeting reticle on the new target
 	Pres = `PRES;
 	TacticalHud = Pres.GetTacticalHUD();
-	TacticalHud.TargetEnemy(LastTarget);
+	// advance the target counter
+	NewTarget = TargetIndex % Action.AvailableTargets.Length;
+	if(NewTarget < 0) NewTarget = Action.AvailableTargets.Length + NewTarget;
 
+	if(NewTarget != LastTarget)
+	{
+		LastTarget = NewTarget;
+		TacticalHud.TargetEnemy(NewTarget);
+	}
+
+	LastTarget = NewTarget;
 	// have the idle state machine look at the new target
 	FiringUnit.IdleStateMachine.CheckForStanceUpdate();
 

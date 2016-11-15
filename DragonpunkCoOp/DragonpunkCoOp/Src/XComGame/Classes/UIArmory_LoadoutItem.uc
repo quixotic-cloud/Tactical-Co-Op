@@ -13,6 +13,7 @@ var bool IsLocked;
 var bool IsInfinite;
 var bool IsDisabled;
 
+var bool bCanBeCleared;
 var EInventorySlot EquipmentSlot; // only relevant if this item represents an equipment slot
 var StateObjectReference ItemRef;
 var X2ItemTemplate ItemTemplate;
@@ -47,7 +48,7 @@ simulated function UIArmory_LoadoutItem InitLoadoutItem(XComGameState_Item Item,
 	{
 		if (Item != None)
 		{
-			if (ItemTemplate.bInfiniteItem && !Item.HasBeenModified())
+			if ((ItemTemplate.bInfiniteItem || ItemTemplate.StartingItem) && !Item.HasBeenModified())
 			{
 				SetInfinite(true);
 			}
@@ -295,6 +296,9 @@ simulated function UpdateDropItemButton(optional XComGameState_Item Item)
 		bShowClearButton = Item != none && !UIArmory_Loadout_MP(Screen).GetUnit().ItemIsInMPBaseLoadout(Item.GetMyTemplateName());
 	else
 		bShowClearButton = Item != none && !ItemTemplate.bInfiniteItem || Item.HasBeenModified();
+	bCanBeCleared = bShowClearButton;
+	if(!Movie.IsMouseActive())
+		return; //should not show the PC button to clear item if in console mode
 
 	MC.SetBool("showClearButton", bShowClearButton);
 	MC.FunctionVoid("realize");

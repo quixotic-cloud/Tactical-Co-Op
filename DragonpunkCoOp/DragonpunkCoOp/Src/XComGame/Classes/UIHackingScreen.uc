@@ -38,6 +38,7 @@ var array<int>	HackRollMods;
 
 var localized string strHackAbilityLabel;
 var localized string strHackButtonLabel;
+var localized string strHackConsoleButtonLabel;
 var localized string strCancelHackButtonLabel;
 var localized string strUnlockChanceLabel;
 var localized string strRewardUnlockedLabel;
@@ -54,6 +55,7 @@ var localized string ChooseRewardText;
 var localized string m_AdventName;
 var localized string m_AdvenOverride;
 var localized string m_AdventInitialize;
+var localized string HackCompleteConsoleAnyKeyToContinue;
 
 var delegate<HackingCompleteCallback> OnHackingComplete;
 var delegate<HackingRewardUnlockedCallback> OnHackingRewardUnlocked;
@@ -117,11 +119,24 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 // Flash screen is initialized
 simulated function OnInit()
 {
+	local GFxObject ButtonMC;
+	local ASValue GeneralASValue;
+	local Array<AsValue> AsParamArray;
+	local int IntegerValue;
+	local string FinalHackLabelStr;
 	super.OnInit();
 
 	AS_SetChooseRewards(ChooseRewardText);
 	PopulateResultsInfo();
-	AS_LocalizeButton(strHackButtonLabel);
+	if( `ISCONTROLLERACTIVE )
+	{
+		FinalHackLabelStr = Repl(strHackConsoleButtonLabel, "%A", class 'UIUtilities_Input'.static.HTML(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon(),,-6));
+		AS_LocalizeButton(FinalHackLabelStr);
+	}
+	else
+	{
+		AS_LocalizeButton(strHackButtonLabel);
+	}
 	PopulateSoldierInfo();
 	PopulateEnemyInfo();
 
@@ -134,6 +149,27 @@ simulated function OnInit()
 	}
 	SetTimer(3.3, False, 'StartScaryComputerLoopAkEvent');
 	MC.FunctionString("UpdateCancelButton", CanCancel() ? strCancelHackButtonLabel : "");
+
+	if( `ISCONTROLLERACTIVE )
+	{
+		GeneralASValue.Type = AS_Number;
+		IntegerValue = eUIButtonStyle_HOTLINK_BUTTON;
+		GeneralASValue.n = IntegerValue;
+		AsParamArray.AddItem( GeneralASValue );
+
+		ButtonMC = Movie.GetVariableObject(MCPath$".CancelButton.cancelButton");
+		if(ButtonMC != none)
+		{
+			ButtonMC.Invoke("setStyle", AsParamArray);
+			// (kmartinez) Array was storing a copy of the object, so I had to remove it, modify it,
+			// then add it back in. 
+			AsParamArray.RemoveItem(GeneralASValue);
+			GeneralASValue.Type = AS_String;
+			GeneralASValue.s = class 'UIUtilities_Input'.static.GetBackButtonIcon();
+			AsParamArray.AddItem( GeneralASValue );
+			ButtonMC.Invoke("setIcon", AsParamArray);
+		}
+	}
 }
 
 simulated function bool CanCancel()
@@ -365,6 +401,19 @@ simulated function bool OnUnrealCommand(int ucmd, int ActionMask)
 				bHandled = true;
 			}
 			break;
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+			SelectedHackRewardOption = 1;
+			HighlightedHackRewardOption = 1;
+			RefreshPreviewState();
+			break;
+		
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+			SelectedHackRewardOption = 2;
+			HighlightedHackRewardOption = 2;
+			RefreshPreviewState();
+			break;
 	}
 
 	// consume all other input
@@ -438,6 +487,7 @@ function InitiateHack()
 	local int DisplayedScore, SelectedHackChance;
 	local array<string> HackFriendlyNames;
 	local array<string> HackDescriptions;
+	local string FinalPressButtonToContinueStr;
 
 	`assert(!m_hackStarted);
 	`assert(FinalizeHackAbility != none);
@@ -470,11 +520,13 @@ function InitiateHack()
 
 	AS_SetMeterRolledScore(DisplayedScore);
 
+	FinalPressButtonToContinueStr = Repl(HackCompleteConsoleAnyKeyToContinue, "%A", class 'UIUtilities_Input'.static.HTML(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon(),,-6));
+
 	AS_UpdateHackComplete(
 		HackRewards[RewardIndex].bBadThing ? HackFailedLabel : HackSuccessLabel,	// Title
 		HackFriendlyNames[RewardIndex],									// Reward Name
 		HackDescriptions[RewardIndex],								// Reward Description
-		HackCompleteAnyKeyToContinue,												// Button Hint
+		`ISCONTROLLERACTIVE ? FinalPressButtonToContinueStr :HackCompleteAnyKeyToContinue,												// Button Hint
 		RewardIndex
 		);
 

@@ -72,20 +72,35 @@ simulated function BindLibraryItem()
 		ButtonGroup.InitPanel('ButtonGroup', '');
 
 		Button1 = Spawn(class'UIButton', ButtonGroup);
-		Button1.SetResizeToText(false);
-		Button1.InitButton('Button0', "");
+
+		Button1.InitButton('Button0', "",, eUIButtonStyle_NONE);
+		Button1.OnSizeRealized = OnButtonSizeRealized;
 
 		Button2 = Spawn(class'UIButton', ButtonGroup);
-		Button2.SetResizeToText(false);
 		Button2.InitButton('Button1', "");
+		Button2.InitButton('Button1', "",, eUIButtonStyle_NONE);
+		Button2.OnSizeRealized = OnButtonSizeRealized;
 
 		Button3 = Spawn(class'UIButton', ButtonGroup);
-		Button3.SetResizeToText(false);
 		Button3.InitButton('Button2', "");
+		Button3.InitButton('Button2', "",, eUIButtonStyle_NONE);
+		Button3.OnSizeRealized = OnButtonSizeRealized;
 
 		ShadowChamber = Spawn(class'UIPanel', LibraryPanel);
 		ShadowChamber.InitPanel('ShadowChamber');
 	}
+}
+simulated function OnButtonSizeRealized()
+{
+	super.OnButtonSizeRealized();
+
+	Button1.SetX(-Button1.Width / 2.0);
+	Button2.SetX(-Button2.Width / 2.0);
+	LockedButton.SetX(185 - LockedButton.Width / 2.0);
+
+	Button1.SetY(10.0);
+	Button2.SetY(40.0);
+	LockedButton.SetY(125.0);
 }
 
 simulated function BuildScreen()
@@ -103,6 +118,17 @@ simulated function BuildScreen()
 	}
 	// Add Interception warning and Shadow Chamber info 
 	super.BuildScreen();
+	
+	Navigator.Clear();
+	Button1.OnLoseFocus();
+	Button2.OnLoseFocus();
+	Button3.OnLoseFocus();
+	Button1.SetResizeToText(true);
+	Button2.SetResizeToText(true);
+	Button1.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+	Button1.SetGamepadIcon(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+	Button2.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+	Button2.SetGamepadIcon(class 'UIUtilities_Input'.static.GetBackButtonIcon());
 }
 
 simulated function BuildMissionPanel()
@@ -161,9 +187,14 @@ simulated function BuildOptionsPanel()
 		LockedButton = Spawn(class'UIButton', LockedPanel);
 		LockedButton.SetResizeToText(false);
 		LockedButton.InitButton('ConfirmButton', "");
+		LockedButton.SetResizeToText(true);
+		LockedButton.SetStyle(eUIButtonStyle_HOTLINK_BUTTON);
+		LockedButton.SetGamepadIcon(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+		LockedButton.OnSizeRealized = OnButtonSizeRealized;
 		LockedButton.SetText(m_strOK);
 		LockedButton.OnClickedDelegate = OnCancelClicked;
 		LockedButton.Show();
+		LockedButton.DisableNavigation();
 	}
 	else
 	{
@@ -176,6 +207,32 @@ simulated function BuildOptionsPanel()
 
 	Button3.Hide();
 	ConfirmButton.Hide();
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	switch (cmd)
+	{
+	case class 'UIUtilities_Input'.const.FXS_BUTTON_A:
+	case class 'UIUtilities_Input'.const.FXS_KEY_ENTER:
+		if (CanTakeMission() && Button1 != none)
+		{
+			Button1.Click();
+			return true;
+		}
+		else
+		{
+			CloseScreen();
+			return true;
+		}
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 //-------------- EVENT HANDLING --------------------------------------------------------

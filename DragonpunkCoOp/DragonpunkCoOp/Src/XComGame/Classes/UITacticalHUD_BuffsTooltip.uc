@@ -80,6 +80,11 @@ simulated function UIPanel InitBonusesAndPenalties(optional name InitName, optio
 	ItemListMask = Spawn(class'UIMask', self).InitMask('Mask', ItemList).FitMask(ItemList); 
 
 	// --------------------------------------------- 
+	//A delay is unnecessay when the 'hover' display is simulated by a button press
+	if(!Movie.IsMouseActive())
+	{
+		tDelay = 0;
+	}	
 
 	return self; 
 }

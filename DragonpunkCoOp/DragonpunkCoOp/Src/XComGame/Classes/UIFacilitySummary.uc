@@ -24,6 +24,7 @@ var array<XComGameState_FacilityXCom> m_arrFacilities;
 
 var localized string m_strTitle;
 
+var public localized string m_strToggleSort;
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
 {
 	super.InitScreen(InitController, InitMovie, InitName);
@@ -88,7 +89,10 @@ simulated function UpdateData()
 simulated function UpdateNavHelp()
 {
 	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
+	`HQPRES.m_kAvengerHUD.NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
 	`HQPRES.m_kAvengerHUD.NavHelp.AddBackButton(OnCancel);
+	if( `ISCONTROLLERACTIVE )
+		`HQPRES.m_kAvengerHUD.NavHelp.AddLeftHelp(m_strToggleSort, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
 }
 
 simulated function OnReceiveFocus()
@@ -130,6 +134,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
 
+	if (m_kList.GetSelectedItem().OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
 	switch( cmd )
 	{
 		// OnAccept
@@ -141,6 +149,41 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_BUTTON_START:
 			`HQPRES.UIPauseMenu( ,true );
 			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			if (!m_bFlipSort)
+			{
+				m_bFlipSort = true;
+			}
+			else
+			{
+				m_bFlipSort = false;
+				switch (m_eSortType)
+				{
+				case eFacilitySortType_Name:
+					m_eSortType = eFacilitySortType_Staff;
+					break;
+
+				case eFacilitySortType_Staff:
+					m_eSortType = eFacilitySortType_Power;
+					break;				
+				
+				case eFacilitySortType_Power:
+					m_eSortType = eFacilitySortType_ConstructionDate;
+					break;
+									
+				case eFacilitySortType_ConstructionDate:
+					m_eSortType = eFacilitySortType_Status;
+					break;
+
+				case eFacilitySortType_Status:
+					m_eSortType = eFacilitySortType_Name;
+					break;
+				}
+			}
+
+			UpdateData();
+			m_kList.SetSelectedIndex(0, true);
+			return true;
 	}
 
 	return super.OnUnrealCommand(cmd, arg);
@@ -148,6 +191,9 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 function SortFacilities()
 {
+	local int i;
+	local array<UIPanel> SortButtons;
+	local UIFacilitySummary_HeaderButton SortButton;
 	switch(m_eSortType)
 	{
 	case eFacilitySortType_Name: m_arrFacilities.Sort(SortByName); break;
@@ -155,6 +201,23 @@ function SortFacilities()
 	case eFacilitySortType_Power: m_arrFacilities.Sort(SortByPower); break;
 	case eFacilitySortType_ConstructionDate: m_arrFacilities.Sort(SortByConstructionDate); break;
 	case eFacilitySortType_Status: m_arrFacilities.Sort(SortByStatus); break;
+	}
+	//INS:
+	m_kHeader.GetChildrenOfType(class'UIFacilitySummary_HeaderButton', SortButtons);
+	for (i = 0; i < SortButtons.Length; ++i)
+	{
+		SortButton = UIFacilitySummary_HeaderButton(SortButtons[i]);
+		SortButton.SetArrow(m_bFlipSort);
+		if (SortButton.IsSelected())
+		{
+			SortButton.OnReceiveFocus();
+			SortButton.MC.FunctionBool("setArrowVisible", true);
+		}
+		else
+		{
+			SortButton.OnLoseFocus();
+			SortButton.MC.FunctionBool("setArrowVisible", false);
+		}
 	}
 }
 

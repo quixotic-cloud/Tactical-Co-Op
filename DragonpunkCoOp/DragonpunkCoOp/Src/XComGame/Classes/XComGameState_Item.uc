@@ -1761,6 +1761,92 @@ function bool IsNeededForGoldenPath()
 	return false;
 }
 
+static function FilterOutGoldenPathItems(out array<StateObjectReference> ItemsToFilter)
+{
+	local XComGameStateHistory History;
+	local XComGameState_HeadquartersXCom XComHQ;
+	local XComGameState_Objective ObjectiveState;
+	local XComGameState_Tech TechState;
+	local X2ObjectiveTemplate ObjTemplate;
+	local name TechName;
+
+	local name ItemTemplateName;
+	local array<name> ItemTemplatesToFilter;
+
+	local int i;
+	local XComGameState_Item ItemState;
+
+	History = `XCOMHISTORY;
+	XComHQ = XComGameState_HeadquartersXCom(History.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
+
+	foreach History.IterateByClassType(class'XComGameState_Objective', ObjectiveState)
+	{
+		if(ObjectiveState.ObjState < eObjectiveState_InProgress)
+		{
+			ObjTemplate = ObjectiveState.GetMyTemplate();
+			if (ObjTemplate != none)
+			{
+				foreach ObjTemplate.AssignmentRequirements.RequiredItems(ItemTemplateName)
+				{
+					if(ItemTemplatesToFilter.Find(ItemTemplateName) == INDEX_NONE)
+						ItemTemplatesToFilter.AddItem(ItemTemplateName);
+				}
+
+				foreach ObjTemplate.AssignmentRequirements.RequiredTechs(TechName)
+				{
+					foreach History.IterateByClassType(class'XComGameState_Tech', TechState)
+					{
+						if (!XComHQ.TechIsResearched(TechState.GetReference()) && TechState.GetMyTemplateName() == TechName)
+						{
+							foreach TechState.GetMyTemplate().Requirements.RequiredItems(ItemTemplateName)
+							{
+								if(ItemTemplatesToFilter.Find(ItemTemplateName) == INDEX_NONE)
+									ItemTemplatesToFilter.AddItem(ItemTemplateName);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if(ObjectiveState.ObjState < eObjectiveState_Completed)
+		{
+			ObjTemplate = ObjectiveState.GetMyTemplate();
+			if (ObjTemplate != none)
+			{
+				foreach ObjTemplate.CompletionRequirements.RequiredItems(ItemTemplateName)
+				{
+					if(ItemTemplatesToFilter.Find(ItemTemplateName) == INDEX_NONE)
+						ItemTemplatesToFilter.AddItem(ItemTemplateName);
+				}
+
+				foreach ObjTemplate.CompletionRequirements.RequiredTechs(TechName)
+				{
+					foreach History.IterateByClassType(class'XComGameState_Tech', TechState)
+					{
+						if (!XComHQ.TechIsResearched(TechState.GetReference()) && TechState.GetMyTemplateName() == TechName)
+						{
+							foreach TechState.GetMyTemplate().Requirements.RequiredItems(ItemTemplateName)
+							{
+								if(ItemTemplatesToFilter.Find(ItemTemplateName) == INDEX_NONE)
+									ItemTemplatesToFilter.AddItem(ItemTemplateName);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+
+	for(i = ItemsToFilter.Length - 1; i >= 0; i--)
+	{
+		ItemState = XComGameState_Item(History.GetGameStateForObjectID(ItemsToFilter[i].ObjectID));
+		if(ItemTemplatesToFilter.Find(ItemState.GetMyTemplateName()) != INDEX_NONE)
+			ItemsToFilter.Remove(i, 1);
+	}
+}
+
 function bool ShouldDisplayWeaponAndAmmo()
 {
 	local X2WeaponTemplate WeaponTemplate;

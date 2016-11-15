@@ -172,8 +172,15 @@ simulated function ShowQueue(optional bool bRefreshQueue = false)
 
 simulated function UpdateNavHelp()
 {
-	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
-	`HQPRES.m_kAvengerHUD.NavHelp.AddBackButton(CloseScreen);
+	local UINavigationHelp NavHelp;
+
+	NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
+
+	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
+	NavHelp.AddBackButton(CloseScreen);
+	if(`ISCONTROLLERACTIVE)
+		NavHelp.AddSelectNavHelp();
 }
 
 simulated function bool OnUnrealCommand(int cmd, int arg)

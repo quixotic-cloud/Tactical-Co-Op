@@ -33,10 +33,43 @@ simulated event Destroyed()
 simulated function bool OnInput( int iInput,  optional int ActionMask = class'UIUtilities_Input'.const.FXS_ACTION_PRESS )
 {
 	local UIScreen Screen;
+	local UIAvengerHUD AvengerHUD;
+//	local XComHQPresentationLayer HQPres;
 
 	// Ignore input if system is gated.
 	if ( IsInputBlocked )
 		return false;
+
+	/*
+	// Block all Avenger input if non-interactive events (e.g. camera transition, fullscreen video) are occurring, 
+	// unless the pause menu is up.  This prevents a plethora of bugs from occurring!
+	HQPres = XCOmHQPresentationLayer( XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).Pres );
+	if (HQPres != None && HQPres.NonInterruptiveEventsOccurring() && !IsInStack(class'UIPauseMenu') && !IsInStack(class'UIEndGameStats') )
+	{
+		// Because the new strategy camera code is suspected of a bug, this will help diagnose, in that case, why X
+		// buttons are being blocked, if indeed this system is the one blocking them.
+		if (iInput == class'UIUtilities_Input'.const.FXS_BUTTON_A && 
+			(ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0)
+		{
+			HQPres.DiagnoseWhyNonInterruptiveEventsAreOccurring();
+		}
+
+		// Return false to block the input.
+		return false;
+	}*/
+	
+	// Process screens to handle Avenger Y button shortcut.
+	AvengerHUD = UIAvengerHUD( GetFirstInstanceOf(class'UIAvengerHUD') );
+	if (AvengerHUD != none && AvengerHUD.bIsInited)
+	{
+		if( iInput == class'UIUtilities_Input'.const.FXS_BUTTON_Y)
+		{
+			if (AvengerHUD.OnUnrealCommand(iInput, ActionMask))
+			{
+				return true;
+			}
+		}
+	}
 
 	// Not using foreach to enforce calling via stack order: LIFO
 	foreach Screens(Screen)
@@ -282,6 +315,11 @@ simulated function PrintScreenStack()
  */
 simulated function UIScreen Push( UIScreen Screen, optional UIMovie Movie = none )
 {
+	//local UIScreen ReconnectControllerScreen;
+	local XComHQPresentationLayer HQPres;
+	
+	`log("UIScreenStack::Push "$Screen @ Movie,,'DebugHQCamera');
+	
 	if( Screens.Length > 0 )
 	{
 		Screens[0].OnLoseFocus();
@@ -325,10 +363,20 @@ simulated function UIScreen Push( UIScreen Screen, optional UIMovie Movie = none
 		}
 		else
 		{
-			if(!Screen.bIsInited)
-				Screen.InitScreen( XComPlayerController(Pres.Owner), Movie );
+			//if(!Screen.bIsInited)
+			//	Screen.InitScreen( XComPlayerController(Pres.Owner), Movie );
+			//
+			//Movie.LoadScreen( Screen );			
+			HQPres = XCOmHQPresentationLayer( XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).Pres );
 
-			Movie.LoadScreen( Screen );
+			if (HQPres != None)
+			{
+				HQPres.LoadUIScreen(Screen, Movie);
+			}
+			else
+			{
+				LoadUIScreen(Screen, Movie);
+			}
 		}
 
 		// Clean reference used to store spawned screens (which is passed via 'Screen' argument).
@@ -340,6 +388,13 @@ simulated function UIScreen Push( UIScreen Screen, optional UIMovie Movie = none
 		Pres.m_kTooltipMgr.HideAllTooltips();
 
 	return Screen;
+}
+simulated function LoadUIScreen(UIScreen Screen, UIMovie Movie)
+{
+	if(!Screen.bIsInited)
+		Screen.InitScreen( XComPlayerController(Pres.Owner), Movie );
+
+	Movie.LoadScreen(Screen);
 }
 
 //----------------------------------------------------------------------------
@@ -398,6 +453,7 @@ simulated function UIScreen Pop(UIScreen Screen, optional bool MustExist = true)
 {
 	local int Index;
 
+	`log("UIScreenStack::Pop "$Screen,,'DebugHQCamera');
 	Index = Screens.Find(Screen);
 
 `if( `notdefined(FINAL_RELEASE) )
@@ -487,6 +543,7 @@ simulated function PopUntil( UIScreen Screen, optional bool MustExist = true )
  */
 simulated function PopUntilClass( class<UIScreen> ClassToKeep, optional bool MustExist = true )
 {
+	`log("PopUntilClass",,'DebugHQCamera');
 	PopUntil( GetScreen( ClassToKeep ), MustExist );
 }
 

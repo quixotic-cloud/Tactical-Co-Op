@@ -11,6 +11,11 @@ class XCom3DCursor extends XComPawn
 
 var const config float CursorFloorHeight; // how high is each floor, in unreal units?
 var const config float MinDrawCylinderHeightThreshold; // how high above the ground, in units, must a flying unit be before drawing the height cylinder
+//<workshop> Avoid pop after moving a unit the first time AMS 2016/04/13
+// After a unit moves once and X2Camera_FollowMovingUnit kicks in, we must not update the X2Camera_FollowCursor until the cursor moves,
+// or this will result a camera pop.
+var XComUnitPawn LastUnitMovedTo;
+var bool bCamera_FollowMovingUnit_IsStationary;
 
 var protected int CachedMaxFloor; // cached from the plot definition of the current map. Don't use directly, instead call GetMaxFloor()
 var protected float CachedCursorFloorOffset; // // cached from the plot definition of the current map.
@@ -45,6 +50,8 @@ enum CursorSearchDirection
 };
 
 var bool m_bPathingNeedsUpdate;
+var bool m_bCustomAllowCursorMovement;
+var bool m_bAllowCursorAscensionAndDescension;
 
 cpptext
 {
@@ -108,6 +115,7 @@ var bool                        m_bHiddenOverride; // this is a temp fix for dem
 var vector2D                    m_vCutoutExtent;
 var float                       m_fCursorExtentFactor;
 
+var vector                      m_vInitialCursorPressMovement;
 ////////////////////////
 // Native functions
 ////////////////////////
@@ -115,13 +123,14 @@ native function int GetMaxFloor();
 native function bool IsCursorOccluded();
 native function bool CameraLineCheck( Vector PositionToTest, out Vector OutFurthestOccluder  );
 native function UpdateCursorVisibility();
-simulated native private function DisplayHeightDifferences();
 
+simulated native private function DisplayHeightDifferences();
 simulated native private function CursorSearchResult CursorSnapToFixedFloors(float fCollisionRadius, 
 																			 int iDesiredFloor,
 																			 CursorSearchDirection eSearchType);
 
-simulated native private function Vector ProcessChainedDistance(Vector vLocation);
+
+simulated native function Vector ProcessChainedDistance(Vector vLocation);
 
 native function int WorldZToFloor(Vector kLocation);
 native function float WorldZFromFloor(int iFloor);
@@ -204,9 +213,16 @@ reliable server function ServerSetChainedPawn(XComUnitPawn kChainedPawn)
 	ChainedPawn = kChainedPawn;
 }
 
+// Take note of sister function MoveToUnitWithOffset,
 simulated function MoveToUnit( XComUnitPawn Unit, optional bool bSetCamView=true, optional bool bResetChainedDistance=true )
 {
 	local Vector kLocation;
+	// If the unit is being automatically selected for the 2nd movement, and the X2Camera_FollowMovingUnit is stationary
+	// because the entire path is on screen, we don't want to move the cursor because that will jolt the camera.
+	if (Unit == LastUnitMovedTo && bCamera_FollowMovingUnit_IsStationary)
+	{
+		return;
+	}
 	
 	if( bResetChainedDistance )
 	{
@@ -227,6 +243,34 @@ simulated function MoveToUnit( XComUnitPawn Unit, optional bool bSetCamView=true
 
 	kLocation = Unit.Location;
 	kLocation.Z -= Unit.GetCollisionHeight() * 0.5;
+	MoveToLocation( kLocation, bSetCamView );
+	
+	LastUnitMovedTo = Unit;
+}
+// Same as sister function MoveToUnit, but with the parameter Offset.
+simulated function MoveToUnitWithOffset( XComUnitPawn Unit, Vector Offset, optional bool bSetCamView=true, optional bool bResetChainedDistance=true  )
+{
+	local Vector kLocation;
+	if( bResetChainedDistance )
+	{
+		// Exploit fix: don't reset the chain distances if a targeting method is currently active. 
+		// You could throw a grenade completely across the map if we did that
+		if(`Pres.m_kTacticalHUD.m_kAbilityHUD.TargetingMethod == none)
+		{
+			m_fMaxChainedDistance = 0;
+			m_fMinChainedDistance = 0;
+		}
+		ChainedPawn = Unit;
+		if(Role < ROLE_Authority)
+		{
+			ServerSetChainedPawn(Unit);
+		}
+	}
+
+	kLocation = Unit.Location + Offset;
+	kLocation.Z -= Unit.GetCollisionHeight() * 0.5;
+
+	// happens in here
 	MoveToLocation( kLocation, bSetCamView );
 }
 
@@ -277,6 +321,7 @@ function MoveToLocation( vector Pos, bool bSetCamView )
 	SetPhysics( PHYS_None ); 
 	SetCollision( false, false ); // MHU - This && physics change allows cursor to travel into/out of buildings seamlessly at varying floor heights.
 	CursorSetLocation( Pos );
+	CursorSnapToFloor(m_iRequestedFloor);
 
 	// cursor should be oriented flat. this fixes an MP problem where the cursor was pitched/rolled. -tsmith 
 	rotOnlyYaw = Rotation;
@@ -349,6 +394,7 @@ protected function bool DisableFloorChanges()
 	// Don't allow user to change elevations in the tutorial if we're not supposed to.
 	// disabled for x2, but leaving this function here as we'll likely want to do this again
 	return false;
+	return !m_bAllowCursorAscensionAndDescension;
 }
 
 state CursorMode_NoCollision
@@ -468,7 +514,7 @@ state CursorMode_NoCollision
 
 		// update cursor height switching logic. Only increase our requested floor
 		// if the user was able to see a change (i.e., the effective floor also increased)
-		kResult = CursorSnapToFloor(m_iRequestedFloor, eCursorSearch_Up);
+		kResult = CursorSnapToFloor(m_iRequestedFloor, eCursorSearch_ExactFloor);
 		m_bCursorLaunchedInAir = !kResult.m_bOnGround;
 		if(kResult.m_iEffectiveFloor > m_iRequestedFloor)
 		{
@@ -619,6 +665,8 @@ defaultproperties
 	m_bLastCursorInBuildingStatus=false
 	m_bIgnoreCursorSnapToFloor=false;
 	m_bPathingNeedsUpdate=true;
+	m_bCustomAllowCursorMovement = true;
+	m_bAllowCursorAscensionAndDescension = true;
 
 	bDoNotTriggerSeqEventTouch=true
 }

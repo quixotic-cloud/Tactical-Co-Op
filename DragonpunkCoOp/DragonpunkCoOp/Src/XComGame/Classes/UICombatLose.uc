@@ -59,20 +59,24 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	Button0 = Spawn(class'UIButton', ButtonGroup);
 	Button0.bAnimateOnInit = false;
 	Button0.SetResizeToText(false);
-	Button0.InitButton('Button0', m_sRestart, RequestRestart);
+	Button0.InitButton('Button0', m_sRestart, RequestRestart, eUIButtonStyle_NONE);
 
 	Button1 = Spawn(class'UIButton', ButtonGroup);
 	Button1.bAnimateOnInit = false; 
 	Button1.SetResizeToText(false);
-	Button1.InitButton('Button1', m_sReload, RequestLoad);
+	Button1.InitButton('Button1', m_sReload, RequestLoad, eUIButtonStyle_NONE);
 
 	Button2 = Spawn(class'UIButton', ButtonGroup);
 	Button2.bAnimateOnInit = false; 
 	Button2.SetResizeToText(false);
-	Button2.InitButton('Button2', m_sExitToMain, RequestExit);
+	Button2.InitButton('Button2', m_sExitToMain, RequestExit, eUIButtonStyle_NONE);
 
-	Navigator.SetSelected(ButtonGroup);
-	ButtonGroup.Navigator.SetSelected(Button0);
+
+	Navigator.Clear();
+	Navigator.AddControl(Button0);
+	Navigator.AddControl(Button1);
+	Navigator.AddControl(Button2);
+
 
 	//We're hijacking the pause menu override of the input methods here, to allow the Steam controller to switch the input mode in Tactical to use the menu mode. 
 	`BATTLE.m_bInPauseMenu = true;
@@ -110,6 +114,8 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	if(!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
 		return true;
+
+	// TODO: Need a custom implementation for keyboard / gamepad (track selected index and set button's focus state manually)
 
 	return super.OnUnrealCommand(cmd, arg);
 }

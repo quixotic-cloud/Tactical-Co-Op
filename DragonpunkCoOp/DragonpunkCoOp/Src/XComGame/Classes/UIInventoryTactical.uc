@@ -63,10 +63,18 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_kLootList.InitList('ListB', 10, 135, 480, 290); // position list underneath title
 	
 	m_kButton_OK = Spawn(class'UIButton', m_kRContainer);
-	m_kButton_OK.InitButton('BackButton', class'UIUtilities_Text'.default.m_strGenericOK, OnButtonClicked, eUIButtonStyle_HOTLINK_BUTTON);
+	m_kButton_OK.InitButton('BackButton', class'UIUtilities_Text'.static.AlignCenter(class'UIUtilities_Text'.default.m_strGenericOK), OnButtonClicked, eUIButtonStyle_HOTLINK_BUTTON);
 	m_kButton_OK.SetPosition(180, 430); 
 	
+	m_kButton_OK.OnSizeRealized = OnButtonSizeRealized;
+	m_kButton_OK.SetGamepadIcon(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+	m_kButton_OK.DisableNavigation();
 	UpdateData();
+}
+
+simulated function OnButtonSizeRealized()
+{
+	m_kButton_OK.SetX(240 - m_kButton_OK.Width / 2.0 + 20);
 }
 
 simulated function InitLoot(XComGameState_Unit Looter, Lootable LootableObject, delegate<OnScreenClosed> CallbackFn )

@@ -138,6 +138,13 @@ simulated function ShowMouseCursor()
 {
 	local LocalPlayer LP;
 
+	//Hide mouse cursor if mouse is inactive
+	if (`XPROFILESETTINGS == none ? false : !`XPROFILESETTINGS.Data.IsMouseActive())
+	{
+		HideMouseCursor();
+		return;
+	}
+	
 	LP = LocalPlayer(GetALocalPlayerController().Player);
 
 	// Don't show the mouse cursor if the interface Movie is still hidden

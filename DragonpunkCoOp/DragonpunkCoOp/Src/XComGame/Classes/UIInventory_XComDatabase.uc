@@ -42,6 +42,7 @@ simulated function PopulateData()
 	local X2EncyclopediaTemplate CurrentHeader, CurrentEntry;
 	local UIInventory_HeaderListItem HeaderItem;
 	local array<X2EncyclopediaTemplate> HeaderTemplates, EntryTemplates, CategoryTemplates;
+	//local UIInventory_HeaderListItem HeaderListItem;
 
 	super.PopulateData();
 
@@ -95,8 +96,9 @@ simulated function PopulateData()
 
 	if(List.ItemCount > 0)
 	{
-		List.SetSelectedIndex(0);
+		List.SetSelectedIndex(1);
 		PopulateXComDatabaseCard(EntryTemplates[0]);
+		List.Navigator.SelectFirstAvailable();
 	}
 }
 

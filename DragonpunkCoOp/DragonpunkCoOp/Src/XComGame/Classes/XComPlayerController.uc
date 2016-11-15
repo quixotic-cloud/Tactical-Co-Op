@@ -39,7 +39,7 @@ var bool bProcessedTravelDestinationLoaded;
 var string MapImagePath;
 var Object MapImage;
 
-simulated function SetInputState( name nStateName );
+simulated function SetInputState( name nStateName, optional bool bForce );
 
 //
 // Network: Server only
@@ -427,6 +427,13 @@ event PreClientTravel( string PendingURL, ETravelType TravelType, bool bIsSeamle
 	Pres.PreClientTravel( PendingURL, TravelType, bIsSeamlessTravel );
 }
 
+function bool CanUnpauseControllerConnected()
+{
+	if( Pres.IsPauseMenuRaised() ) //Don't permit the reconnection of a controller to unpause us while we're also at the pause menu.
+		return false;
+
+	return super.CanUnpauseControllerConnected();
+}
 simulated private function OnControllerConnected()
 {
 	 if( bIsControllerConnected )
@@ -718,6 +725,7 @@ exec function Trigger_Right_Press()
 }
 exec function Trigger_Right_Release()
 {
+	XComInputBase(PlayerInput).Trigger_Right_Analog(0.0f);
 	XComInputBase(PlayerInput).InputEvent( class'UIUtilities_Input'.const.FXS_BUTTON_RTRIGGER, class'UIUtilities_Input'.const.FXS_ACTION_RELEASE  );
 }
 //---------------------------------------------------------------------------------------
@@ -1125,6 +1133,14 @@ function bool InAltTab()
 function bool SetPause( bool bPause, optional delegate<CanUnpause> CanUnpauseDelegate=CanUnpause, optional bool bFromLossOfFocus=false)
 {
 	local bool NewPause;
+	if (PlayerCamera != None)
+	{
+		if (PlayerCamera.bEnableFading)
+		{
+			//Do not pause when a camera fade is present.
+			return false;
+		}
+	}
 	// When "unpausing" from loss of focus (i.e, the user alt-tabs, or clicks, back into the game),
 	// don't allow any inputs for 1/2 second.  This stops the activation mouse clicks from triggering game
 	// related items. - DMW

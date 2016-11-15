@@ -192,7 +192,7 @@ simulated function AS_UpdateResearchReport(string header, string project, string
 	MC.EndOp();
 }
 
-//==============================================================================
+//============================================================================== 
 
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
@@ -208,12 +208,21 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
 		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
-			CloseScreen();
+			if (Movie.Pres.ScreenStack.IsInStack(class'UIResearchArchives'))
+			{
+				CloseScreen();
+			}
 			break;
-		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A: 
 		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-			CloseScreen();
+			//<workshop> SCI 2016/6/16
+			//WAS:
+			//CloseScreen();
+			if (!Movie.Pres.ScreenStack.IsInStack(class'UIResearchArchives'))
+			{
+				CloseScreen();
+			}
 			break;
 		default:
 			bHandled = false;

@@ -7,11 +7,11 @@
 //  Copyright (c) 2016 Firaxis Games, Inc. All rights reserved.
 //---------------------------------------------------------------------------------------
 
-class X2Camera_FollowMouseCursor extends X2Camera_FollowCursor
+class X2Camera_FollowMouseCursor extends X2Camera_Lookat
 	config(Camera);
 
 // the location this camera currently wants to look at
-var private Vector LookAt;
+var protected Vector LookAt;
 
 // track scroll input separately, so we can apply it at a higher rate than the normal interpolation
 var private Vector RemainingEdgeScroll;
@@ -200,10 +200,6 @@ function EdgeScrollCamera(Vector2D Offset)
 
 function UpdateCamera(float DeltaTime)
 {
-	local XComWorldData WorldData;
-	local vector BoundsMin;
-	local vector BoundsMax;
-	local vector VerticalBuffer;
 	local float RemainingScrollBrakeAlpha;
 	local Vector UsedScrollDelta;
 
@@ -237,6 +233,16 @@ function UpdateCamera(float DeltaTime)
 		CurrentLookAt += UsedScrollDelta;
 		RemainingEdgeScroll -= UsedScrollDelta;
 	}
+
+	ClampLookAtToWorldBounds();
+}
+
+protected function ClampLookAtToWorldBounds()
+{
+	local XComWorldData WorldData;
+	local vector BoundsMin;
+	local vector BoundsMax;
+	local vector VerticalBuffer;
 
 	// clamp the lookat point to the level bounds (with some vertical buffer to account for camera floor adjustments,
 	// we just need to keep it from completely falling out of the level)

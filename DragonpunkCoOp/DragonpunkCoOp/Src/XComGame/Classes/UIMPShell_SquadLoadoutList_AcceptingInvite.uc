@@ -9,6 +9,7 @@
 
 class UIMPShell_SquadLoadoutList_AcceptingInvite extends UIMPShell_SquadLoadoutList;
 
+var UIButton EditSquadButton;
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
 {
 	super.InitScreen(InitController, InitMovie, InitName);	
@@ -32,6 +33,44 @@ simulated function OnInit()
 	}
 }
 
+function EditSquadButtonCallback()
+{
+	if(!EditSquadButton.IsDisabled)
+		CreateSquadEditor(m_kSquadLoadout);
+}
+
+simulated function UpdateNavHelp()
+{
+	super.UpdateNavHelp();
+	//<workshop> GAMEPAD_NAV_HELP - JTA 2015/11/15
+	if(!Movie.IsMouseActive())
+		return;
+	//</workshop>
+
+	if(EditSquadButton == none)
+	{
+		EditSquadButton = IntegratedNavHelp.AddCenterButton(m_strEditSquad,, EditSquadButtonCallback, m_kSquadLoadout == none);
+		EditSquadButton.OnClickedDelegate = EditSquadClickedButtonCallback;
+		Navigator.AddControl(EditSquadButton);
+	}
+
+	 UpdateNavHelpState();
+}
+
+simulated function UpdateNavHelpState()
+{
+	super.UpdateNavHelpState();
+	//<workshop> GAMEPAD_NAV_HELP - JTA 2015/11/15
+	if( `ISCONTROLLERACTIVE )
+		return;
+	//</workshop>
+	EditSquadButton.SetDisabled(m_kSquadLoadout == none);
+}
+
+function EditSquadClickedButtonCallback(UIButton Button)
+{
+	EditSquadButtonCallback();
+}
 function ConnectionLost(EQuitReason Reason, TDialogueBoxData DialogBoxData)
 {
 	BackButtonCallback();

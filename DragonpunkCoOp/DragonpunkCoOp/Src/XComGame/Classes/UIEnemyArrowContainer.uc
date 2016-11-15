@@ -125,16 +125,16 @@ simulated function UpdateVisibleEnemies()
 			if( kEnemy == m_kNextTarget )
 			{
 				if( Movie.IsMouseActive() )
-					sHelp = class'UIUtilities_Input'.const.ICON_KEY_TAB;
+					sHelp = class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_KEY_TAB;
 				else 
-					sHelp = class'UIUtilities_Input'.const.ICON_RB_R1;
+					sHelp = class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RB_R1;
 			}
 			else if( kEnemy == m_kPrevTarget )
 			{
 				if( Movie.IsMouseActive() )
 					sHelp = "";
 				else
-					sHelp = class'UIUtilities_Input'.const.ICON_LB_L1;
+					sHelp = class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LB_L1;
 			}
 			else
 			{

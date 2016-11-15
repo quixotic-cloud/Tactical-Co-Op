@@ -39,9 +39,9 @@ simulated function InitAbilities(UITacticalQuickLaunch_UnitSlot Slot)
 	m_kTitle.InitText('', Slot.m_FirstName @ Slot.m_NickName @ Slot.m_LastName, true);
 	m_kTitle.SetPosition(500, 10).SetWidth(kBG.width);
 
-	m_kSaveButton = Spawn(class'UIButton', m_kContainer).InitButton('', "Save & Close", SaveButton, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_kSaveButton = Spawn(class'UIButton', m_kContainer).InitButton('', "Save & Close", SaveButton);
 	m_kSaveButton.SetPosition(10, 10);
-	m_kCancelButton = Spawn(class'UIButton', m_kContainer).InitButton('', "Cancel", CancelButton, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_kCancelButton = Spawn(class'UIButton', m_kContainer).InitButton('', "Cancel", CancelButton);
 	m_kCancelButton.SetPosition(10, 42);
 
 	OriginatingSlot = Slot;

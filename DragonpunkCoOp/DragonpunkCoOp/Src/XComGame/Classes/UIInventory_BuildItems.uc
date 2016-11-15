@@ -24,6 +24,8 @@ var public localized string m_strWeaponTab;
 var public localized string m_strArmorTab;
 var public localized string m_strMiscTab;
 var public localized string m_strBuiltLabel;
+var public localized string m_strBrowseCategories;
+var public localized string m_strTabNavHelp;
 var public localized string ConfirmInstantBuild;
 var public localized string ConfirmBuildTime;
 
@@ -83,11 +85,19 @@ simulated function CloseScreen()
 
 simulated function UpdateNavHelp()
 {
-	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
+	local UINavigationHelp NavHelp;
+
+	NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
+	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
 
 	if(CanBackOut())
+		NavHelp.AddBackButton(CloseScreen);
+
+	if(`ISCONTROLLERACTIVE)
 	{
-		`HQPRES.m_kAvengerHUD.NavHelp.AddBackButton(CloseScreen);
+		NavHelp.AddSelectNavHelp();
+		NavHelp.AddCenterHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%LB %RB" @ m_strTabNavHelp));
 	}
 }
 
@@ -96,10 +106,11 @@ simulated function UIButton CreateTabButton(int Index, string Text, delegate<UIB
 	local UIButton TabButton;
 
 	TabButton = Spawn(class'UIButton', self);
-	TabButton.InitButton(Name("inventoryTab" $ Index), "", ButtonClickedDelegate);
+	TabButton.InitButton(Name("inventoryTab" $ Index), "", ButtonClickedDelegate, eUIButtonStyle_NONE);
 	TabButton.MC.FunctionString( "populateData", Text );//special formating in flash
 	TabButton.SetWidth( 198 );
 	TabButton.SetDisabled(IsDisabled);
+	TabButton.DisableNavigation();
 	TabButton.Show();
 
 	return TabButton;
@@ -157,6 +168,7 @@ simulated function PopulateData()
 		List.SetSelectedIndex(0);
 		PopulateItemCard(UIInventory_ListItem(List.GetItem(0)).ItemTemplate);
 		TitleHeader.SetText(m_strTitle, "");
+		List.Navigator.SelectFirstAvailable();
 	}
 }
 
@@ -509,6 +521,18 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
 		case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
 			SwitchTab((SelectedTab + 1) % eUIItemType_MAX);
+			break;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
+			if (SelectedTab > 0)
+			{
+				SwitchTab(SelectedTab - 1, true);
+			}
+			break;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
+			if (SelectedTab < eUIItemType_Armor)
+			{
+				SwitchTab(SelectedTab + 1, true);
+			}
 			break;
 		default:
 			bHandled = false;

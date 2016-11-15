@@ -36,13 +36,13 @@ simulated function OnInit()
 	InitializeLayouts();
 	
 	//TODO: bsteiner: What are these final icons? 
-	SetFunctionButton( 0, class'UIUtilities_Input'.const.ICON_LB_L1, "Symbols"); //AltGr, international
-	SetFunctionButton( 1, class'UIUtilities_Input'.const.ICON_RB_R1, "Shift");
-	SetFunctionButton( 2, class'UIUtilities_Input'.const.ICON_LSCLICK_L3, "Capslock");
-	SetFunctionButton( 3, class'UIUtilities_Input'.const.ICON_Y_TRIANGLE, "Space");
-	SetFunctionButton( 4, class'UIUtilities_Input'.const.ICON_X_SQUARE, "Backspace");
-	SetFunctionButton( 5, class'UIUtilities_Input'.static.GetBackButtonIcon(), "Cancel");
-	SetFunctionButton( 6, class'UIUtilities_Input'.const.ICON_START, "Confirm");
+	SetFunctionButton(0, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LB_L1, "Symbols"); //AltGr, international
+	SetFunctionButton(1, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RB_R1, "Shift");
+	SetFunctionButton(2, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LSCLICK_L3, "Capslock");
+	SetFunctionButton(3, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE, "Space");
+	SetFunctionButton(4, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE, "Backspace");
+	SetFunctionButton(5, class'UIUtilities_Input'.static.GetBackButtonIcon(), "Cancel");
+	SetFunctionButton(6, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_START, "Confirm");
 	
 	SetTitle(m_sTitle);
 	SetDefaultText( m_sDefault );

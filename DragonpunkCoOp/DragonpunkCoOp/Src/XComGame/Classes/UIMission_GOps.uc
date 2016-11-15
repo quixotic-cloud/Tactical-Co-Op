@@ -3,6 +3,7 @@ class UIMission_GOps extends UIMission;
 var array<XComGameState_MissionSite> arrMissions;
 
 var UIButton CurrentButton; 
+var UIButton IgnoreButton; 
 
 var public localized string m_strGOpsSites;
 var public localized string m_strGOpsSite;
@@ -30,6 +31,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 		`XEVENTMGR.TriggerEvent('OnMultiMissionGOps', , , NewGameState);
 		`XCOMGAME.GameRuleset.SubmitGameState(NewGameState);
 	}
+	Navigator.OnSelectedIndexChanged = OnSelectionIndexChanged;
 }
 
 simulated function BindLibraryItem()
@@ -82,6 +84,7 @@ simulated function BuildScreen()
 {
 	`XSTRATEGYSOUNDMGR.PlaySoundEvent("GeoscapeFanfares_GuerillaOps");
 	XComHQPresentationLayer(Movie.Pres).CAMSaveCurrentLocation();
+	`HQPRES.StrategyMap2D.HideCursor();
 
 	if(bInstantInterp)
 	{
@@ -145,6 +148,43 @@ simulated function BuildMissionPanel()
 	LibraryPanel.MC.EndOp();
 }
 
+simulated function UpdateButtons()
+{
+	if (GetNumMissions() < 1)
+	{
+		Button1.MC.FunctionVoid("Hide");
+	}
+
+	if (GetNumMissions() < 2)
+	{
+		Button2.MC.FunctionVoid("Hide");
+	}
+
+	if (GetNumMissions() < 3)
+	{
+		Button3.MC.FunctionVoid("Hide");
+	}
+
+	RefreshNavigation();
+	
+	if (arrMissions[0].GetReference() == MissionRef)
+	{
+		Navigator.SetSelected(Button1);
+		UpdateStickyButton(Button1);
+	}
+
+	if (arrMissions[1].GetReference() == MissionRef)
+	{
+		Navigator.SetSelected(Button2);
+		UpdateStickyButton(Button2);
+	}
+
+	if (arrMissions[2].GetReference() == MissionRef)
+	{
+		Navigator.SetSelected(Button3);
+		UpdateStickyButton(Button3);
+	}
+}
 
 simulated function BuildOptionsPanel()
 {
@@ -164,7 +204,11 @@ simulated function BuildOptionsPanel()
 		Button1.Show();
 	}
 	else
+	{
+		Button1.DisableNavigation();
 		Button1.Hide();
+		Button1.Remove();
+	}
 
 	if( GetNumMissions() > 1 )
 	{
@@ -175,7 +219,11 @@ simulated function BuildOptionsPanel()
 		Button2.Show();
 	}
 	else
+	{
+		Button2.DisableNavigation();
 		Button2.Hide();
+		Button2.Remove();
+	}
 
 	if( GetNumMissions() > 2 )
 	{
@@ -186,7 +234,11 @@ simulated function BuildOptionsPanel()
 		Button3.Show();
 	}
 	else
+	{
+		Button3.DisableNavigation();
 		Button3.Hide();
+		Button3.Remove();
+	}
 	
 	// Send over to flash ---------------------------------------------------
 
@@ -203,18 +255,32 @@ simulated function BuildOptionsPanel()
 	// ----------------------------------------------------------------------
 
 	BuildConfirmPanel();
+	SetTimer(0.3, false, 'UpdateButtons');
 }
 
 simulated function AddIgnoreButton()
 {
 	//Button is controlled by flash and shows by default. Hide if need to. 
-	local UIButton IgnoreButton; 
+	//local UIButton IgnoreButton; 
 
 	IgnoreButton = Spawn(class'UIButton', LibraryPanel);
 	if(CanBackOut())
 	{
-		IgnoreButton.SetResizeToText( false );
-		IgnoreButton.InitButton('IgnoreButton', "", OnCancelClicked);
+		if( `ISCONTROLLERACTIVE == false )
+		{
+			IgnoreButton.SetResizeToText(false);
+			IgnoreButton.InitButton('IgnoreButton', "", OnCancelClicked);
+		}
+		else
+		{
+			IgnoreButton.InitButton('IgnoreButton', "", OnCancelClicked, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+			IgnoreButton.SetGamepadIcon(class'UIUtilities_Input'.static.GetBackButtonIcon());
+			//IgnoreButton.OnSizeRealized = OnIgnoreButtonSizeRealized;
+			IgnoreButton.SetX(1450.0);
+			IgnoreButton.SetY(736.0);
+		}
+
+		IgnoreButton.DisableNavigation();
 	}
 	else
 	{
@@ -222,13 +288,17 @@ simulated function AddIgnoreButton()
 	}
 }
 
+simulated function OnIgnoreButtonSizeRealized()
+{
+	//IgnoreButton.SetX(1525.0 - IgnoreButton.Width / 2.0);
+}
 simulated function UpdateData()
 {
 	`XSTRATEGYSOUNDMGR.PlaySoundEvent("Geoscape_AlienOperation");
 	XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(GetMission().Get2DLocation(), CAMERA_ZOOM);
 
 	BuildMissionPanel();
-	RefreshNavigation();
+	//RefreshNavigation();
 
 	super.UpdateData();
 }
@@ -274,22 +344,45 @@ simulated function OnMissionThreeClicked(UIButton button)
 	}
 }
 
+
+simulated function OnSelectionIndexChanged(int Index)
+{
+	if (Index == 0)
+	{
+		OnMissionOneClicked(Button1);
+		return;
+	}
+
+	if (Index == 1)
+	{
+		OnMissionTwoClicked(Button2);
+		return;
+	}
+
+	if (Index == 2)
+	{
+		OnMissionThreeClicked(Button3);
+		return;
+	}
+}
+
+
 simulated function UpdateStickyButton(UIButton TargetButton)
 {
 	CurrentButton = TargetButton; 
-	if( Button1 != CurrentButton )
+	if( Button1 != CurrentButton && Button1.IsVisible())
 	{
 		Button1.SetGood(false);
 		Button1.MC.FunctionVoid("mouseOut");
 	}
 
-	if( Button2 != CurrentButton )
+	if( Button2 != CurrentButton && Button2.IsVisible() )
 	{
 		Button2.SetGood(false);
 		Button2.MC.FunctionVoid("mouseOut");
 	}
 
-	if( Button3 != CurrentButton )
+	if( Button3 != CurrentButton && Button3.IsVisible())
 	{
 		Button3.SetGood(false);
 		Button3.MC.FunctionVoid("mouseOut");

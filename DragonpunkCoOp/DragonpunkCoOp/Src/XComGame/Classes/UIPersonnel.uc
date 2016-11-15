@@ -54,6 +54,7 @@ var public localized string m_strEngineerTab;
 var public localized string m_strSoldierTab;
 var public localized string m_strDeceasedTab;
 var public localized string m_strAvailableSlot;
+var public localized string m_strToggleSort;
 
 var localized string m_strButtonLabels[EPersonnelSortType.EnumCount]<BoundEnum = EPersonnelSortType>;
 var localized string m_strButtonValues[EPersonnelSortType.EnumCount]<BoundEnum = EPersonnelSortType>;
@@ -161,6 +162,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	CreateSortHeaders();
 	UpdateNavHelp();
 	RefreshTitle();
+	SpawnNavHelpIcons();
 	
 	// ---------------------------------------------------------
 	if(m_eListType != eUIPersonnel_All)
@@ -168,11 +170,14 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	else
 		SwitchTab(m_arrNeededTabs[0]);
 
-	EnableNavigation();
+	if( `ISCONTROLLERACTIVE == false )
+	{
+		EnableNavigation();
 
-	Navigator.LoopSelection = true;
-	Navigator.SelectedIndex = 0;
-	Navigator.OnSelectedIndexChanged = SelectedHeaderChanged;
+		Navigator.LoopSelection = true;
+		Navigator.SelectedIndex = 0;
+		Navigator.OnSelectedIndexChanged = SelectedHeaderChanged;
+	}
 }
 
 simulated function UpdateNavHelp()
@@ -182,15 +187,47 @@ simulated function UpdateNavHelp()
 	NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
 
 	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
 	if(HQState.IsObjectiveCompleted('T0_M2_WelcomeToArmory'))
 	{
 		NavHelp.AddBackButton(OnCancel);
+
+		if( `ISCONTROLLERACTIVE )
+		{
+			NavHelp.AddSelectNavHelp();
+			NavHelp.AddLeftHelp(m_strToggleSort, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);	
+		}
 		
 		// Don't allow jumping to the geoscape from the armory in the tutorial or when coming from squad select
 		if (class'XComGameState_HeadquartersXCom'.static.GetObjectiveStatus('T0_M7_WelcomeToGeoscape') != eObjectiveState_InProgress
 			&& !`SCREENSTACK.IsInStack(class'UISquadSelect'))
 			NavHelp.AddGeoscapeButton();
 	}
+	else if( `ISCONTROLLERACTIVE )
+	{
+		NavHelp.AddLeftHelp(m_strToggleSort, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
+	}
+}
+
+simulated function SpawnNavHelpIcons()
+{
+	local UIGamepadIcons ButtonGraphic;
+
+	if( m_arrNeededTabs.length < 2 ) return; 
+
+	ButtonGraphic = Spawn(class'UIGamepadIcons', Self);
+	ButtonGraphic.InitGamepadIcon('NavButtonLeftBumper', class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LB_L1);
+	ButtonGraphic.SetSize(43.623, 26.845);
+	ButtonGraphic.AnchorCenter();
+	ButtonGraphic.SetX(-320);
+	ButtonGraphic.SetY(-430);
+
+	ButtonGraphic = Spawn(class'UIGamepadIcons', Self);
+	ButtonGraphic.InitGamepadIcon('NavButtonRightBumper', class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RB_R1);
+	ButtonGraphic.SetSize(43.623, 26.845);
+	ButtonGraphic.AnchorCenter();
+	ButtonGraphic.SetX(320);
+	ButtonGraphic.SetY(-430);
 }
 
 simulated function SelectedHeaderChanged(int NavigationIndex)
@@ -281,7 +318,7 @@ simulated function UpdateData()
 
 		if(Unit.IsAlive())
 		{
-			if (Unit.IsASoldier())
+			if (Unit.IsSoldier())
 			{
 				if (m_arrNeededTabs.Find(eUIPersonnel_Soldiers) != INDEX_NONE)
 				{
@@ -307,20 +344,27 @@ simulated function UpdateData()
 simulated function UpdateList()
 {
 	local int SelIdx;
+
 	SelIdx = m_kList.SelectedIndex;
 
 	m_kList.ClearItems();
 	PopulateListInstantly();
 
+	// Always select first option if using controller
+	if(SelIdx < 0 && m_kList.itemCount > 0 && `ISCONTROLLERACTIVE)
+		SelIdx = 0;
+
 	m_kList.SetSelectedIndex(SelIdx);
+	m_kList.Navigator.SetSelected(m_kList.GetItem(SelIdx));
+	Navigator.SetSelected(m_kList);
 }
 
 // calling this function will add items instantly
 simulated function PopulateListInstantly()
 {
-	local array<StateObjectReference> CurrentData;
 	local UIPersonnel_ListItem kItem;
 	local StateObjectReference SoldierRef;
+	local array<StateObjectReference> CurrentData;
 
 	CurrentData = GetCurrentData();
 
@@ -381,6 +425,7 @@ function SortData()
 {
 	local int i;
 	local array<UIPanel> SortButtons;
+	local UIFlipSortButton SortButton;
 
 	switch( m_eSortType )
 	{
@@ -399,7 +444,21 @@ function SortData()
 	GetCurrentSortPanel().GetChildrenOfType(class'UIFlipSortButton', SortButtons);
 	for(i = 0; i < SortButtons.Length; ++i)
 	{
-		UIFlipSortButton(SortButtons[i]).RealizeSortOrder();
+
+		if(`ISCONTROLLERACTIVE)
+		{
+			SortButton = UIFlipSortButton(SortButtons[i]);
+			SortButton.RealizeSortOrder();
+			SortButton.SetArrow(m_bFlipSort);
+			if (SortButton.IsSelected())
+			{
+				SortButton.OnReceiveFocus();
+			}
+		}
+		else
+		{
+			UIFlipSortButton(SortButtons[i]).RealizeSortOrder();
+		}
 	}
 }
 
@@ -682,6 +741,96 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 				SwitchTab(tempCurrentTab);
 			}
+			break;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
+			if (m_eListType == eUIPersonnel_All)
+			{
+				switch (m_eCurrentTab)
+				{
+				case eUIPersonnel_Soldiers:
+					SwitchTab(eUIPersonnel_Scientists);
+					break;
+
+				case eUIPersonnel_Scientists:
+					SwitchTab(eUIPersonnel_Engineers);
+					break;				
+				
+				case eUIPersonnel_Engineers:
+					SwitchTab(eUIPersonnel_Soldiers);
+					break;
+				}
+			}
+
+			break;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
+			if (m_eListType == eUIPersonnel_All)
+			{
+				switch (m_eCurrentTab)
+				{
+				case eUIPersonnel_Soldiers:
+					SwitchTab(eUIPersonnel_Engineers);
+					break;
+
+				case eUIPersonnel_Engineers:
+					SwitchTab(eUIPersonnel_Scientists);
+					break;				
+				
+				case eUIPersonnel_Scientists:
+					SwitchTab(eUIPersonnel_Soldiers);
+					break;
+				}
+			}
+
+			break;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			if (!m_bFlipSort)
+			{
+				m_bFlipSort = true;
+			}
+			else
+			{
+				m_bFlipSort = false;
+				switch (m_eSortType)
+				{
+				case ePersonnelSoldierSortType_Rank:
+					SetSortType(ePersonnelSoldierSortType_Name);
+					break;
+
+				case ePersonnelSoldierSortType_Name:
+					if (m_eListType == eUIPersonnel_Soldiers ||
+						m_eCurrentTab == eUIPersonnel_Soldiers)
+					{	
+						SetSortType(ePersonnelSoldierSortType_Class);
+					}
+					else
+					{
+						SetSortType(ePersonnelSoldierSortType_Status);
+					}
+				
+					break;				
+				
+				case ePersonnelSoldierSortType_Class:
+					SetSortType(ePersonnelSoldierSortType_Status);
+					break;
+									
+				case ePersonnelSoldierSortType_Status:
+					if (m_eListType == eUIPersonnel_Soldiers ||
+						m_eCurrentTab == eUIPersonnel_Soldiers)
+					{	
+						SetSortType(ePersonnelSoldierSortType_Rank);
+					}
+					else
+					{
+						SetSortType(ePersonnelSoldierSortType_Name);
+					}
+
+					break;
+				}
+			}
+
+			RefreshData();
 			break;
 		default:
 			bHandled = super.OnUnrealCommand(cmd, arg);

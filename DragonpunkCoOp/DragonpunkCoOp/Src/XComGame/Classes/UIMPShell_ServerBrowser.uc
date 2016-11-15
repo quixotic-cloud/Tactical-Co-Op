@@ -42,6 +42,7 @@ var UIX2PanelHeader  m_kTitle;
 
 var UINavigationHelp m_NavHelp;
 
+var array<UIServerBrowser_HeaderButton> m_arrHeaderTabs;
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
 {
 	super.InitScreen(InitController, InitMovie, InitName);
@@ -67,12 +68,12 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	m_kHeader = Spawn(class'UIPanel', self).InitPanel('', 'ServerHeader');
 
-	Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("gamertag", eServerBrowserSortType_Name, m_strGamertagText);
-	Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("squad", eServerBrowserSortType_SquadSize, m_strArmySizeText);
-	Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("turns", eServerBrowserSortType_TurnTimer, m_strTurnTimerText);
-	Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("map", eServerBrowserSortType_MapType, m_strMapTypeText);
-	Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("ping", eServerBrowserSortType_Ping, m_strPingText);
 
+	m_arrHeaderTabs.AddItem(Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("gamertag", eServerBrowserSortType_Name, m_strGamertagText));
+	m_arrHeaderTabs.AddItem(Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("squad", eServerBrowserSortType_SquadSize, m_strArmySizeText));
+	m_arrHeaderTabs.AddItem(Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("turns", eServerBrowserSortType_TurnTimer, m_strTurnTimerText));
+	m_arrHeaderTabs.AddItem(Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("map", eServerBrowserSortType_MapType, m_strMapTypeText));
+	m_arrHeaderTabs.AddItem(Spawn(class'UIServerBrowser_HeaderButton', m_kHeader).InitHeaderButton("ping", eServerBrowserSortType_Ping, m_strPingText));
 	Navigator.Clear();
 	Navigator.AddControl(m_kList);
 	
@@ -87,9 +88,51 @@ simulated function UpdateNavHelp()
 	m_NavHelp.ClearButtonHelp();
 	m_NavHelp.AddBackButton(BackButtonCallback);
 
-	m_NavHelp.AddRightHelp(m_strRefreshListButtonText, "", RefreshListButtonCallback);
+	//m_NavHelp.AddRightHelp(m_strRefreshListButtonText, "", RefreshListButtonCallback);
+	m_NavHelp.AddCenterHelp(m_strRefreshListButtonText, class'UIUtilities_Input'.const.ICON_Y_TRIANGLE, RefreshListButtonCallback);
 	if(m_kList.GetItemCount() > 0)
-		m_NavHelp.AddRightHelp(m_strJoinGameButtonText, "", JoinGameButtonCallback);
+	{
+		if( `ISCONTROLLERACTIVE )
+			m_NavHelp.AddCenterHelp(m_strJoinGameButtonText, class'UIUtilities_Input'.const.ICON_A_X, JoinGameButtonCallback);
+		else
+			m_NavHelp.AddRightHelp(m_strJoinGameButtonText, "", JoinGameButtonCallback);
+
+	}
+}
+simulated function UpdateGamepadFocus()
+{		
+	if(m_kList != None && m_kList.ItemCount > 0)
+	{		
+		Navigator.SetSelected(m_kList);
+		m_kList.SetSelectedIndex(m_kList.SelectedIndex > -1 ? m_kList.SelectedIndex : 0);
+		UpdateNavHelp();
+	}
+}
+
+//called from a delegate event when the list items are ready to take focus
+simulated function OnFirstPanelInitialized(UIPanel Panel)
+{
+	UpdateGamepadFocus();
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	// Only pay attention to presses or repeats; ignoring other input types
+	// NOTE: Ensure repeats only occur with arrow keys
+	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
+		return false;
+
+	switch( cmd )
+	{
+		case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
+			RefreshListButtonCallback();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+			ServerListItemDoubleClicked(m_kList,m_kList.SelectedIndex);
+			return true;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 function BackButtonCallback()
@@ -231,6 +274,13 @@ function UpdateServerBrowserList(const out TServerBrowserData kServerData)
 		kServerListItem = UIServerBrowser_ListItem(m_kList.CreateItem(class'UIServerBrowser_ListItem')).InitListItem();
 		kServerListItem.metadataInt = kServerInfo.iOnlineGameSearchResultIndex;
 		kServerListItem.UpdateData(kServerInfo);
+		
+		if( i == 0 )
+		{
+			//Will callback when the item is ready to take visual focus
+			//TODO - should actually be set to the 'bg' variable if possible (which is the asset that has the visual highlight)
+			kServerListItem.AddOnInitDelegate(OnFirstPanelInitialized);
+		}
 	}
 }
 

@@ -17,7 +17,7 @@ var string CachedTooltipText;
 
 delegate del_OnMouseIn( UIToolTip refToTooltip ); 
 
-simulated function UIX2MenuButton InitMenuButton(optional bool bIsPsi = false, optional name InitName, optional string InitLabel, optional delegate<OnClickedDelegate> InitOnClicked, optional EUIButtonStyle InitStyle = eUIButtonStyle_BUTTON_WHEN_MOUSE)
+simulated function UIX2MenuButton InitMenuButton(optional bool bIsPsi = false, optional name InitName, optional string InitLabel, optional delegate<OnClickedDelegate> InitOnClicked, optional EUIButtonStyle InitStyle = eUIButtonStyle_SELECTED_SHOWS_HOTLINK)
 {
 	if( bIsPsi )
 		LibID = PsiLibID;  

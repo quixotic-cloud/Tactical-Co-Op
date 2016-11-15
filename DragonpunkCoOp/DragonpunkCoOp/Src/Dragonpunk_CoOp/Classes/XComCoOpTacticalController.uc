@@ -266,7 +266,7 @@ simulated function bool PerformEndTurn(EPlayerEndTurnType eEndTurnType)
 	return super.PerformEndTurn(eEndTurnType);
 }
 
-simulated function SetInputState( name nStateName )
+simulated function SetInputState( name nStateName , optional bool bForce)
 {
 	local string CurrentState;
 	CurrentState=string(nStateName);

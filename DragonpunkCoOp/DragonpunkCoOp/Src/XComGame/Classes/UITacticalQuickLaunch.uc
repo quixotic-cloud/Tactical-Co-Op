@@ -126,17 +126,19 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	//Set up the button elements
 	BuildButton_StartBattle();
 	BuildButton_GenerateMap();
-	BuildButton_RerollSpawnPoint();
 	BuildButton_ChooseMapData();
 	BuildButton_ChooseSquadLoadout();
 	BuildButton_ToggleDebugCamera();
 	BuildButton_ReturnToShell();
+	BuildButton_RerollSpawnPoint();
 	BuildChallengeControls();
 
 	//Set up the info box element
 	InfoBoxContainer = Spawn(class'UIPanel', self).InitPanel();
 	InfoBoxContainer.AnchorTopRight().SetPosition(-550,50);
 	BuildInfoBox();
+	InfoBoxContainer.DisableNavigation();
+	Navigator.HorizontalNavigation = true;
 
 	Pres = XComPresentationLayer(PC.Pres);
 
@@ -251,8 +253,8 @@ function InitializeCamera()
 simulated private function BuildButton_StartBattle()
 {
 	Button_StartBattle = Spawn(class'UIButton', self);
-	Button_StartBattle.InitButton('Button_StartBattle', "Start Battle", OnButtonStartBattleClicked, eUIButtonStyle_HOTLINK_BUTTON);
-	Button_StartBattle.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_A_X);
+	Button_StartBattle.InitButton('Button_StartBattle', "Start Battle", OnButtonStartBattleClicked, eUIButtonStyle_NONE);
+	Button_StartBattle.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 	Button_StartBattle.SetPosition(50, 50);
 }
 
@@ -305,13 +307,13 @@ simulated private function BuildChallengeControls()
 	ChallengeTemplateManager = class'X2ChallengeTemplateManager'.static.GetChallengeTemplateManager( );
 
 	Button_StartChallenge = Spawn( class'UIButton', self );
-	Button_StartChallenge.InitButton( 'Button_StartChallenge', "Start Challenge", OnButtonStartChallengeClicked, eUIButtonStyle_HOTLINK_BUTTON );
-	Button_StartChallenge.SetGamepadIcon( class'UIUtilities_Input'.const.ICON_A_X );
+	Button_StartChallenge.InitButton( 'Button_StartChallenge', "Start Challenge", OnButtonStartChallengeClicked, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
+	Button_StartChallenge.SetGamepadIcon( class'UIUtilities_Input'.static.GetAdvanceButtonIcon() );
 	Button_StartChallenge.SetPosition( 50, 200 );
 
 	Button_ChallengeControls = Spawn( class'UIButton', self );
-	Button_ChallengeControls.InitButton( 'Button_ChallengeControls', "Show Challenge Controls", OnButtonChallengeControlsClicked, eUIButtonStyle_HOTLINK_BUTTON );
-	Button_ChallengeControls.SetGamepadIcon( class'UIUtilities_Input'.const.ICON_A_X );
+	Button_ChallengeControls.InitButton( 'Button_ChallengeControls', "Show Challenge Controls", OnButtonChallengeControlsClicked, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
+	Button_ChallengeControls.SetGamepadIcon( class'UIUtilities_Input'.static.GetAdvanceButtonIcon() );
 	Button_ChallengeControls.SetPosition( 200, 200 );
 
 	ChallengeControlsVisible = true;
@@ -392,13 +394,13 @@ simulated private function OnButtonChallengeControlsClicked( UIButton button )
 simulated private function BuildButton_GenerateMap()
 {
 	Button_GenerateMap = Spawn(class'UIButton', self);
-	Button_GenerateMap.InitButton('Button_GenerateMap', "Generate Map", OnButtonGenerateMapClicked, eUIButtonStyle_HOTLINK_BUTTON);		
-	Button_GenerateMap.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_B_CIRCLE);
+	Button_GenerateMap.InitButton('Button_GenerateMap', "Generate Map", OnButtonGenerateMapClicked, eUIButtonStyle_NONE);		
+	Button_GenerateMap.SetGamepadIcon(class'UIUtilities_Input'.static.GetBackButtonIcon());
 	Button_GenerateMap.SetPosition(200, 50);
 
 	Button_ToggleMapSize = Spawn(class'UIButton', self);
-	Button_ToggleMapSize.InitButton('Button_ToggleMapSize', "Toggle Map Size", OnButtonToggleMapSizeClicked, eUIButtonStyle_HOTLINK_BUTTON);
-	Button_ToggleMapSize.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_B_CIRCLE);
+	Button_ToggleMapSize.InitButton('Button_ToggleMapSize', "Toggle Map Size", OnButtonToggleMapSizeClicked, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
+	Button_ToggleMapSize.SetGamepadIcon(class'UIUtilities_Input'.static.GetBackButtonIcon());
 	Button_ToggleMapSize.SetPosition(500, 50);
 }
 
@@ -438,8 +440,8 @@ simulated private function OnButtonToggleMapSizeClicked(UIButton button)
 simulated private function BuildButton_RerollSpawnPoint()
 {
 	Button_RerollSpawnPoint = Spawn(class'UIButton', self);
-	Button_RerollSpawnPoint.InitButton('Button_RerollSpawnPoint', "Reroll SpawnPoint", OnButtonRerollSpawnPointClicked, eUIButtonStyle_HOTLINK_BUTTON);		
-	Button_RerollSpawnPoint.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_B_CIRCLE);
+	Button_RerollSpawnPoint.InitButton('Button_RerollSpawnPoint', "Reroll SpawnPoint", OnButtonRerollSpawnPointClicked, eUIButtonStyle_NONE);		
+	Button_RerollSpawnPoint.SetGamepadIcon(class'UIUtilities_Input'.static.GetBackButtonIcon());
 	Button_RerollSpawnPoint.SetPosition(200, 150);
 	Button_RerollSpawnPoint.SetDisabled(true);
 }
@@ -457,8 +459,8 @@ simulated private function OnButtonRerollSpawnPointClicked(UIButton button)
 simulated private function BuildButton_ChooseMapData()
 {
 	Button_ChooseMapData = Spawn(class'UIButton', self);
-	Button_ChooseMapData.InitButton('Button_ChooseMapData', "Choose Map Data", OnButtonChooseMapDataClicked, eUIButtonStyle_HOTLINK_BUTTON);		
-	Button_ChooseMapData.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+	Button_ChooseMapData.InitButton('Button_ChooseMapData', "Choose Map Data", OnButtonChooseMapDataClicked, eUIButtonStyle_NONE);		
+	Button_ChooseMapData.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
 	Button_ChooseMapData.SetPosition(350, 50);
 }
 
@@ -478,8 +480,8 @@ simulated private function OnButtonChooseMapDataClicked(UIButton button)
 simulated private function BuildButton_ChooseSquadLoadout()
 {
 	Button_ChooseSquadLoadout = Spawn(class'UIButton', self);
-	Button_ChooseSquadLoadout.InitButton('BuildButton_ChooseSquadLoadout', "Choose Squad", OnButtonChooseSquadLoadoutClicked, eUIButtonStyle_HOTLINK_BUTTON);		
-	Button_ChooseSquadLoadout.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_X_SQUARE);
+	Button_ChooseSquadLoadout.InitButton('BuildButton_ChooseSquadLoadout', "Choose Squad", OnButtonChooseSquadLoadoutClicked, eUIButtonStyle_NONE);		
+	Button_ChooseSquadLoadout.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
 	Button_ChooseSquadLoadout.SetPosition(50, 100);
 }
 
@@ -499,16 +501,16 @@ simulated private function OnButtonChooseSquadLoadoutClicked(UIButton button)
 simulated private function BuildButton_ToggleDebugCamera()
 {
 	Button_ToggleDebugCamera = Spawn(class'UIButton', self);
-	Button_ToggleDebugCamera.InitButton('BuildButton_ToggleDebugCamera', "Turn On Debug Camera", OnButton_ToggleDebugCameraClicked, eUIButtonStyle_HOTLINK_BUTTON);		
-	Button_ToggleDebugCamera.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_LSCLICK_L3);
+	Button_ToggleDebugCamera.InitButton('BuildButton_ToggleDebugCamera', "Turn On Debug Camera", OnButton_ToggleDebugCameraClicked, eUIButtonStyle_NONE);		
+	Button_ToggleDebugCamera.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LSCLICK_L3);
 	Button_ToggleDebugCamera.SetPosition(200, 100);
 }
 
 simulated function BuildButton_ReturnToShell()
 {
 	Button_ReturnToShell = Spawn(class'UIButton', self);
-	Button_ReturnToShell.InitButton('Button_ReturnToShell', "Return To Shell", OnButtonReturnToShellClicked, eUIButtonStyle_HOTLINK_BUTTON);
-	Button_ReturnToShell.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_A_X);
+	Button_ReturnToShell.InitButton('Button_ReturnToShell', "Return To Shell", OnButtonReturnToShellClicked, eUIButtonStyle_NONE);
+	Button_ReturnToShell.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 	Button_ReturnToShell.SetPosition(50, 150);
 }
 
@@ -580,24 +582,30 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_KEY_TAB:
 		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
-			OnButtonStartBattleClicked(Button_StartBattle);
-			break;
-		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
-			OnButtonGenerateMapClicked(Button_GenerateMap);
-			break;
-		case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
-			OnButtonChooseMapDataClicked(Button_ChooseMapData);
-			break;
-		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
-			OnButtonChooseSquadLoadoutClicked(Button_ChooseSquadLoadout);
-			break;
-		case class'UIUtilities_input'.const.FXS_BUTTON_L3:
-			OnButton_ToggleDebugCameraClicked(Button_ToggleDebugCamera);
-			break;
+		//	OnButtonStartBattleClicked(Button_StartBattle);
+		//	break;
+			
+		//case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		//	OnButtonStartBattleClicked(Button_StartBattle);
+		//	break;
+		//case class'UIUtilities_Input'.const.FXS_BUTTON_B:
+		//	OnButtonGenerateMapClicked(Button_GenerateMap);
+		//	break;
+		//case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
+		//	OnButtonChooseMapDataClicked(Button_ChooseMapData);
+		//	break;
+		//case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+		//	OnButtonChooseSquadLoadoutClicked(Button_ChooseSquadLoadout);
+		//	break;
+		//case class'UIUtilities_input'.const.FXS_BUTTON_L3:
+		//	OnButton_ToggleDebugCameraClicked(Button_ToggleDebugCamera);
+		//	break;
 		case class'UIUtilities_Input'.const.FXS_L_MOUSE_DOWN:
 			OnLMouseDown();
 			break;		
+		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
+			OnButtonReturnToShellClicked(Button_ReturnToShell);
+			break;
 		default:
 			bHandled = false;
 			break;

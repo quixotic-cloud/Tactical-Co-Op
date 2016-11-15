@@ -15,10 +15,12 @@ class UITacticalHUD_AbilityContainer extends UIPanel
 // These values must be mirrored in the AbilityContainer actionscript file.
 const MAX_NUM_ABILITIES = 15;
 const MAX_NUM_ABILITIES_PER_ROW = 7;
+const MAX_NUM_ABILITIES_PER_ROW_BAR = 15;
 
 var bool bShownAbilityError;
 
 var int                      m_iCurrentIndex;    // Index of selected item.
+var int						 m_iPreviousIndexForSecondaryMovement;
 
 var int TargetIndex;
 var array<AvailableAction> m_arrAbilities;
@@ -32,7 +34,14 @@ var int                      m_iSelectionOnButtonDown;      // The current index
 
 var X2TargetingMethod TargetingMethod;
 
+var X2TargetingMethod PrevTargetingMethodUsedForSecondaryTargetingMethodSwap;
 var StateObjectReference LastActiveUnitRef;
+
+var UIButton AbilityButton;
+var Vector SortReferencePoint;
+var Vector SortOriginPoint;
+var bool bAbilitiesInited;
+//</workshop>
 
 //----------------------------------------------------------------------------
 // LOCALIZATION
@@ -79,6 +88,12 @@ simulated function UITacticalHUD_AbilityContainer InitAbilityContainer()
 		m_arrUIAbilities.AddItem(kItem);
 	}
 
+	AbilityButton = Spawn(class'UIButton', self);
+	AbilityButton.InitButton('AbilityButton', "",, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+	AbilityButton.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RT_R2);
+	//AbilityButton.SetTextShadow(true);
+	//AbilityButton.SetFontSize(26);
+	AbilityButton.SetAnchor(class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
 	return self;
 }
 
@@ -86,8 +101,11 @@ simulated function OnInit()
 {
 	super.OnInit();
 
-	if(!Movie.IsMouseActive())
-		mc.FunctionString("SetHelp", class'UIUtilities_Input'.const.ICON_RT_R2);
+	//if(!Movie.IsMouseActive())
+	//	mc.FunctionString("SetHelp", class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RT_R2);
+	PopulateFlash();
+	SetTimer(0.18, false, 'PopulateFlash');
+	SetTimer(0.8, false, 'PopulateFlash');
 }
 
 simulated function X2TargetingMethod GetTargetingMethod()
@@ -100,6 +118,7 @@ simulated function NotifyCanceled()
 	ResetMouse(); 
 	UpdateHelpMessage(""); //Clears out any message when canceling the mode. 
 	Invoke("Deactivate");  //Animate back to top corner. Handle this here instead of in "clear", so that we prevent unwanted animations when staying in show mode. 
+	AbilityButton.Show();
 	if(TargetingMethod != none)
 	{
 		TargetingMethod.Canceled();
@@ -126,8 +145,58 @@ simulated function RefreshTutorialShine(optional bool bIgnoreMenuStatus = false)
 	}
 }
 
-simulated function SetSelectionOnInputPress (int ucmd)
+//bsg-mfawcett(10.03.16): helper to determine if this ability uses grenade targeting
+simulated function bool AbilityRequiresTargetingActivation(int Index)
 {
+	local XComGameState_Ability AbilityState;
+
+	if( !`ISCONTROLLERACTIVE )
+	{
+		return false;
+	}
+
+	if( Index < 0 || Index >= m_arrAbilities.Length )
+	{
+		return false;
+	}
+
+	AbilityState = XComGameState_Ability(
+		`XCOMHISTORY.GetGameStateForObjectID(m_arrAbilities[Index].AbilityObjectRef.ObjectID));
+
+	if( AbilityState != none )
+	{
+		if( ClassIsChildOf(AbilityState.GetMyTemplate().TargetingMethod, class'X2TargetingMethod_Grenade') ||
+		   ClassIsChildOf(AbilityState.GetMyTemplate().TargetingMethod, class'X2TargetingMethod_Cone') ||
+		   ClassIsChildOf(AbilityState.GetMyTemplate().TargetingMethod, class'X2TargetingMethod_Line') )
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+simulated function bool IsTargetingMethodActivated()
+{
+	if( TargetingMethod != none &&
+		(TargetingMethod.IsA('X2TargetingMethod_Grenade') ||
+		 TargetingMethod.IsA('X2TargetingMethod_Cone') ||
+		 TargetingMethod.IsA('X2TargetingMethod_Line')) )
+	{
+		return true;
+	}
+
+	return false;
+}
+
+simulated function SetSelectionOnInputPress(int ucmd)
+{
+	//bsg-mfawcett(10.03.16): if this is a grenade ability and we are already targeting, dont let user cycle abilities with dpad (rotate camera instead)
+	if( AbilityRequiresTargetingActivation(m_iCurrentIndex) && IsTargetingMethodActivated() )
+	{
+		return;
+	}
+
 	switch(ucmd)
 	{
 		case (class'UIUtilities_Input'.const.FXS_BUTTON_A):  
@@ -136,12 +205,50 @@ simulated function SetSelectionOnInputPress (int ucmd)
 			m_iSelectionOnButtonDown = m_iCurrentIndex;
 		break;
 	}
+	
+	if (IsCommmanderAbility(m_iCurrentIndex))
+	{
+		return;
+	}
+
+	switch(ucmd)
+	{
+		case (class'UIUtilities_Input'.const.FXS_DPAD_UP):
+		case (class'UIUtilities_Input'.const.FXS_ARROW_UP):
+			if (UITacticalHUD(Owner).IsMenuRaised())
+			{
+				CycleAbilitySelectionRow(-1);
+			}
+			break;	
+
+		case (class'UIUtilities_Input'.const.FXS_DPAD_DOWN):
+		case (class'UIUtilities_Input'.const.FXS_ARROW_DOWN):
+			if (UITacticalHUD(Owner).IsMenuRaised())
+			{
+				CycleAbilitySelectionRow(1);
+			}
+			break;
+
+		case (class'UIUtilities_Input'.const.FXS_DPAD_LEFT):
+		case (class'UIUtilities_Input'.const.FXS_ARROW_LEFT):
+			if( UITacticalHUD(Owner).IsMenuRaised() )
+				CycleAbilitySelection(-1);
+			break;
+
+		case (class'UIUtilities_Input'.const.FXS_DPAD_RIGHT):	
+		case (class'UIUtilities_Input'.const.FXS_ARROW_RIGHT):
+			if( UITacticalHUD(Owner).IsMenuRaised() )
+				CycleAbilitySelection(1);	
+			break;												
+	}
+	
 }
 
 simulated function bool OnUnrealCommand(int ucmd, int arg)
 {
 	local bool bHandled;
-	
+	local XComGameState_Ability AbilityState;
+
 	bHandled = true;
 
 	// Only allow releases through.
@@ -153,30 +260,92 @@ simulated function bool OnUnrealCommand(int ucmd, int arg)
 		return false;
 	}
 
+	//bsg-mfawcett(10.03.16): support for rotating camera while aiming grenades
+	if( AbilityRequiresTargetingActivation(m_iCurrentIndex) )
+	{
+		if( IsTargetingMethodActivated() )
+		{
+			bHandled = false;
+			switch( ucmd )
+			{
+			case (class'UIUtilities_Input'.static.GetBackButtonInputCode()):
+				TargetingMethod.Canceled();
+				TargetingMethod = none;
+				// reset the camera (based on the cursor) on the active unit
+				`Cursor.MoveToUnit(XComTacticalController(PC).GetActiveUnitPawn());
+				`Cursor.m_bCustomAllowCursorMovement = false;
+				`Cursor.m_bAllowCursorAscensionAndDescension = false;
+				bHandled = true;
+				break;
+			case (class'UIUtilities_Input'.const.FXS_DPAD_LEFT):
+			case (class'UIUtilities_Input'.const.FXS_ARROW_LEFT):
+				XComTacticalController(PC).YawCamera(90.0);
+				bHandled = true;
+				break;
+			case (class'UIUtilities_Input'.const.FXS_DPAD_RIGHT):
+			case (class'UIUtilities_Input'.const.FXS_ARROW_RIGHT):
+				XComTacticalController(PC).YawCamera(-90.0);
+				bHandled = true;
+				break;
+			case (class'UIUtilities_Input'.const.FXS_DPAD_UP):
+			case (class'UIUtilities_Input'.const.FXS_ARROW_UP):
+				// if we are using the ability grid, allow the cursor to go up/down
+				// if we are not using the ability grid this is handled in XComTacticalInput
+				if( `XPROFILESETTINGS.Data.m_bAbilityGrid )
+				{
+					`Cursor.AscendFloor();
+				}
+				break;
+			case (class'UIUtilities_Input'.const.FXS_DPAD_DOWN):
+			case (class'UIUtilities_Input'.const.FXS_ARROW_DOWN):
+				if( `XPROFILESETTINGS.Data.m_bAbilityGrid )
+				{
+					`Cursor.DescendFloor();
+				}
+				break;
+			}
+			if( bHandled )
+			{
+				// all done, we dont want any more handling of this input
+				return true;
+			}
+			else
+			{
+				// restore value of bHandled so that rest of function behaves properly
+				bHandled = true;
+			}
+		}
+		else
+		{
+			if( ucmd == class'UIUtilities_Input'.static.GetAdvanceButtonInputCode() )
+			{
+				// cancel the current (top down) targeting method
+				if( TargetingMethod != none )
+				{
+					TargetingMethod.Canceled();
+				}
+
+				// create the actual grenade targeting method
+				AbilityState = XComGameState_Ability(
+					`XCOMHISTORY.GetGameStateForObjectID(m_arrAbilities[m_iCurrentIndex].AbilityObjectRef.ObjectID));
+				TargetingMethod = new AbilityState.GetMyTemplate().TargetingMethod;
+				TargetingMethod.Init(m_arrAbilities[m_iCurrentIndex]);
+				return true;
+			}
+			// anything else fall through
+		}
+	}
+	//bsg-mfawcett(10.03.16): end
+
 	// ignore the virtual dpad inputs on PC, we want to pass them along to the camera for rotation
 	// since PC has the extra buttons to dedicate to ability selection
-	// VALVE disabled for Steam controller, this didn't appear to work in the
-	// first place and dpad didn't do anything in shot HUD?
-	/*if ( `BATTLE != none && `BATTLE.ProfileSettingsActivateMouse() )
-	{
-		switch(ucmd)
-		{
-			case (class'UIUtilities_Input'.const.FXS_DPAD_UP):
-			case (class'UIUtilities_Input'.const.FXS_DPAD_DOWN):
-			case (class'UIUtilities_Input'.const.FXS_DPAD_LEFT):
-			case (class'UIUtilities_Input'.const.FXS_DPAD_RIGHT):
-				return false;
-			default:
-		}
-	}*/
-
 	switch(ucmd)
 	{
 		case (class'UIUtilities_Input'.const.FXS_BUTTON_A):  
 		case (class'UIUtilities_Input'.const.FXS_L_MOUSE_UP):  
 		case (class'UIUtilities_Input'.const.FXS_KEY_ENTER):
 		case (class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR):
-			if( UITacticalHUD(Owner).IsMenuRaised() )
+			if( UITacticalHUD(Owner).IsMenuRaised() || UITacticalHUD(Owner).IsHidingForSecondaryMovement())
 				OnAccept();
 			else
 				bHandled = false;
@@ -184,10 +353,22 @@ simulated function bool OnUnrealCommand(int ucmd, int arg)
 
 		case (class'UIUtilities_Input'.const.FXS_KEY_ESCAPE):
 		case (class'UIUtilities_Input'.const.FXS_BUTTON_B):
+		case (class'UIUtilities_Input'.const.FXS_BUTTON_RTRIGGER):
 			if( UITacticalHUD(Owner).IsMenuRaised() )
 				UITacticalHUD(Owner).CancelTargetingAction();
 			else
-				bHandled = false;
+			{
+				if(UITacticalHUD(Owner).IsHidingForSecondaryMovement())
+				{
+					m_iCurrentIndex = m_iPreviousIndexForSecondaryMovement;
+					UITacticalHUD(Owner).RaiseTargetSystem();
+					TargetingMethod.Canceled();
+					TargetingMethod = None;
+					SetAbilityByIndex( m_iCurrentIndex );
+				}
+				else
+					bHandled = false;
+			}
 			break;
 
 		case (class'UIUtilities_Input'.const.FXS_KEY_TAB):
@@ -206,36 +387,13 @@ simulated function bool OnUnrealCommand(int ucmd, int arg)
 				bHandled = false;
 			break;
 
-		//case (class'UIUtilities_Input'.const.FXS_DPAD_LEFT):
-		case (class'UIUtilities_Input'.const.FXS_ARROW_LEFT):
-			if( UITacticalHUD(Owner).IsMenuRaised() )
-				CycleAbilitySelection(-1);
-			else
-				bHandled = false;
-			break;
-
-		//case (class'UIUtilities_Input'.const.FXS_DPAD_RIGHT):	
-		case (class'UIUtilities_Input'.const.FXS_ARROW_RIGHT):
-			if( UITacticalHUD(Owner).IsMenuRaised() )
-				CycleAbilitySelection(1);	
-			else
-				bHandled = false;
-			break;
-
-		case (class'UIUtilities_Input'.const.FXS_BUTTON_X):
-		case (class'UIUtilities_Input'.const.FXS_KEY_X):
-
-			// Don't allow user to swap weapons in the tutorial if we're not supposed to.
-			if( `BATTLE.m_kDesc.m_bIsTutorial && `TACTICALGRI != none && `TACTICALGRI.DirectedExperience != none && !`TACTICALGRI.DirectedExperience.AllowSwapWeapons() )
+		case class'UIUtilities_Input'.const.FXS_BUTTON_L3:
+			if(UITacticalHUD(ParentPanel) != None)
 			{
-				bHandled = false;
-				break;
-			}
-
-			if( UITacticalHUD(Owner).IsMenuRaised() )
-				OnCycleWeapons();
-			else
-				bHandled = false;
+				//toggles a boolean that will display more relevant enemy info (Shot wings + enemy buffs/debuff tooltips) - JTA 2016/4/25
+				UITacticalHUD(ParentPanel).ToggleEnemyInfo();
+				bHandled = true;
+			}			
 			break;
 
 		case (class'UIUtilities_Input'.const.FXS_KEY_1):	DirectConfirmAbility( 0 ); break;
@@ -337,13 +495,35 @@ function DirectConfirmAbility(int index, optional bool ActivateViaHotKey)
 
 	if( m_iMouseTargetedAbilityIndex != index )
 	{
+		if (ActivateViaHotKey)
+		{
+			m_arrUIAbilities[m_iCurrentIndex].OnLoseFocus();
+		}
 		//Update the selection 
 		m_iMouseTargetedAbilityIndex = index;
-		SelectAbility(m_iMouseTargetedAbilityIndex, ActivateViaHotKey);
+		if (ActivateViaHotKey)
+		{
+			if (!SelectAbility(m_iMouseTargetedAbilityIndex, ActivateViaHotKey))
+			{
+				UITacticalHUD(Owner).CancelTargetingAction();
+				return;
+			}
+		}
+		else
+		{
+			SelectAbility(m_iMouseTargetedAbilityIndex, ActivateViaHotKey);
+		}
 		Movie.Pres.PlayUISound(eSUISound_MenuSelect);
-	} 
+		if (ActivateViaHotKey)
+		{
+			Invoke("Deactivate");
+			AbilityButton.Show();
+			PopulateFlash();
+		}
+	}
 	else
 	{
+		m_iSelectionOnButtonDown = index;
 		OnAccept();
 	}
 }
@@ -361,6 +541,7 @@ simulated public function bool ConfirmAbility( optional AvailableAction Availabl
 	local bool					        bSubmitSuccess;
 	local XComGameStateContext          AbilityContext;
 	local XComGameState_Ability         AbilityState;
+	local X2AbilityTemplate				AbilityTemplate;
 	local array<TTile>                  PathTiles;
 	local string                        ConfirmSound;
 
@@ -402,7 +583,7 @@ simulated public function bool ConfirmAbility( optional AvailableAction Availabl
 	if(AvailableActionInfo.AvailableCode != 'AA_Success')
 	{
 		Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
-		m_iCurrentIndex = -1;
+		//m_iCurrentIndex = -1;
 		return false;
 	}
 
@@ -424,10 +605,32 @@ simulated public function bool ConfirmAbility( optional AvailableAction Availabl
 	AbilityContext = AbilityState.GetParentGameState().GetContext();
 
 	AbilityContext.SetSendGameState(true);
-	bSubmitSuccess = class'XComGameStateContext_Ability'.static.ActivateAbility(AvailableActionInfo, TargetIndex, TargetLocations, TargetingMethod, PathTiles);
+	AbilityTemplate = AbilityState.GetMyTemplate();
+	if(AbilityTemplate.SecondaryTargetingMethod != none)
+	{
+		if( UITacticalHUD(Owner).IsMenuRaised() && !UITacticalHUD(Owner).IsHidingForSecondaryMovement())
+		{
+			UITacticalHUD(Owner).HideAwayTargetAction();
+			XComTacticalInput(PC.PlayerInput).GotoState('UsingSecondaryTargetingMethod');
+			//we need to store the targeting method.
+
+			PrevTargetingMethodUsedForSecondaryTargetingMethodSwap = TargetingMethod;
+			TargetingMethod = new AbilityState.GetMyTemplate().SecondaryTargetingMethod;
+			TargetingMethod.Init(AvailableActionInfo);
+			TargetingMethod.DirectSetTarget(TargetIndex);
+		}
+		else if( UITacticalHUD(Owner).IsHidingForSecondaryMovement() && AbilityState.CustomCanActivateFlag )
+			bSubmitSuccess = class'XComGameStateContext_Ability'.static.ActivateAbility(AvailableActionInfo, TargetIndex, TargetLocations, TargetingMethod, PathTiles);
+	}
+	else
+	{
+		if( AbilityState.CustomCanActivateFlag )
+			bSubmitSuccess = class'XComGameStateContext_Ability'.static.ActivateAbility(AvailableActionInfo, TargetIndex, TargetLocations, TargetingMethod, PathTiles);
+	}
 	AbilityContext.SetSendGameState(false);
 
-	if (bSubmitSuccess)
+
+	if (bSubmitSuccess && AbilityState.CustomCanActivateFlag)
 	{
 		ConfirmSound = AbilityState.GetMyTemplate().AbilityConfirmSound;
 		if (ConfirmSound != "")
@@ -435,6 +638,8 @@ simulated public function bool ConfirmAbility( optional AvailableAction Availabl
 
 		TargetingMethod.Committed();
 		TargetingMethod = none;
+		PrevTargetingMethodUsedForSecondaryTargetingMethodSwap = none;
+		UITacticalHUD(Owner).m_bIsHidingShotHUDForSecondaryMovement = false;
 
 		XComPresentationLayer(Owner.Owner).PopTargetingStates();
 
@@ -442,8 +647,12 @@ simulated public function bool ConfirmAbility( optional AvailableAction Availabl
 
 		`Pres.m_kUIMouseCursor.HideMouseCursor();
 	}
-
-	m_iCurrentIndex = -1;
+	//we're not going to reset this value if this flag is false, it means our
+	//current ability should still be selected, but it couldn't activate for some gameplay reason.
+	if( AbilityState.CustomCanActivateFlag && bSubmitSuccess)
+		m_iCurrentIndex = -1;
+	else
+		Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
 
 	return bSubmitSuccess;
 }
@@ -584,6 +793,10 @@ simulated static function bool ShouldShowAbilityIcon(out AvailableAction Ability
 			return false;
 	}
 
+	if (`REPLAY.bInTutorial && !`TUTORIAL.IsNextAbility(AbilityTemplate.DataName) && AbilityState.GetMyTemplateName() == 'ThrowGrenade')
+	{
+		return false;
+	}
 	ShowOnCommanderHUD = AbilityTemplate.bCommanderAbility ? 1 : 0;
 
 	return true;
@@ -638,9 +851,21 @@ simulated function UpdateAbilitiesArray()
 	m_arrAbilities.Sort(SortAbilities);
 	PopulateFlash();
 
+	if (m_iCurrentIndex < 0)
+	{
+		mc.FunctionNum("animateIn", m_arrAbilities.Length - arrCommandAbilities.Length);
+	}
 	UITacticalHUD(screen).m_kShotInfoWings.Show();
-	UITacticalHUD(screen).m_kMouseControls.SetCommandAbilities(arrCommandAbilities);
-	UITacticalHUD(screen).m_kMouseControls.UpdateControls();
+
+	if(`ISCONTROLLERACTIVE)
+	{
+		UITacticalHUD(screen).UpdateSkyrangerButton();
+	}
+	else
+	{
+		UITacticalHUD(screen).m_kMouseControls.SetCommandAbilities(arrCommandAbilities);
+		UITacticalHUD(screen).m_kMouseControls.UpdateControls();
+	}
 
 	//  jbouscher: I am 99% certain this call is entirely redundant, so commenting it out
 	//kUnit.UpdateUnitBuffs();
@@ -664,6 +889,11 @@ simulated function UpdateAbilitiesArray()
 	UpdateWatchVariables();
 	CheckForHelpMessages();
 	DoTutorialChecks();
+	//INS:
+	if(m_iCurrentIndex >= 0 && m_arrAbilities[m_iCurrentIndex].AvailableTargets.Length > 1)
+		m_arrAbilities[m_iCurrentIndex].AvailableTargets = SortTargets(m_arrAbilities[m_iCurrentIndex].AvailableTargets);
+	else if(m_iPreviousIndexForSecondaryMovement >= 0 && m_arrAbilities[m_iPreviousIndexForSecondaryMovement].AvailableTargets.Length > 1)
+		m_arrAbilities[m_iPreviousIndexForSecondaryMovement].AvailableTargets = SortTargets(m_arrAbilities[m_iPreviousIndexForSecondaryMovement].AvailableTargets);
 }
 
 simulated function DoTutorialChecks()
@@ -747,6 +977,25 @@ simulated function int SortAbilities(AvailableAction A, AvailableAction B)
 	else return 0;
 }
 
+simulated function XComGameState_Ability GetAbilityStateByHotKey(int KeyCode)
+{
+	local int i;
+	local XComGameState_Ability AbilityState;
+	local X2AbilityTemplate AbilityTemplate;
+
+	for (i = 0; i < m_arrAbilities.Length; i++)
+	{
+		AbilityState = XComGameState_Ability(`XCOMHISTORY.GetGameStateForObjectID(m_arrAbilities[i].AbilityObjectRef.ObjectID));
+		AbilityTemplate = AbilityState.GetMyTemplate();
+
+		if (AbilityTemplate.DefaultKeyBinding == KeyCode && m_arrAbilities[i].AvailableCode == 'AA_Success')
+		{
+			return AbilityState;
+		}
+	}
+
+	return none;
+}
 simulated function int GetAbilityIndexByHotKey(int KeyCode)
 {
 	local int i;
@@ -758,7 +1007,8 @@ simulated function int GetAbilityIndexByHotKey(int KeyCode)
 		AbilityState = XComGameState_Ability(`XCOMHISTORY.GetGameStateForObjectID(m_arrAbilities[i].AbilityObjectRef.ObjectID));
 		AbilityTemplate = AbilityState.GetMyTemplate();
 
-		if (AbilityTemplate.DefaultKeyBinding == KeyCode)
+
+		if (AbilityTemplate.DefaultKeyBinding == KeyCode && m_arrAbilities[i].AvailableCode == 'AA_Success')
 		{
 			return i;
 		}
@@ -809,17 +1059,50 @@ simulated function PopulateFlash()
 	local X2AbilityTemplate AbilityTemplate;
 	local UITacticalHUD_AbilityTooltip TooltipAbility;
 
+	if (!bAbilitiesInited)
+	{
+		bAbilitiesInited = true;
+		for (i = 0; i < MAX_NUM_ABILITIES; i++)
+		{
+			if (!m_arrUIAbilities[i].bIsInited)
+			{
+				bAbilitiesInited = false;
+				return;
+			}
+		}
+	}
+
+	if (!bIsInited)
+	{
+		return;
+	}
+
+	if (m_arrAbilities.Length <= 0)
+	{
+		return;
+	}
 	//Process the number of abilities, verify that it does not violate UI assumptions
 	len = m_arrAbilities.Length;
 
 	numActiveAbilities = 0;
 	for( i = 0; i < len; i++ )
 	{
+		if (i >= m_arrAbilities.Length)
+		{
+			m_arrUIAbilities[i].ClearData();
+			continue;
+		}
 		AvailableActionInfo = m_arrAbilities[i];
 
 		AbilityState = XComGameState_Ability( `XCOMHISTORY.GetGameStateForObjectID(AvailableActionInfo.AbilityObjectRef.ObjectID));
 		AbilityTemplate = AbilityState.GetMyTemplate();
 
+		if (AbilityTemplate.bCommanderAbility)
+		{
+			m_arrUIAbilities[i].ClearData();
+
+			continue;
+		}
 		if(!AbilityTemplate.bCommanderAbility)
 		{
 			m_arrUIAbilities[numActiveAbilities].UpdateData(numActiveAbilities, AvailableActionInfo);
@@ -828,8 +1111,17 @@ simulated function PopulateFlash()
 	}
 	
 	mc.FunctionNum("SetNumActiveAbilities", numActiveAbilities);
+	if (numActiveAbilities > 0 && m_iCurrentIndex < 0)
+	{
+		AbilityButton.Show();
+	}
+	else
+	{
+		AbilityButton.Hide();	
+	}
+		AbilityButton.SetPosition(63.1 * ((numActiveAbilities / 2.0) - 0.1), -70);
 	
-	if(numActiveAbilities >= MAX_NUM_ABILITIES && !bShownAbilityError)
+	if(numActiveAbilities > MAX_NUM_ABILITIES && !bShownAbilityError)
 	{
 		bShownAbilityError = true;
 		Movie.Pres.PopupDebugDialog("UI ERROR", "More abilities are being updated than UI supports( " $ len $"). Please report this to UI team and provide a save.");
@@ -843,21 +1135,59 @@ simulated function PopulateFlash()
 		TooltipAbility.RefreshData();
 }
 
+// Eac hotkey 
+simulated function bool IsCommmanderAbility(int Index)
+{
+	local XComGameState_Ability AbilityState;
+
+	if (Index < 0 || Index >= m_arrAbilities.Length)
+	{
+		return false;
+	}
+
+	AbilityState = XComGameState_Ability(
+		`XCOMHISTORY.GetGameStateForObjectID(m_arrAbilities[Index].AbilityObjectRef.ObjectID));
+	return AbilityState != none ? AbilityState.GetMyTemplate().bCommanderAbility : false;
+}
+
 simulated function CycleAbilitySelection(int step)
 {
 	local int index;
+	local int totalStep;
 
 	// Ignore if index was never set (e.g. nothing was populated.)
 	if (m_iCurrentIndex == -1)
 		return;
 
-	index = m_iCurrentIndex + step; // MHU - Not safe to update m_iCurrentIndex (this variable is watched) here. 
-									//       We must allow SetAbilityByIndex to handle actual increment for us.
 
-	if(index > m_arrAbilities.Length - 1) 
-		index = 0;
-	else if(index < 0) 
-		index = m_arrAbilities.Length - 1;
+	if( `ISCONTROLLERACTIVE )
+	{
+		totalStep = step;
+		do
+		{
+			index = m_iCurrentIndex;
+			index = ((index / MAX_NUM_ABILITIES_PER_ROW_BAR) * MAX_NUM_ABILITIES_PER_ROW_BAR) + 
+				((index + totalStep) % MAX_NUM_ABILITIES_PER_ROW_BAR);
+			if (index < 0)
+			{
+				index += MAX_NUM_ABILITIES_PER_ROW_BAR;
+			}
+
+			totalStep += step;
+		}
+		until(index >= 0 && index < m_arrAbilities.Length && !IsCommmanderAbility(index));
+
+	}
+	else
+	{
+		index = m_iCurrentIndex + step; // MHU - Not safe to update m_iCurrentIndex (this variable is watched) here. 
+										//       We must allow SetAbilityByIndex to handle actual increment for us.
+
+		if(index > m_arrAbilities.Length - 1) 
+			index = 0;
+		else if(index < 0) 
+			index = m_arrAbilities.Length - 1;
+}
 	
 	ResetMouse();
 	SelectAbility( index );
@@ -865,14 +1195,29 @@ simulated function CycleAbilitySelection(int step)
 simulated function CycleAbilitySelectionRow(int step)
 {
 	local int index;
+	local int totalStep;
 
 	// Ignore if index was never set (e.g. nothing was populated.)
 	if (m_iCurrentIndex == -1)
 		return;
 
-	index = MAX_NUM_ABILITIES + (m_iCurrentIndex + (step * MAX_NUM_ABILITIES_PER_ROW));
-	index = index % MAX_NUM_ABILITIES;
+	if( `ISCONTROLLERACTIVE )
+	{
+		totalStep = step;
+		do
+		{
+			index = m_iCurrentIndex;
+			index = (MAX_NUM_ABILITIES + (index + (totalStep * MAX_NUM_ABILITIES_PER_ROW_BAR))) % MAX_NUM_ABILITIES;
 
+			totalStep += step;
+		}
+		until(index >= 0 && index < m_arrAbilities.Length && !IsCommmanderAbility(index));
+		}
+	else
+	{
+		index = MAX_NUM_ABILITIES + (m_iCurrentIndex + (step * MAX_NUM_ABILITIES_PER_ROW));
+		index = index % MAX_NUM_ABILITIES;
+	}
 	if(index != m_iCurrentIndex && index >= 0 && index < m_arrAbilities.Length )
 	{
 		ResetMouse();
@@ -1047,9 +1392,19 @@ simulated function bool DirectTargetObject(int TargetObjectID, optional bool Aut
 // Select ability at index, and then update all associated visuals. 
 simulated function bool SelectAbility( int index, optional bool ActivateViaHotKey )
 {
+	if (m_iCurrentIndex < 0)
+	{
+		mc.FunctionNum("animateIn", MAX_NUM_ABILITIES);
+	}
 	if(!SetAbilityByIndex( index, ActivateViaHotKey ))
 	{
 		return false;
+	}
+	
+	if( `ISCONTROLLERACTIVE )
+	{
+		Invoke("Activate");
+		AbilityButton.Hide();
 	}
 	
 	PopulateFlash();
@@ -1147,6 +1502,74 @@ public function OnCycleWeapons()
 	}
 }
 
+simulated function int SortTargetsByLocation(AvailableTarget TargetA, AvailableTarget TargetB)
+{
+	local Actor ActorA, ActorB;
+	local XComGameStateHistory History;
+	local Vector ActorALocation, ActorBLocation;
+	local Vector ReferenceDirection;
+	local float DeterminantA, DeterminantB;
+	local Vector DirectionA, DirectionB;
+
+	History = `XCOMHISTORY; 
+
+	ActorA = History.GetVisualizer(TargetA.PrimaryTarget.ObjectID);
+	ActorB = History.GetVisualizer(TargetB.PrimaryTarget.ObjectID);
+
+	ActorALocation = ActorA.Location;
+	ActorALocation.Z = 0.0;
+	ActorBLocation = ActorB.Location;
+	ActorBLocation.Z = 0.0;
+
+	DirectionA = ActorALocation - SortOriginPoint;
+	DirectionB = ActorBLocation - SortOriginPoint;
+
+	ReferenceDirection = SortReferencePoint - SortOriginPoint;
+
+	DirectionA = Normal(DirectionA);
+	DirectionB = Normal(DirectionB);
+
+	ReferenceDirection = Normal(ReferenceDirection);
+
+	DeterminantA = ReferenceDirection.X * DirectionA.Y - ReferenceDirection.Y * DirectionA.X;
+	DeterminantB = ReferenceDirection.X * DirectionB.Y - ReferenceDirection.Y * DirectionB.X;
+
+	if (DeterminantA < DeterminantB)
+	{
+		return 1;
+	}
+
+	if (DeterminantA > DeterminantB)
+	{
+		return -1;
+	}
+
+	return 0;
+}
+
+simulated function array<AvailableTarget> SortTargets(array<AvailableTarget> AvailableTargets)
+{
+	local int i;
+
+	SortReferencePoint.X = 0.0;
+	SortReferencePoint.Y = 0.0;
+	for (i = 0; i < AvailableTargets.Length; ++i)
+	{
+		SortReferencePoint += `XCOMHISTORY.GetVisualizer(AvailableTargets[i].PrimaryTarget.ObjectID).Location;
+	}
+
+	SortReferencePoint.X /= AvailableTargets.Length;
+	SortReferencePoint.Y /= AvailableTargets.Length;
+	SortReferencePoint.Z = 0.0;
+
+	SortOriginPoint = `XCOMHISTORY.GetVisualizer(XComTacticalController(PC).GetActiveUnit().ObjectID).Location;
+	SortOriginPoint.Z = 0.0;
+
+	AvailableTargets.Sort(SortTargetsByLocation);
+	
+	return AvailableTargets;
+}
+
 // Setup an ability. Eventually this should be the ONLY way to select an ability. Everything must route through it.
 simulated function bool SetAbilityByIndex( int AbilityIndex, optional bool ActivatedViaHotKey  )
 {	
@@ -1158,9 +1581,13 @@ simulated function bool SetAbilityByIndex( int AbilityIndex, optional bool Activ
 	local GameRulesCache_Unit	UnitInfoCache;
 	local int                   PreviousIndex;
 	local int                   DefaultTargetIndex;
+	local XComWorldData			WorldData;
+	local XComLevelVolume		LevelVolume;
+	local XCom3DCursor			Cursor;
 	local name					PreviousInptuState;
 
-	if(AbilityIndex == m_iCurrentIndex)
+
+	if(AbilityIndex == m_iCurrentIndex && TargetingMethod != None)
 		return false; // we are already using this ability
 
 	//See if anything is happening in general that should block ability activation
@@ -1209,6 +1636,9 @@ simulated function bool SetAbilityByIndex( int AbilityIndex, optional bool Activ
 	m_iMouseTargetedAbilityIndex = AbilityIndex; // make sure this gets updated
 	m_iCurrentIndex = AbilityIndex;
 	
+	if(AvailableActionInfo.AvailableTargets.Length > 1)
+		AvailableActionInfo.AvailableTargets = SortTargets(AvailableActionInfo.AvailableTargets);
+	
 	if(TargetingMethod != none)
 	{
 		// if switching abilities, the previous targeting method will still be active. Cancel it.
@@ -1223,19 +1653,36 @@ simulated function bool SetAbilityByIndex( int AbilityIndex, optional bool Activ
 	}
 
 	// make sure our input is in the right mode
+	Cursor = `CURSOR;
+	Cursor.m_bCustomAllowCursorMovement = false;
+	Cursor.m_bAllowCursorAscensionAndDescension = false;
+	Cursor.SetForceHidden(true);
+	WorldData = `XWORLD;
+	LevelVolume = WorldData.Volume;
+	LevelVolume.BorderComponent.SetUIHidden(true);
 	PreviousInptuState = XComTacticalInput(PC.PlayerInput).GetStateName();
 	XComTacticalInput(PC.PlayerInput).GotoState('UsingTargetingMethod');
 
 	if(AvailableActionInfo.AvailableTargets.Length > 0 || AvailableActionInfo.bFreeAim)
 	{
-		TargetingMethod = new AbilityState.GetMyTemplate().TargetingMethod;
-		TargetingMethod.Init(AvailableActionInfo);
+		//bsg-mfawcett(10.03.16): if this is a grenade, delay creating the targeting method so we can support rotating camera while aiming grenades
+		if( !AbilityRequiresTargetingActivation(m_iCurrentIndex) )
+		{
+			TargetingMethod = new AbilityState.GetMyTemplate().TargetingMethod;
+			TargetingMethod.Init(AvailableActionInfo);
+		}
+		else
+		{
+			// reset the camera (based on the cursor) on the active unit as it might be currently on another unit from a previous ability (eg. melee)
+			Cursor.MoveToUnit(XComTacticalController(PC).GetActiveUnitPawn());
+		}
 
 		DefaultTargetIndex = Max(TargetingMethod.GetTargetIndex(), 0);
 	}
 
 	if (AbilityState.GetMyTemplate().bNoConfirmationWithHotKey && ActivatedViaHotKey)
 	{
+		m_iSelectionOnButtonDown = m_iCurrentIndex;
 		// if the OnAccept fails, because unavailable or other similar reasons, we need to put the input state back. 
 		if( !OnAccept() )
 			XComTacticalInput(PC.PlayerInput).GotoState(PreviousInptuState);
@@ -1255,7 +1702,10 @@ simulated function bool SetAbilityByIndex( int AbilityIndex, optional bool Activ
 	if(AvailableActionInfo.bFreeAim)
 		TacticalHUD.OnFreeAimChange();
 
-	TacticalHUD.RealizeTargetingReticules(DefaultTargetIndex);
+	if( `ISCONTROLLERACTIVE == false )
+		TacticalHUD.RealizeTargetingReticules(DefaultTargetIndex);
+	else
+		TacticalHUD.TargetHighestHitChanceEnemy();
 	TacticalHUD.m_kShotHUD.Update();
 
 	return true;
@@ -1317,6 +1767,10 @@ simulated function AvailableAction GetSelectedAction()
 	if( m_iCurrentIndex >= 0 && m_iCurrentIndex < m_arrAbilities.Length )
 	{	
 		return m_arrAbilities[m_iCurrentIndex];
+	}
+	else if( m_iPreviousIndexForSecondaryMovement >= 0 && m_iPreviousIndexForSecondaryMovement < m_arrAbilities.Length)
+	{
+		return m_arrAbilities[m_iPreviousIndexForSecondaryMovement];
 	}
 	else
 	{

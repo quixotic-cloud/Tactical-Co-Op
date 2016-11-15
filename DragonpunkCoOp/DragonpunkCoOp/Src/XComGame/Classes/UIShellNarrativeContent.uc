@@ -23,6 +23,8 @@ var private bool bCheckboxUpdate;
 
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
 {
+	local UINavigationHelp NavHelp;
+
 	super.InitScreen(InitController, InitMovie, InitName);
 
 	m_List = Spawn(class'UIList', self);
@@ -34,14 +36,38 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_List.OnSelectionChanged = OnSelectedItemChanged;
 
 	m_CancelButton = Spawn(class'UIButton', self);
-	m_CancelButton.InitButton('difficultyCancelButton', class'UIUtilities_Text'.default.m_strGenericCancel, OnButtonCancel);
-	m_Cancelbutton.DisableNavigation();
+	m_CancelButton.bIsNavigable = false;
+	m_CancelButton.InitButton('difficultyCancelButton').Hide();
 
+	NavHelp = Movie.Pres.GetNavHelp();
+	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = true;
+	NavHelp.AddBackButton(OnButtonCancel);
+	NavHelp.AddSelectNavHelp();
+	
 	m_StartButton = Spawn(class'UILargeButton', self);
 	m_StartButton.InitLargeButton('difficultyLaunchButton', class'UIUtilities_Text'.default.m_strGenericAccept, "", ConfirmNarrativeContent);
+	m_StartButton.DisableNavigation();
+	UpdateStartButtonText();
 
 	Navigator.SetSelected(m_StartButton);
 	m_List.Navigator.SetSelected(m_List.GetItem(m_List.SelectedIndex));
+}
+
+simulated function UpdateStartButtonText()
+{
+	local String strLabel;
+
+	strLabel = class'UIUtilities_Text'.default.m_strGenericAccept;
+
+	if( `ISCONTROLLERACTIVE )
+	{
+		strLabel = class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, -2) @ strLabel;
+		m_StartButton.SetX(m_Startbutton.X - 50);
+		m_StartButton.SetY(405);
+	}
+
+	m_StartButton.SetText(strLabel);
 }
 
 simulated function OnInit()
@@ -182,7 +208,7 @@ simulated function AS_SetDifficultyDesc(string desc)
 	Movie.ActionScriptVoid(MCPath$".SetDifficultyDesc");
 }
 
-simulated public function OnButtonCancel(UIButton ButtonControl)
+simulated public function OnButtonCancel()
 {
 	if(bIsInited)
 	{
@@ -212,7 +238,7 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	switch(cmd)
 	{
 	case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
-	case class'UIUtilities_Input'.const.FXS_BUTTON_START:
+	case class'UIUtilities_Input'.const.FXS_BUTTON_START :
 
 		CurrentSelection = Navigator.GetSelected();
 		if(CurrentSelection != None)
@@ -221,10 +247,13 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		}
 		break;
 
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X :
+		ConfirmNarrativeContent(none);
+		break;
 	case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
 	case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
-		OnButtonCancel(none);
+		OnButtonCancel();
 		break;
 
 	default:

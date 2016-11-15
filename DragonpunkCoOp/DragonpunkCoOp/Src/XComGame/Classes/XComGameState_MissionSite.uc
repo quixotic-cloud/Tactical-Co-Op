@@ -981,7 +981,7 @@ function class<UIStrategyMapItem> GetUIClass()
 {
 	if(MakesDoom())
 	{
-		return class'UIStrategyMapItem_AlienNetworkComponent';
+		return class'UIStrategyMapItem_Mission'; //bsg-jneal (8.30.16): added DOOM to mission map items, use that class now
 	}
 
 	return class'UIStrategyMapItem_Mission';
@@ -989,12 +989,14 @@ function class<UIStrategyMapItem> GetUIClass()
 
 function string GetUIWidgetFlashLibraryName()
 {
-	if(MakesDoom())
-	{
-		return "MI_alienFacility";
-	}
+	//bsg-jneal (8.30.16): added DOOM to mission map items, use that class now
+	//if(MakesDoom())
+	//{
+	//	return "MI_alienFacility";
+	//}
 
-	return string(class'UIPanel'.default.LibID);
+	//return "MI_region"; // bsg-jneal (7.22.16): reusing region button for missions
+	return "SimpleHint";
 }
 
 function string GetUIPinImagePath()

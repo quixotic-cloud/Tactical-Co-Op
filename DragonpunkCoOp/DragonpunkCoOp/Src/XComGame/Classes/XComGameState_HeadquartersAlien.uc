@@ -69,6 +69,7 @@ var() bool bNeedsDoomPopup;
 var() bool bHasHeardFacilityWarningHalfway; // Has the player heard the warning for the doom meter being halfway full
 var() bool bHasHeardFacilityWarningAlmostDone; // Has the player heard the warning for the doom meter being 3/4 full
 var() bool bHasSeenRetaliation; // Has the player seen a retaliation mission
+var() bool bHasSeenDarkEvents; // Has the player seen any Dark Events
 
 var array<DoomGenData> FacilityDoomData;
 
@@ -1577,6 +1578,7 @@ function ChooseDarkEvents(XComGameState NewGameState)
 
 	DarkEventDeck = BuildDarkEventDeck();
 	NumEvents = GetNumDarkEventsToPlay();
+	bHasSeenDarkEvents = true; // This gets called for the first time during the first EndOfMonth
 
 	History = `XCOMHISTORY;
 	ResistanceHQ = XComGameState_HeadquartersResistance(History.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersResistance'));

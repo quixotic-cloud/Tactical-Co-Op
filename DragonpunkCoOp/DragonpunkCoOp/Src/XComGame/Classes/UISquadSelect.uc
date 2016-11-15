@@ -13,6 +13,7 @@ class UISquadSelect extends UIScreen
 const LIST_ITEM_PADDING = 6;
 
 var int m_iSelectedSlot; // used when selecting a new soldier, set by UISquadSelect_UnitSlot
+var int m_iSlotIndex;
 
 var UISquadSelectMissionInfo m_kMissionInfo;
 var UIList m_kSlotList;
@@ -49,6 +50,7 @@ var localized string m_strStripItems;
 var localized string m_strStripItemsConfirm;
 var localized string m_strStripItemsConfirmDesc;
 var localized string m_strBuildItems; 
+var localized string m_strClearSquad;
 
 var localized string m_strTooltipStripWeapons;
 var localized string m_strTooltipStripGear;
@@ -62,6 +64,8 @@ var string m_strPawnLocationIdentifier;
 var array<int> SlotListOrder; //The slot list is not 0->n for cinematic reasons ( ie. 0th and 1st soldier are in a certain place )
 var config int MaxDisplayedSlots; // The maximum number of slots displayed to the player on the screen
 var config array<name> SkulljackObjectives; // Objectives which require a skulljack equipped
+//Set this to 'true' before leaving screen, will set back to false on focus regain
+var bool m_bNoRefreshOnLoseFocus;
 
 // Constructor
 simulated function InitScreen(XComPlayerController InitController, UIMovie InitMovie, optional name InitName)
@@ -102,7 +106,8 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	listWidth = GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + LIST_ITEM_PADDING);
 	listX = Clamp((Movie.UI_RES_X / 2) - (listWidth / 2), 10, Movie.UI_RES_X / 2);
 
-	m_kSlotList = Spawn(class'UIList', self);
+	//m_kSlotList = Spawn(class'UIList', self);
+	m_kSlotList = Spawn(class'UIList_SquadEditor', self);
 	m_kSlotList.InitList('', listX, -435, Movie.UI_RES_X - 20, 310, true).AnchorBottomLeft();
 	m_kSlotList.itemPadding = LIST_ITEM_PADDING;
 
@@ -121,8 +126,20 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	LaunchButton = Spawn(class'UILargeButton', self);
 	LaunchButton.bAnimateOnInit = false;
-	LaunchButton.InitLargeButton(, m_strMission, m_strLaunch, OnLaunchMission);
+
+	if( `ISCONTROLLERACTIVE )
+	{
+		LaunchButton.InitLargeButton(,class'UIUtilities_Text'.static.InjectImage(
+				class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, -13) @ m_strLaunch @ m_strMission,, OnLaunchMission);
+	}
+	else
+	{
+		LaunchButton.InitLargeButton(, m_strMission, m_strLaunch, OnLaunchMission);
+	}
+
 	LaunchButton.AnchorBottomRight();
+	LaunchButton.DisableNavigation();
+	LaunchButton.ShowBG(true);
 
 	if (MissionData.Mission.AllowDeployWoundedUnits)
 	{
@@ -154,7 +171,7 @@ function StartPreMissionCinematic()
 event OnRemoteEvent(name RemoteEventName)
 {
 	local int i, j;
-	local UISquadSelect_ListItem ListItem;
+	local UISquadSelect_ListItem ListItem, SelectedListItem;
 
 	super.OnRemoteEvent(RemoteEventName);
 
@@ -164,6 +181,7 @@ event OnRemoteEvent(name RemoteEventName)
 		Show();
 		UpdateNavHelp();
 
+		SelectedListItem = UIList_SquadEditor(m_kSlotList).GetActiveListItem();
 		// Animate the slots in from left to right
 		for(i = 0; i < SlotListOrder.Length; ++i)
 		{
@@ -171,7 +189,17 @@ event OnRemoteEvent(name RemoteEventName)
 			{
 				ListItem = UISquadSelect_ListItem(m_kSlotList.GetItem(j));
 				if(ListItem.bIsVisible && ListItem.SlotIndex == SlotListOrder[i])
+				{
 					ListItem.AnimateIn(float(i));
+					if( `ISCONTROLLERACTIVE )
+					{
+					if(SelectedListItem == ListItem)
+						ListItem.RefreshFocus();
+
+					//disabling Navigators because the system doesn't work well with the mouse-highlight based navigation system on the PC-version
+					Navigator.Clear();
+					}
+				}
 			}
 		}
 	}
@@ -204,7 +232,7 @@ simulated function UpdateData(optional bool bFillSquad)
 	local int SlotIndex;	//Index into the list of places where a soldier can stand in the after action scene, from left to right
 	local int SquadIndex;	//Index into the HQ's squad array, containing references to unit state objects
 	local int ListItemIndex;//Index into the array of list items the player can interact with to view soldier status and promote
-	local int ListX, ListWidth;
+
 	local UISquadSelect_ListItem ListItem;
 	local XComGameState_Unit UnitState;
 	local XComGameState_MissionSite MissionState;
@@ -216,9 +244,12 @@ simulated function UpdateData(optional bool bFillSquad)
 	ClearPawns();
 
 	// update list positioning in case the number of total slots has changed since init was called
-	ListWidth = GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + LIST_ITEM_PADDING);
-	ListX = Clamp((Movie.UI_RES_X / 2) - (ListWidth / 2), 10, Movie.UI_RES_X / 2);
-	m_kSlotList.SetX(ListX);
+	//<workshop> This is handled in the UIList_SquadEditor.uc at InitPosition() - JTA 2016/2/22
+	//DEL:
+	//ListWidth = GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + LIST_ITEM_PADDING);
+	//ListX = Clamp((Movie.UI_RES_X / 2) - (ListWidth / 2), 10, Movie.UI_RES_X / 2);
+	//m_kSlotList.SetX(ListX); //this is definitely causing the problems
+	//</workshop>
 
 	// get existing states
 	XComHQ = class'UIUtilities_Strategy'.static.GetXComHQ();
@@ -354,7 +385,8 @@ simulated function UpdateData(optional bool bFillSquad)
 		{
 			if (UnitPawns[SquadIndex] != none)
 			{
-				m_kPawnMgr.ReleaseCinematicPawn(self, UnitPawns[SquadIndex].ObjectID);
+				//m_kPawnMgr.ReleaseCinematicPawn(self, UnitPawns[SquadIndex].ObjectID);
+				m_kPawnMgr.ReleaseCinematicPawn(self, XComHQ.Squad[SquadIndex].ObjectID);
 			}
 
 			UnitPawns[SquadIndex] = CreatePawn(XComHQ.Squad[SquadIndex], SquadIndex);
@@ -362,11 +394,14 @@ simulated function UpdateData(optional bool bFillSquad)
 
 		// We want the slots to match the visual order of the pawns in the slot list.
 		ListItem = UISquadSelect_ListItem(m_kSlotList.GetItem(ListItemIndex));
-		UnitState = XComGameState_Unit(History.GetGameStateForObjectID(XComHQ.Squad[SquadIndex].ObjectID));
-		if (RequiredSpecialSoldiers.Length > 0 && UnitState != none && RequiredSpecialSoldiers.Find(UnitState.GetMyTemplateName()) != INDEX_NONE)
-			ListItem.UpdateData(SquadIndex, true, true, false, UnitState.GetSoldierClassTemplate().CannotEditSlots); // Disable customization or removing any special soldier required for the mission
-		else
-			ListItem.UpdateData(SquadIndex, bDisableEdit, bDisableDismiss, bDisableLoadout);
+		if(ListItem.bDirty)
+		{
+			UnitState = XComGameState_Unit(History.GetGameStateForObjectID(XComHQ.Squad[SquadIndex].ObjectID));
+			if (RequiredSpecialSoldiers.Length > 0 && UnitState != none && RequiredSpecialSoldiers.Find(UnitState.GetMyTemplateName()) != INDEX_NONE)
+				ListItem.UpdateData(SquadIndex, true, true, false, UnitState.GetSoldierClassTemplate().CannotEditSlots); // Disable customization or removing any special soldier required for the mission
+			else
+				ListItem.UpdateData(SquadIndex, bDisableEdit, bDisableDismiss, bDisableLoadout);
+		}
 		++ListItemIndex;
 	}
 
@@ -443,7 +478,7 @@ simulated function BlastBackpacks()
 	{
 		UnitState = XComGameState_Unit(History.GetGameStateForObjectID(XComHQ.Crew[iCrew].ObjectID));
 
-		if (UnitState != None && UnitState.IsASoldier())
+		if (UnitState != None && UnitState.IsSoldier())
 		{
 			UnitState = XComGameState_Unit(UpdateState.CreateStateObject(class'XComGameState_Unit', XComHQ.Crew[iCrew].ObjectID));
 			UpdateState.AddStateObject(UnitState);
@@ -481,7 +516,7 @@ simulated function ValidateRequiredLoadouts()
 	{
 		UnitState = XComGameState_Unit(History.GetGameStateForObjectID(XComHQ.Crew[idx].ObjectID));
 
-		if (UnitState != None && UnitState.IsASoldier() && 
+		if (UnitState != None && UnitState.IsSoldier() && 
 			UnitState.GetMyTemplate().RequiredLoadout != '' && !UnitState.HasLoadout(UnitState.GetMyTemplate().RequiredLoadout))
 		{
 			UnitState = XComGameState_Unit(UpdateState.CreateStateObject(class'XComGameState_Unit', UnitState.ObjectID));
@@ -519,7 +554,7 @@ simulated function MakeWoundedSoldierItemsAvailable()
 	{
 		UnitState = XComGameState_Unit(History.GetGameStateForObjectID(XComHQ.Crew[idx].ObjectID));
 
-		if(UnitState != None && UnitState.IsASoldier() && ((UnitState.IsInjured() && !UnitState.IgnoresInjuries()) || UnitState.IsTraining()))
+		if(UnitState != None && UnitState.IsSoldier() && ((UnitState.IsInjured() && !UnitState.IgnoresInjuries()) || UnitState.IsTraining()))
 		{
 			UnitState = XComGameState_Unit(UpdateState.CreateStateObject(class'XComGameState_Unit', UnitState.ObjectID));
 			UpdateState.AddStateObject(UnitState);
@@ -538,6 +573,7 @@ simulated function CreatePendingStates()
 
 simulated function UpdateNavHelp()
 {
+	local UINavigationHelp NavHelp;
 	local XComHeadquartersCheatManager CheatMgr;
 
 	LaunchButton.SetDisabled(!CanLaunchMission());
@@ -545,29 +581,37 @@ simulated function UpdateNavHelp()
 
 	if( `HQPRES != none )
 	{
+		NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
 		CheatMgr = XComHeadquartersCheatManager(GetALocalPlayerController().CheatManager);
-		`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
+		NavHelp.ClearButtonHelp();
 	
 		if( !bNoCancel )
-			`HQPRES.m_kAvengerHUD.NavHelp.AddBackButton(CloseScreen);
+			NavHelp.AddBackButton(CloseScreen);
+
+		if(`ISCONTROLLERACTIVE)
+			NavHelp.AddSelectNavHelp();
 
 		if(CheatMgr == none || !CheatMgr.bGamesComDemo)
 		{
-			`HQPRES.m_kAvengerHUD.NavHelp.AddCenterHelp(m_strStripItems, "", OnStripItems, false, m_strTooltipStripItems);
-			`HQPRES.m_kAvengerHUD.NavHelp.AddCenterHelp(m_strStripWeapons, "", OnStripWeapons, false, m_strTooltipStripWeapons);
-			`HQPRES.m_kAvengerHUD.NavHelp.AddCenterHelp(m_strStripGear, "", OnStripGear, false, m_strTooltipStripGear);
+			NavHelp.AddCenterHelp(m_strStripItems, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LT_L2,
+				OnStripItems, false, m_strTooltipStripItems);
+			NavHelp.AddCenterHelp(m_strStripGear, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RT_R2,
+				OnStripGear, false, m_strTooltipStripGear);
 		}
 
 		if (class'XComGameState_HeadquartersXCom'.static.IsObjectiveCompleted('T0_M5_WelcomeToEngineering'))
 		{
-			`HQPRES.m_kAvengerHUD.NavHelp.AddCenterHelp(m_strBuildItems, "", OnBuildItems, false, m_strTooltipBuildItems);
+
+			NavHelp.AddCenterHelp(m_strBuildItems, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE, 
+				OnBuildItems, false, m_strTooltipBuildItems);
 		}
 
 		// Re-enabling this option for Steam builds to assist QA testing, TODO: disable this option before release
 `if(`notdefined(FINAL_RELEASE))
 		if(CheatMgr == none || !CheatMgr.bGamesComDemo)
 		{
-			`HQPRES.m_kAvengerHUD.NavHelp.AddCenterHelp("SIM COMBAT", "", OnSimCombat, !CanLaunchMission(), GetTooltipText());
+			NavHelp.AddCenterHelp("SIM COMBAT", class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_BACK_SELECT,
+				OnSimCombat, !CanLaunchMission(), GetTooltipText());
 		}	
 `endif
 	}
@@ -697,6 +741,7 @@ simulated function OnStripItemsDialogCallback(eUIAction eAction)
 
 		`GAMERULES.SubmitGameState(UpdateState);
 	}
+	UpdateNavHelp();
 }
 
 simulated function OnStripGear()
@@ -709,6 +754,7 @@ simulated function OnStripGear()
 	DialogData.strAccept = class'UIDialogueBox'.default.m_strDefaultAcceptLabel;
 	DialogData.strCancel = class'UIDialogueBox'.default.m_strDefaultCancelLabel;
 	Movie.Pres.UIRaiseDialog(DialogData);
+	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
 }
 simulated function OnStripGearDialogCallback(eUIAction eAction)
 {
@@ -739,6 +785,7 @@ simulated function OnStripGearDialogCallback(eUIAction eAction)
 
 		`GAMERULES.SubmitGameState(UpdateState);
 	}
+	UpdateNavHelp();
 }
 
 simulated function OnStripWeapons()
@@ -751,6 +798,7 @@ simulated function OnStripWeapons()
 	DialogData.strAccept = class'UIDialogueBox'.default.m_strDefaultAcceptLabel;
 	DialogData.strCancel = class'UIDialogueBox'.default.m_strDefaultCancelLabel;
 	Movie.Pres.UIRaiseDialog(DialogData);
+	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
 }
 simulated function OnStripWeaponsDialogCallback(eUIAction eAction)
 {
@@ -782,12 +830,17 @@ simulated function OnStripWeaponsDialogCallback(eUIAction eAction)
 
 		`GAMERULES.SubmitGameState(UpdateState);
 	}
+	UpdateNavHelp();
 }
 
 simulated function OnBuildItems()
 {
 	// This is a screen jump, but NOT a hotlink, so we DO NOT clear down to the HUD. 
 	bDirty = true; // Force a refresh of the pawns when you come back, in case the user purchased new weapons or armor
+	if(UIList_SquadEditor(m_kSlotList) != None)
+	{
+		UIList_SquadEditor(m_kSlotList).MarkAllListItemsAsDirty(); //Necessary for possible upgrades to weapons that affect all soldiers
+	}	
 
 	// Make sure the camera is set since we are leaving
 	SnapCamera();
@@ -867,7 +920,8 @@ simulated function ChangeSlot(optional StateObjectReference UnitRef)
 	
 	if(PrevUnitRef.ObjectID == 0)
 	{
-		RefreshDisplay();
+
+		UpdateData();
 		
 		if (UnitPawns[m_iSelectedSlot] != none)
 			m_kPawnMgr.ReleaseCinematicPawn(self, UnitPawns[m_iSelectedSlot].ObjectID);
@@ -876,24 +930,6 @@ simulated function ChangeSlot(optional StateObjectReference UnitRef)
 	}
 }
 
-simulated function RefreshDisplay()
-{
-	local int SlotIndex, SquadIndex;
-	local UISquadSelect_ListItem ListItem; 
-
-	for( SlotIndex = 0; SlotIndex < SlotListOrder.Length; ++SlotIndex )
-	{
-		SquadIndex = SlotListOrder[SlotIndex];
-
-		// The slot list may contain more information/slots than available soldiers, so skip if we're reading outside the current soldier availability. 
-		if( SquadIndex >= SoldierSlotCount )
-			continue;
-
-		//We want the slots to match the visual order of the pawns in the slot list. 
-		ListItem = UISquadSelect_ListItem(m_kSlotList.GetItem(SlotIndex));
-		ListItem.UpdateData(SquadIndex);
-	}
-}
 
 simulated function OnSimCombat()
 {
@@ -1081,9 +1117,15 @@ simulated function SnapCamera()
 
 simulated function OnReceiveFocus()
 {
+	//Don't reset the camera during the launch sequence.
+	//This case occurs, for example, when closing the "reconnect controller" dialog.
+	//INS:
+	if(bLaunched)
+		return;
 	SnapCamera();
 
 	super.OnReceiveFocus();
+	m_bNoRefreshOnLoseFocus = false;
 
 	UpdateNavHelp();
 
@@ -1095,14 +1137,47 @@ simulated function OnReceiveFocus()
 
 simulated function OnLoseFocus()
 {
+	local LocalPlayer LP;
+
+	LP = class'UIInteraction'.static.GetLocalPlayer(0);
+	if(!m_bNoRefreshOnLoseFocus && UIList_SquadEditor(m_kSlotList) != None && LP.ControllerID != -1)
+	{
+		bDirty = true;
+				
+		//marks the active listitem as 'dirty' so it will be forced to refresh when the screen gains focus again
+		if(class'XComGameState_HeadquartersXCom'.static.NeedsToEquipMedikitTutorial())
+			UIList_SquadEditor(m_kSlotList).MarkAllListItemsAsDirty(); //Tutorial modifies ALL listitems, so a full refresh is needed
+		else
+			UIList_SquadEditor(m_kSlotList).MarkActiveListItemAsDirty();
+	}
+	
 	super.OnLoseFocus();
 	StoreGameStateChanges(); // need to save the state of the screen when we leave it
+
+	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
 }
 
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local bool bHandled;
 
+	if (!bIsVisible)
+	{
+		return true;
+	}
+	
+	if (bLaunched)
+	{
+		return false;
+	}
+
+	if (IsTimerActive(nameof(GoToBuildItemScreen)))
+	{
+		return false;
+	}
+	if ( m_kSlotList.OnUnrealCommand(cmd, arg) )
+		return true;
+		
 	// Only pay attention to presses or repeats; ignoring other input types
 	// NOTE: Ensure repeats only occur with arrow keys
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
@@ -1114,12 +1189,6 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	bHandled = true;
 	switch( cmd )
 	{
-		// OnAccept
-		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
-		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
-			//OnAccept(); //TODO: activate this 
-			//Movie.Pres.PlayUISound(eSUISound_MenuSelect);
-			break;
 
 		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
@@ -1131,18 +1200,34 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 			}
 			break;
 
-		case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
+		case class'UIUtilities_Input'.const.FXS_BUTTON_LTRIGGER:
+			OnStripItems();
+			break;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RTRIGGER:
 			OnStripGear();
 			break;
 
 		case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
-			OnLaunchMission(LaunchButton);
+			if (class'XComGameState_HeadquartersXCom'.static.IsObjectiveCompleted('T0_M5_WelcomeToEngineering'))
+			{
+				OnBuildItems();
+			}
 			break;
 
-		case class'UIUtilities_Input'.const.FXS_BUTTON_START:
-			`HQPRES.UIPauseMenu( ,true );
+`if(`notdefined(FINAL_RELEASE))
+		case class'UIUtilities_Input'.const.FXS_BUTTON_SELECT:
+			OnSimCombat();
+			break;
+`endif
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			OnLaunchMission(LaunchButton);
 			break;
 			
+		case class'UIUtilities_Input'.const.FXS_BUTTON_START: //Re-enabled this case for consistency, since we're not using start to launch anymore - BET 2016-06-23
+			`HQPRES.UIPauseMenu( ,true );
+			break;
 		default:
 			bHandled = false;
 			break;
@@ -1353,6 +1438,43 @@ simulated function ClearPawns()
 	}
 }
 
+//Clears the entire squad
+simulated function ClearSquad()
+{
+	local int i, PrevSelectedIndex;
+	local UISquadSelect_ListItem ListItem;
+	local UIList_SquadEditor SquadList;
+
+	if(XComHQ != None && !XComHQ.IsObjectiveCompleted('T0_M3_WelcomeToHQ'))
+		return;	
+
+	SquadList = UIList_SquadEditor(m_kSlotList);
+	if(SquadList == None)
+		return;
+	else `log("List must be a 'UIList_SquadEditor' to use this function");
+
+	//used later to return focus back to where it started
+	PrevSelectedIndex = SquadList.GetItemIndex(SquadList.GetActiveListItem());
+
+	//cycles through each list item and simulates a 'dismiss' button click
+	for(i = 0; i < m_kSlotList.ItemCount; i++)
+	{
+		ListItem = UISquadSelect_ListItem(m_kSlotList.GetItem(i));
+		if(ListItem != None && !ListItem.bDisabled)
+		{
+			ListItem.OnLoseFocus();
+			ListItem.OnClickedDismissButton();
+		}
+	}
+
+	//Sets focus back to where it started
+	//The list items will refresh after a short delay (that exists to give actionscript time to process the animations)	
+	ListItem = UISquadSelect_ListItem(SquadList.GetItem(PrevSelectedIndex));
+	if(ListItem != None)
+	{
+		ListItem.OnReceiveFocus();
+	}
+}
 simulated function int GetSlotIndexForUnit(StateObjectReference UnitRef)
 {
 	local int SlotIndex;	//Index into the list of places where a soldier can stand in the after action scene, from left to right

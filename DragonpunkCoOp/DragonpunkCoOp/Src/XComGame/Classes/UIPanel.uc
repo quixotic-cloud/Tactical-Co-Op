@@ -43,6 +43,7 @@ var bool bIsFocused;
 var bool bIsRemoved;
 var bool bHasTooltip;
 
+var int CachedTooltipId;
 // Whether this control should be added to its parent's navigator or not
 var bool bIsNavigable;
 
@@ -316,7 +317,7 @@ simulated function SetTooltipText(string Text,
 	}
 	else
 	{
-		Movie.Pres.m_kTooltipMgr.AddNewTooltipTextBox(Text,
+		CachedTooltipId = Movie.Pres.m_kTooltipMgr.AddNewTooltipTextBox(Text,
 													  OffsetX,
 													  OffsetY,
 													  string(MCPath),
@@ -373,6 +374,15 @@ simulated function UIPanel SetSize(float NewWidth, float NewHeight)
 		MC.EndOp();												// end function call (queue it for processing)
 	}
 	return self;
+}
+
+//accepts a 0-1 scale pct (can exceed 1), though actionscript2 uses a 0-100 scale pct
+simulated function UIPanel SetPanelScale(float NewScale)
+{
+	MC.SetNum("_xscale", NewScale * 100);
+	MC.SetNum("_yscale", NewScale * 100);
+
+	return Self;
 }
 
 // Expects the const Anchor values from UIUtilities. 

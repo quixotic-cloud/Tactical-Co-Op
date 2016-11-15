@@ -12,6 +12,7 @@ var UIIcon AbilityIcon1;
 var UIIcon AbilityIcon2;
 var UIIcon ClassIcon;
 
+var int SelectedAbility;
 var bool bIsDisabled;
 var bool bEligibleForPromotion;
 
@@ -30,12 +31,14 @@ simulated function UIArmory_PromotionItem InitPromotionItem(int InitRank)
 	AbilityIcon1.bDisableSelectionBrackets = true;
 	AbilityIcon1.bAnimateOnInit = false;
 	AbilityIcon1.Hide(); // starts hidden
+	AbilityIcon1.DisableNavigation();
 
 	AbilityIcon2 = Spawn(class'UIIcon', self).InitIcon('abilityIcon2MC');
 	AbilityIcon2.ProcessMouseEvents(OnChildMouseEvent);
 	AbilityIcon2.bDisableSelectionBrackets = true;
 	AbilityIcon2.bAnimateOnInit = false;
 	AbilityIcon2.Hide(); // starts hidden
+	AbilityIcon2.DisableNavigation();
 
 	InfoButton1 = Spawn(class'UIButton', self);
 	InfoButton1.bIsNavigable = false;
@@ -43,12 +46,14 @@ simulated function UIArmory_PromotionItem InitPromotionItem(int InitRank)
 	InfoButton1.ProcessMouseEvents(OnChildMouseEvent);
 	InfoButton1.bAnimateOnInit = false;
 	InfoButton1.Hide(); // starts hidden
+	InfoButton1.DisableNavigation();
 	InfoButton2 = Spawn(class'UIButton', self);
 	InfoButton2.bIsNavigable = false;
 	InfoButton2.InitButton('infoButtonRight');
 	InfoButton2.ProcessMouseEvents(OnChildMouseEvent);
 	InfoButton2.bAnimateOnInit = false;
 	InfoButton2.Hide(); // starts hidden
+	InfoButton2.DisableNavigation();
 
 	ClassIcon = Spawn(class'UIIcon', self);
 	ClassIcon.bIsNavigable = false;
@@ -57,6 +62,9 @@ simulated function UIArmory_PromotionItem InitPromotionItem(int InitRank)
 	ClassIcon.bAnimateOnInit = false;
 	ClassIcon.bDisableSelectionBrackets = true;
 	ClassIcon.Hide(); // starts hidden
+	ClassIcon.DisableNavigation();
+
+	SelectedAbility = -1;
 
 	MC.FunctionString("setPromoteRank", m_strNewRank);
 
@@ -130,6 +138,9 @@ simulated function SetEquippedAbilities(optional bool bEquippedAbility1, optiona
 simulated function RealizeVisuals()
 {
 	MC.FunctionVoid("realizeFocus");
+
+	if(`ISCONTROLLERACTIVE)
+		RealizeInfoButtons();
 }
 
 simulated function OnAbilityInfoClicked(UIButton Button)
@@ -146,6 +157,9 @@ simulated function OnAbilityInfoClicked(UIButton Button)
 
 	if(AbilityTemplate != none)
 		`HQPRES.UIAbilityPopup(AbilityTemplate);
+	AbilityIcon1.OnLoseFocus();
+	AbilityIcon2.OnLoseFocus();
+	RealizeHighlight();
 }
 
 simulated function SelectAbility(int idx)
@@ -154,7 +168,13 @@ simulated function SelectAbility(int idx)
 	PromotionScreen = UIArmory_Promotion(Screen);
 
 	if(bEligibleForPromotion)
+	{
 		PromotionScreen.ConfirmAbilitySelection(Rank, idx);
+		AbilityIcon1.OnLoseFocus();
+		AbilityIcon2.OnLoseFocus();
+		RealizePromoteState();
+		RealizeHighlight();
+	}
 	else
 		Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
 }
@@ -176,11 +196,13 @@ simulated function OnChildMouseEvent(UIPanel ChildControl, int cmd)
 			OnReceiveFocus();
 			AbilityIcon1.OnReceiveFocus();
 			RealizePromoteState();
+			RealizeHighlight();
 		}
 		else if(cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT || cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_DRAG_OUT)
 		{
 			AbilityIcon1.OnLoseFocus();
 			RealizePromoteState();
+			RealizeHighlight();
 		}
 		break;
 	case AbilityIcon2:
@@ -193,11 +215,13 @@ simulated function OnChildMouseEvent(UIPanel ChildControl, int cmd)
 			OnReceiveFocus();
 			AbilityIcon2.OnReceiveFocus();
 			RealizePromoteState();
+			RealizeHighlight();
 		}
 		else if(cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT || cmd == class'UIUtilities_Input'.const.FXS_L_MOUSE_DRAG_OUT)
 		{
 			AbilityIcon2.OnLoseFocus();
 			RealizePromoteState();
+			RealizeHighlight();
 		}
 		break;
 	case InfoButton1:
@@ -232,10 +256,54 @@ simulated function RealizePromoteState()
 		SetPromote(true, AbilityIcon1.bIsFocused, AbilityIcon2.bIsFocused);
 }
 
+simulated function RealizeHighlight()
+{
+	MC.BeginFunctionOp("setHighlight");
+	MC.QueueBoolean(AbilityIcon1.bIsFocused);
+	MC.QueueBoolean(AbilityIcon2.bIsFocused);
+	MC.EndOp();
+}
 simulated function RealizeInfoButtons()
 {
-	InfoButton1.SetVisible(bIsFocused && !bIsDisabled && !ClassIcon.bIsVisible);
-	InfoButton2.SetVisible(bIsFocused && !bIsDisabled);
+	if(`ISCONTROLLERACTIVE)
+	{
+		// Directly force visibility update because PromotionListItem.as manipulates visibility of these components without controller logic
+		InfoButton1.MC.SetBool("_visible", bIsFocused && !bIsDisabled && !bEligibleForPromotion && !ClassIcon.bIsVisible && AbilityIcon1.bIsFocused);
+		InfoButton2.MC.SetBool("_visible", bIsFocused && !bIsDisabled && !bEligibleForPromotion && AbilityIcon2.bIsFocused);
+	}
+	else
+	{
+		InfoButton1.SetVisible(bIsFocused && !bIsDisabled && !ClassIcon.bIsVisible);
+		InfoButton2.SetVisible(bIsFocused && !bIsDisabled);
+	}
+}
+simulated function SetSelectedAbility(int AbilityIndex)
+{
+	if (AbilityIndex == 0 && AbilityIcon1.bIsVisible)
+	{
+		AbilityIcon1.OnReceiveFocus();
+		RealizePromoteState();
+		RealizeHighlight();
+		SelectedAbility = 0;
+	}
+	else if (AbilityIndex == 1 && AbilityIcon2.bIsVisible)
+	{
+		AbilityIcon2.OnReceiveFocus();
+		RealizePromoteState();
+		RealizeHighlight();
+		SelectedAbility = 1;
+	}
+	else
+	{
+		AbilityIcon1.OnLoseFocus();
+		AbilityIcon2.OnLoseFocus();
+		RealizePromoteState();
+		RealizeHighlight();
+		SelectedAbility = -1;
+	}
+
+	if(`ISCONTROLLERACTIVE)
+		RealizeInfoButtons();
 }
 
 simulated function OnReceiveFocus()
@@ -249,9 +317,10 @@ simulated function OnReceiveFocus()
 	if(UIArmory_Promotion(Screen).List.GetItemIndex(self) != INDEX_NONE)
 		UIArmory_Promotion(Screen).List.SetSelectedItem(self);
 	else
+	{
 		UIArmory_Promotion(Screen).List.SetSelectedIndex(-1);
-
-	RealizeInfoButtons();
+		SetSelectedAbility(ClassIcon.bIsVisible ? 1 : UIArmory_Promotion(Screen).SelectedAbilityIndex);
+	}
 }
 
 simulated function OnLoseFocus()
@@ -262,34 +331,109 @@ simulated function OnLoseFocus()
 		super.OnLoseFocus();
 		RealizeInfoButtons();
 	}
+	AbilityIcon1.OnLoseFocus();
+	AbilityIcon2.OnLoseFocus();
+	RealizePromoteState();
+	RealizeHighlight();
 }
 
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
-	local bool bHandled;
-
-	// Only pay attention to presses or repeats; ignoring other input types
-	// NOTE: Ensure repeats only occur with arrow keys
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
+	{
 		return false;
-
-	bHandled = true;
+	}
+	
 	switch( cmd )
 	{
-		case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
-		case class'UIUtilities_Input'.const.FXS_ARROW_LEFT:
-			SelectAbility(0);
-			break;
-		case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
-		case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
-			SelectAbility(1);
-			break;
-		default:
-			bHandled = false;
-			break;
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT:
+	case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+	case class'UIUtilities_Input'.const.FXS_ARROW_LEFT:
+		if (AbilityIcon1.bIsVisible)
+		{
+			OnChildMouseEvent(AbilityIcon1, class'UIUtilities_Input'.const.FXS_L_MOUSE_IN);
+			OnChildMouseEvent(AbilityIcon2, class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT);
+			SelectedAbility = 0;
+		}
+
+		return true;
+
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT:
+	case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+	case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
+		if (AbilityIcon2.bIsVisible)
+		{
+			OnChildMouseEvent(AbilityIcon1, class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT);
+			OnChildMouseEvent(AbilityIcon2, class'UIUtilities_Input'.const.FXS_L_MOUSE_IN);
+			SelectedAbility = 1;
+		}
+
+		return true;
+		
+	case class'UIUtilities_Input'.const.FXS_DPAD_UP:
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP:
+	case class'UIUtilities_Input'.const.FXS_ARROW_UP:
+		if (self != UIArmory_Promotion(Screen).ClassRowItem)
+		{
+			UIArmory_Promotion(Screen).SelectedAbilityIndex = SelectedAbility;
+			OnChildMouseEvent(AbilityIcon1, class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT);
+			OnChildMouseEvent(AbilityIcon2, class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT);
+			SelectedAbility = -1;
+		}
+
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_DPAD_DOWN:
+	case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN:
+	case class'UIUtilities_Input'.const.FXS_ARROW_DOWN:
+		if (UIArmory_Promotion(Screen).List.SelectedIndex < UIArmory_Promotion(Screen).List.GetItemCount() - 1)
+		{
+			UIArmory_Promotion(Screen).SelectedAbilityIndex = SelectedAbility;
+			OnChildMouseEvent(AbilityIcon1, class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT);
+			OnChildMouseEvent(AbilityIcon2, class'UIUtilities_Input'.const.FXS_L_MOUSE_OUT);
+			SelectedAbility = -1;
+		}
+
+		break;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
+		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
+		if (!bEligibleForPromotion)
+		{
+			return false;
+		}
+
+		UIArmory_Promotion(Screen).SelectedAbilityIndex = SelectedAbility;
+		if (SelectedAbility == 0)
+		{
+			OnChildMouseEvent(AbilityIcon1, class'UIUtilities_Input'.const.FXS_L_MOUSE_UP);
+		}
+		else if (SelectedAbility == 1)
+		{
+			OnChildMouseEvent(AbilityIcon2, class'UIUtilities_Input'.const.FXS_L_MOUSE_UP);
+		}
+
+		return true;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_L3:
+		if (!bIsDisabled)
+		{
+			UIArmory_Promotion(Screen).SelectedAbilityIndex = SelectedAbility;
+			if (SelectedAbility == 0)
+			{
+				OnChildMouseEvent(InfoButton1, class'UIUtilities_Input'.const.FXS_L_MOUSE_UP);
+			}
+			else if (SelectedAbility == 1)
+			{
+				OnChildMouseEvent(InfoButton2, class'UIUtilities_Input'.const.FXS_L_MOUSE_UP);
+			}
+		}
+
+		return true;
 	}
 
-	return bHandled || super.OnUnrealCommand(cmd, arg);
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 defaultproperties

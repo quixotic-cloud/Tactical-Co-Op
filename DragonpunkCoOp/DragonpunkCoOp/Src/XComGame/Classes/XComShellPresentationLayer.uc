@@ -85,14 +85,11 @@ simulated function Init()
 	`log("XComShellPresentationLayer.Init()",,'uixcom');
 	
 	//Ask for an early read of settings on PC only.
-	if( !WorldInfo.IsConsoleBuild() )
-	{
-		`ONLINEEVENTMGR.ReadProfileSettings();
+	`ONLINEEVENTMGR.ReadProfileSettings();
 
-		if (class'Engine'.static.IsSteamBigPicture())
-		{
-			`XPROFILESETTINGS.Data.ActivateMouse(false);
-		}
+	if (class'Engine'.static.IsSteamBigPicture())
+	{
+		`XPROFILESETTINGS.Data.ActivateMouse(false);
 	}
 
 	m_kMPShellManager = Spawn(class'X2MPShellManager', self);
@@ -194,10 +191,6 @@ simulated function TravelToNextScreen()
 		{
 			ShuttleToMPMainMenu();
 		}
-		else if( WorldInfo.IsConsoleBuild() )
-		{
-			UIStartScreenState();
-		}
 		else
 		{
 			EnterMainMenu();
@@ -282,7 +275,7 @@ simulated function EnterMainMenu()
 	// ------------------
 
 	// THIS MUST ALSO CHECK RELEASE FOR SHIP! -bsteiner
-	if( `XENGINE.bReviewFlagged )
+	if( `XENGINE.bReviewFlagged)
 		UIFinalShellScreen();
 	else
 		UIShellScreen();
@@ -331,7 +324,7 @@ simulated private function ShuttleToMPMainMenu()
 	`log(`location, true, 'XCom_Online');
 	ClearUIToHUD();
 
-	UIStartScreen(ScreenStack.GetScreen(class'UIStartScreen')).Hide();	
+	//UIStartScreen(ScreenStack.GetScreen(class'UIStartScreen')).Hide();	
 
 	UIFinalShellScreen(); 
 	UIFinalShell(ScreenStack.GetScreen(class'UIFinalShell')).Hide();
@@ -2129,6 +2122,11 @@ simulated function XComBaseCamera GetCamera()
 	return XComBaseCamera(PlayerController(Owner).PlayerCamera);
 }
 
+simulated function bool IsPresentationLayerReady()
+{
+	//Overriding this function because there is no rulseset in the shell menus. 
+	return m_bPresLayerReady;
+}
 defaultproperties
 {
 	//m_fSaveCompleteCallback=none ??? 

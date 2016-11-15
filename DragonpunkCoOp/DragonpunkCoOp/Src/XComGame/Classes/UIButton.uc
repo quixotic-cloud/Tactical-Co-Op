@@ -35,16 +35,27 @@ var bool            IsSelected;
 var bool            ResizeToText;
 var bool			SizeRealized;
 var bool			bNeedsAttention;
+var bool            bHasShadow;
 var UIPanel         AttentionIcon; 
+var UIPanel         BGButton; 
 
 delegate OnSizeRealized();
 
 // mouse callbacks
 delegate OnClickedDelegate(UIButton Button);
 delegate OnDoubleClickedDelegate(UIButton Button);
+delegate OnDisabledClickedDelegate(UIButton Button);
 
-simulated function UIButton InitButton(optional name InitName, optional string InitLabel, optional delegate<OnClickedDelegate> InitOnClicked, optional EUIButtonStyle InitStyle = eUIButtonStyle_BUTTON_WHEN_MOUSE)
+simulated function UIButton InitButton(optional name InitName, optional string InitLabel, optional delegate<OnClickedDelegate> InitOnClicked, optional EUIButtonStyle InitStyle = -1)
 {
+	if( InitStyle == -1 )
+	{
+		if( `ISCONTROLLERACTIVE )
+			InitStyle = eUIButtonStyle_SELECTED_SHOWS_HOTLINK;
+		else
+			InitStyle = eUIButtonStyle_NONE;
+	}
+
 	InitPanel(InitName);
 	SetStyle(InitStyle);
 	SetText(InitLabel);
@@ -62,6 +73,17 @@ simulated function UIButton SetText(string newText)
 		SizeRealized = false;
 		mc.FunctionString("setHTMLText", Text);
 	}
+	return self;
+}
+
+simulated function UIButton SetTextShadow(bool Shadow)
+{
+	if (bHasShadow != Shadow)
+	{
+		bHasShadow = Shadow;
+		MC.FunctionBool("setTextShadow", Shadow);
+	}
+
 	return self;
 }
 
@@ -180,12 +202,23 @@ simulated function UIButton SetGood(bool bIsGood, optional string TooltipText)
 
 simulated function UIButton SetGamepadIcon(string newIcon)
 {
+	local string prefix; 
+
 	if(Icon != newIcon)
 	{
 		Icon = newIcon;
-		mc.FunctionString("setIcon", Icon);
+		prefix = class'UIUtilities_Input'.static.GetGamepadIconPrefix();
+		if( InStr( Icon, prefix, false, true) != 0 )
+			mc.FunctionString("setIcon", prefix $ Icon);
+		else
+			mc.FunctionString("setIcon", Icon);
 	}
 	return self;
+}
+
+function ShowBG(bool bShouldShow )
+{
+	MC.FunctionBool("ShowBG", bShouldShow);
 }
 
 simulated function UIButton SetFontSize(int newFontSize)
@@ -224,7 +257,19 @@ simulated function UIButton SetStyle(EUIButtonStyle newStyle, optional int newFo
 		mc.QueueNumber(float(FontSize));	// add FontSize param
 		mc.QueueBoolean(ResizeTotext);	    // add ResizeTotext param
 		mc.EndOp();                         // add delimiter and process command
+
+		//The BG button was switched to a panel in the gamepad update, so we need to talk to it and tell it to hide when appropriate. -bsteiner 
+		if( Style == eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE )
+		{
+			if( BGButton == none )
+			{
+				BGButton = Spawn(class'UIButton', self);
+				BGButton.InitPanel('theButton'); //instance name on the stage inside XCOmButton 
+			}
+			BGButton.Hide();
+		}
 	}
+
 	return self;
 }
 
@@ -251,6 +296,7 @@ protected function CreateAttentionIcon()
 	AttentionIcon.DisableNavigation();
 	AttentionIcon.SetSize(70, 70); //the animated rings count as part of the size. 
 	AttentionIcon.SetPosition(2, 4);
+	Navigator.RemoveControl(AttentionIcon);
 }
 
 simulated function OnMouseEvent(int cmd, array<string> args)
@@ -274,6 +320,11 @@ simulated function bool Click()
 	if( OnClickedDelegate != none && !IsDisabled && bIsVisible )
 	{
 		OnClickedDelegate(self);
+		return true;
+	}
+	if (OnDisabledClickedDelegate != none && IsDisabled && bIsVisible)
+	{
+		OnDisabledClickedDelegate(self);
 		return true;
 	}
 	return false;
@@ -327,6 +378,8 @@ simulated function OnCommand(string cmd, string arg)
 defaultproperties
 {
 	LibID = "XComButton";
+	//LibID = "CXComButton";
+	Icon = "Default"; //Allows us to set icon to "", which hides the icon in actionscript
 	Style = EUIButtonStyle_NONE;
 	FontSize = FONT_SIZE_2D;
 	IsDisabled = false;

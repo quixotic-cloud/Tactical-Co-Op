@@ -279,18 +279,21 @@ simulated function bool RawInputHandler(Name Key, int ActionMask, bool bCtrl, bo
 	else
 		kBind = m_arrBindings[m_iKeySlotBeingBound].PrimaryBind;
 
-	
-	// Remove it from all player inputs if it's a General or Shared Command
-	if(m_eBindingCategory == eKC_General || SharedCommands.Find(kBind.Command) != INDEX_NONE)
+	// If we are replacing a bind, first remove it.
+	if(kBind.Name != '')
 	{
-		foreach WorldInfo.AllControllers(class'PlayerController', kPlayerController)
+		// Remove it from all player inputs if it's a General or Shared Command
+		if(m_eBindingCategory == eKC_General || SharedCommands.Find(kBind.Command) != INDEX_NONE)
 		{
-			RemoveBind(kPlayerController.PlayerInput, kBind, ChangedInputs);
+			foreach WorldInfo.AllControllers(class'PlayerController', kPlayerController)
+			{
+				RemoveBind(kPlayerController.PlayerInput, kBind, ChangedInputs);
+			}
 		}
-	}
-	else
-	{
-		RemoveBind(GetPlayerInput(), kBind, ChangedInputs);
+		else
+		{
+			RemoveBind(GetPlayerInput(), kBind, ChangedInputs);
+		}
 	}
 
 	// Update the new bind and add it to the bind list.

@@ -9,13 +9,7 @@
 //---------------------------------------------------------------------------------------
 class XComOnlineProfileSettingsDataBlob extends Object
 	dependson(XComContentManager, X2CardManager, X2TacticalGameRulesetDataStructures, X2MPData_Native)
-	native(Core);
-
-`if(`isdefined(FINAL_RELEASE))
-`define FORCE_CONTROLLER 0
-`else
-`define FORCE_CONTROLLER 0
-`endif
+	native(Core) config(UI);
 
 struct native MarketingPreset
 {
@@ -72,8 +66,15 @@ var bool m_bAutoSave;
 
 // Never use m_bActivateMouse.  Always use the accessor function IsMouseActive().  -dwuenschell
 var protected bool m_bActivateMouse;
+var EControllerIconType m_eControllerIconType; 
 var transient bool m_bIsConsoleBuild;
+var bool m_bAbilityGrid;
+var float m_GeoscapeSpeed;
 var float	m_fScrollSpeed;
+
+var bool	m_bSmoothCursor;
+var float CursorSpeed;
+//</workshop>
 var bool	m_bGlamCam;
 var bool	m_bForeignLanguages;
 var bool	m_bAmbientVO;
@@ -111,11 +112,29 @@ var array<CustomizationAlertInfo> m_arrCharacterCustomizationCategoriesInfo; //U
 // DLC Narrative Tracking
 var array<NarrativeContentFlag> m_arrNarrativeContentEnabled;
 
+var config bool bForceController;
+var config int ForceConsole;
+var EConsoleType ConsoleType;
+
+event EConsoleType GetConsoleType()
+{
+	return ConsoleType;
+}
+
+event bool IsConsoleBuild(optional EConsoleType eConsoleType = CONSOLE_Any)
+{
+	if (m_bIsConsoleBuild)
+	{
+		return ConsoleType == eConsoleType || eConsoleType == CONSOLE_Any;
+	}
+
+	return false;
+}
 event bool IsMouseActive()
 {
-	if( m_bIsConsoleBuild ) {
-		return false;
-	}
+	//if( m_bIsConsoleBuild ) 
+	//	return false;
+	//
 	return m_bActivateMouse;
 }
 
@@ -123,12 +142,23 @@ function ActivateMouse( bool activate )
 {
 	ScriptTrace();
 
-`if(`FORCE_CONTROLLER)
-	m_bActivateMouse = false;
-`else
-	m_bActivateMouse = activate;
-`endif
+	if (bForceController)
+	{
+		m_bActivateMouse = false;
+	}
+	else
+	{
+		m_bActivateMouse = activate;
+	}
 	XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).SetIsMouseActive(m_bActivateMouse);
+
+}
+
+function SetControllerIconType( EControllerIconType eNewType )
+{
+	m_eControllerIconType = eNewType;
+
+	ActivateMouse(m_eControllerIconType == eControllerIconType_Mouse);
 }
 
 function int GetGamesStarted()
@@ -227,7 +257,6 @@ native function bool GetGameplayOption( EGameplayOption eOption );
 
 function Options_ResetToDefaults( bool bInShell )
 {
-
 	//In Japanese or Korean, default to the subtitles on. 
 	if( GetLanguage() == "JPN" || GetLanguage() == "KOR" )
 	{
@@ -250,17 +279,19 @@ function Options_ResetToDefaults( bool bInShell )
 	//UI: We can not let you change input device while in game. The Ui will explode. Legacy issues. -bsteiner
 	if( bInShell )
 	{
-`if(`FORCE_CONTROLLER)
-		m_bActivateMouse    = false;
-`else
 		m_bActivateMouse    = class'Engine'.static.IsSteamBigPicture() ? false : !m_bIsConsoleBuild;
-`endif
+
 		XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).SetIsMouseActive(m_bActivateMouse);
 	}
 
+	m_bAbilityGrid = class'XComOnlineProfileSettingsDataBlob'.default.m_bAbilityGrid;
+	m_GeoscapeSpeed = class'XComOnlineProfileSettingsDataBlob'.default.m_GeoscapeSpeed;
+	CursorSpeed = class'XComOnlineProfileSettingsDataBlob'.default.CursorSpeed;
+	//</workshop>
 	m_fScrollSpeed      = class'XComOnlineProfileSettingsDataBlob'.default.m_fScrollSpeed;
 	m_bForeignLanguages = class'XComOnlineProfileSettingsDataBlob'.default.m_bForeignLanguages;
 	m_bAmbientVO		= class'XComOnlineProfileSettingsDataBlob'.default.m_bAmbientVO;
+	m_bSmoothCursor     = class'XComOnlineProfileSettingsDataBlob'.default.m_bSmoothCursor;
 	m_bGlamCam          = class'XComOnlineProfileSettingsDataBlob'.default.m_bGlamCam;
 	m_bShowEnemyHealth  = class'XComOnlineProfileSettingsDataBlob'.default.m_bShowEnemyHealth; 
 	m_bEnableSoldierSpeech = class'XComOnlineProfileSettingsDataBlob'.default.m_bEnableSoldierSpeech;
@@ -274,6 +305,7 @@ function Options_ResetToDefaults( bool bInShell )
 	m_bPlayerHasUncheckedBoxTutorialSetting = class'XComOnlineProfileSettingsDataBlob'.default.m_bPlayerHasUncheckedBoxTutorialSetting;
 
 	m_arrNarrativeContentEnabled.Length = 0;
+	bEnableZipMode = class'XComOnlineProfileSettingsDataBlob'.default.bEnableZipMode;
 }
 
 defaultproperties
@@ -281,12 +313,9 @@ defaultproperties
 	m_bMuteSoundFX=false
 	m_bMuteMusic=false
 	m_bMuteVoice=false
-`if(`FORCE_CONTROLLER)
-	m_bActivateMouse=false
-`else
 	m_bActivateMouse=true
-`endif
 	m_fScrollSpeed=50
+	m_bSmoothCursor=true
 	m_bGlamCam=true
 	m_bVSync=true
 	m_bShowEnemyHealth=true;
@@ -302,11 +331,19 @@ defaultproperties
 	m_iGammaPercentage = 50
 	m_fGamma = 2.2
 	m_bIsConsoleBuild = false
+	CursorSpeed = 58
+	m_bAbilityGrid = false
+	m_GeoscapeSpeed = 50
+	ConsoleType=CONSOLE_Any
+	bEnableZipMode = false
 	m_bPlayerHasUncheckedBoxTutorialSetting = false;
 	UnitMovementSpeed = 1.0f;
 	
+	m_bPushToTalk=false
 	m_bAutoSave=true
 
 	m_eCharPoolUsage=eCPSM_PoolOnly
 	MaxVisibleCrew=30
+
+	m_eControllerIconType = eControllerIconType_Mouse
 }

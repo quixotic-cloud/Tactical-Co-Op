@@ -625,7 +625,7 @@ static function string GetPersonnelStatus( XComGameState_Unit Unit, optional int
 	{
 		return class'UIUtilities_Text'.static.GetSizedText(Unit.GetLocation(), FontSize);
 	}
-	else if (Unit.IsASoldier())
+	else if (Unit.IsSoldier())
 	{
 		// soldiers get put into the hangar to indicate they are getting ready to go on a mission
 		if( `HQPRES.ScreenStack.IsInStack(class'UISquadSelect') && GetXComHQ().IsUnitInSquad(Unit.GetReference()) )
@@ -667,7 +667,7 @@ static function GetPersonnelStatusSeparate(XComGameState_Unit Unit, out string S
 	{
 		Status = class'UIUtilities_Text'.static.GetSizedText(Unit.GetLocation(), FontSize);
 	}
-	else if (Unit.IsASoldier())
+	else if (Unit.IsSoldier())
 	{
 		// soldiers get put into the hangar to indicate they are getting ready to go on a mission
 		if(`HQPRES != none &&  `HQPRES.ScreenStack.IsInStack(class'UISquadSelect') && GetXComHQ().IsUnitInSquad(Unit.GetReference()) )
@@ -1435,7 +1435,7 @@ simulated static function int GetMinimumContactCost()
 simulated static function int GetUnitCurrentHealth(XComGameState_Unit UnitState, optional bool bUseLowestHP)
 {
 	if (bUseLowestHP)
-{
+	{
 		return UnitState.LowestHP;
 	}
 

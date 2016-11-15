@@ -53,7 +53,14 @@ function PreSaveData()
 /// </summary>
 function PostLoadData()
 {
+	local XComPresentationLayerBase Pres;
+
 	class'X2CardManager'.static.GetCardManager().LoadDeckData(Data.SavedCardDecks);
+
+	Pres = XComPlayerController(class'Engine'.static.GetCurrentWorldInfo().GetALocalPlayerController()).Pres;
+	Pres.Get2DMovie().SetMouseActive(Data.IsMouseActive());
+	Pres.Get3DMovie().SetMouseActive(Data.IsMouseActive());
+	Pres.GetModalMovie().SetMouseActive(Data.IsMouseActive());
 }
 
 //******************************************************************************************

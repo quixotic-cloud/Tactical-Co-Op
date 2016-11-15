@@ -99,6 +99,11 @@ simulated protected function UpdatePuckVisuals(XComGameState_Unit ActiveUnitStat
 	// will actually move to when he executes the move
 	PuckMeshComponent.SetHidden(false);
 	PuckMeshComponent.SetStaticMeshes(GetMeleePuckMeshForAbility(MeleeAbilityTemplate), PuckMeshConfirmed);
+	//<workshop> SMOOTH_TACTICAL_CURSOR AMS 2016/01/22
+	//INS:
+	PuckMeshCircleComponent.SetHidden(false);
+	PuckMeshCircleComponent.SetStaticMesh(GetMeleePuckMeshForAbility(MeleeAbilityTemplate));
+	//</workshop>
 	if (IsDashing() || ActiveUnitState.NumActionPointsForMoving() == 1)
 	{
 		RenderablePath.SetMaterial(PathMaterialDashing);
@@ -107,16 +112,33 @@ simulated protected function UpdatePuckVisuals(XComGameState_Unit ActiveUnitStat
 	MeshTranslation = VisualPath.GetEndPoint(); // make sure we line up perfectly with the end of the path ribbon
 	MeshTranslation.Z = WorldData.GetFloorZForPosition(MeshTranslation) + PathHeightOffset;
 	PuckMeshComponent.SetTranslation(MeshTranslation);
+	//<workshop> SMOOTH_TACTICAL_CURSOR AMS 2016/01/22
+	//INS:
+	PuckMeshCircleComponent.SetTranslation(MeshTranslation);
+	//</workshop>
 
 	MeshScale.X = ActiveUnitState.UnitSize;
 	MeshScale.Y = ActiveUnitState.UnitSize;
 	MeshScale.Z = 1.0f;
 	PuckMeshComponent.SetScale3D(MeshScale);
+	//<workshop> SMOOTH_TACTICAL_CURSOR AMS 2016/01/22
+	//INS:
+	PuckMeshCircleComponent.SetScale3D(MeshScale);
+	//</workshop>
 }
 
 simulated function UpdateMeleeTarget(XComGameState_BaseObject Target)
 {
 	local X2AbilityTemplate AbilityTemplate;
+	local vector TileLocation;
+
+	//<workshop> Francois' Smooth Cursor AMS 2016/04/07
+	//INS:
+	local TTile InvalidTile;
+	InvalidTile.X = -1;
+	InvalidTile.Y = -1;
+	InvalidTile.Z = -1;
+	//</workshop>
 
 	if(Target == none)
 	{
@@ -128,14 +150,32 @@ simulated function UpdateMeleeTarget(XComGameState_BaseObject Target)
 	AbilityTemplate = AbilityState.GetMyTemplate();
 
 	PossibleTiles.Length = 0;
+
 	if(class'X2AbilityTarget_MovingMelee'.static.SelectAttackTile(UnitState, Target, AbilityTemplate, PossibleTiles))
 	{
 		// build a path to the default (best) tile
-		RebuildPathingInformation(PossibleTiles[0], TargetVisualizer, AbilityTemplate);
-		
+		//<workshop> Francois' Smooth Cursor AMS 2016/04/07
+		//WAS:
+		//RebuildPathingInformation(PossibleTiles[0], TargetVisualizer, AbilityTemplate);	
+		RebuildPathingInformation(PossibleTiles[0], TargetVisualizer, AbilityTemplate, InvalidTile);
+		//</workshop>
+
 		// and update the tiles to reflect the new target options
 		UpdatePossibleTilesVisuals();
+
+		if(`ISCONTROLLERACTIVE)
+		{
+			// move the 3D cursor to the new target
+			if(`XWORLD.GetFloorPositionForTile(PossibleTiles[0], TileLocation))
+			{
+				`CURSOR.CursorSetLocation(TileLocation, true, true);
+			}
+		}
 	}
+	//<workshop> TACTICAL_CURSOR_PROTOTYPING AMS 2015/12/07
+	//INS:
+	DoUpdatePuckVisuals(PossibleTiles[0], Target.GetVisualizer(), AbilityTemplate);
+	//</workshop>
 }
 
 // override the tick. Rather than do the normal path update stuff, we just want to see if the user has pointed the mouse
@@ -147,7 +187,20 @@ simulated event Tick(float DeltaTime)
 	local vector CursorLocation;
 	local TTile PossibleTile;
 	local TTile CursorTile;
+	local TTile ClosestTile;
 	local X2AbilityTemplate AbilityTemplate;
+	local float ClosestTileDistance;
+	local float TileDistance;
+
+	local TTile InvalidTile;
+	InvalidTile.X = -1;
+	InvalidTile.Y = -1;
+	InvalidTile.Z = -1;
+	
+	if(TargetVisualizer == none) 
+	{
+		return;
+	}
 
 	Cursor = `CURSOR;
 	WorldData = `XWORLD;
@@ -155,14 +208,49 @@ simulated event Tick(float DeltaTime)
 	CursorLocation = Cursor.GetCursorFeetLocation();
 	CursorTile = WorldData.GetTileCoordinatesFromPosition(CursorLocation);
 
-	if(TargetVisualizer != none && CursorTile != LastDestinationTile) 
+	// mouse needs to actually highlight a specific tile, controller tabs through them
+	if(`ISCONTROLLERACTIVE)
 	{
-		foreach PossibleTiles(PossibleTile)
+		ClosestTileDistance = -1;
+
+		if(VSizeSq2D(CursorLocation - TargetVisualizer.Location) > 0.1f)
 		{
-			if(PossibleTile == CursorTile)
+			CursorLocation = TargetVisualizer.Location + (Normal(Cursor.Location - TargetVisualizer.Location) * class'XComWorldData'.const.WORLD_StepSize);
+			foreach PossibleTiles(PossibleTile)
+			{
+				TileDistance = VSizeSq(WorldData.GetPositionFromTileCoordinates(PossibleTile) - CursorLocation);
+				if(ClosestTileDistance < 0 || TileDistance < ClosestTileDistance)
+				{
+					ClosestTile = PossibleTile;
+					ClosestTileDistance = TileDistance;
+				}
+			}
+
+			if(ClosestTile != LastDestinationTile)
 			{
 				AbilityTemplate = AbilityState.GetMyTemplate();
-				RebuildPathingInformation(CursorTile, TargetVisualizer, AbilityTemplate);
+				RebuildPathingInformation(ClosestTile, TargetVisualizer, AbilityTemplate, InvalidTile);
+				DoUpdatePuckVisuals(ClosestTile, TargetVisualizer, AbilityTemplate);
+				LastDestinationTile = ClosestTile;
+			}
+
+			// put the cursor back on the unit
+			Cursor.CursorSetLocation(TargetVisualizer.Location, true);
+		}
+	}
+	else
+	{
+		if(CursorTile != LastDestinationTile)
+		{
+			foreach PossibleTiles(PossibleTile)
+			{
+				if(PossibleTile == CursorTile)
+				{
+					AbilityTemplate = AbilityState.GetMyTemplate();
+					RebuildPathingInformation(CursorTile, TargetVisualizer, AbilityTemplate, InvalidTile);
+					LastDestinationTile = CursorTile;
+					break;
+				}
 			}
 		}
 	}

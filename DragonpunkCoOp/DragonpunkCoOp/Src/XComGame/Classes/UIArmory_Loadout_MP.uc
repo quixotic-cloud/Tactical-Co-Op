@@ -37,6 +37,7 @@ simulated function InitArmory_MP(X2MPShellManager ShellManager, XComGameState St
 			bItemsStripped = Item.ItemRef.ObjectID <= 0;	
 	}
 
+	m_strMakeAvailable = class'UIArmory_LoadoutItem'.default.m_strDropItem; //handled in UIArmory_Loadout
 	UpdateNavHelp();
 }
 
@@ -116,7 +117,11 @@ simulated function UpdateNavHelp()
 	if(bUseNavHelp)
 	{
 		NavHelp.ClearButtonHelp();
+		NavHelp.bIsVerticalHelp = false;
 		NavHelp.AddBackButton(OnCancel);
+		NavHelp.AddSelectNavHelp();
+		NavHelp.AddLeftHelp(class'UIUtilities_Input'.static.InsertGamepadIcons("%RS" @ m_strRotateNavHelp));
+		UpdateNavHelp_LoadoutItem(); //(handled in UIArmory_Loadout) ADDING_NAVHELP_DROPITEM JTA 2016/5/28
 		NavHelp.Show();
 	}
 }
@@ -304,4 +309,5 @@ simulated function Remove()
 defaultproperties
 {
 	bUseNavHelp = true;
+	m_bAllowAbilityToCycle = false;
 }

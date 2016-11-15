@@ -90,7 +90,8 @@ const SIGNAL_REPEAT_FREQUENCY = 0.1f;
 
 // Bounds of the area in the center of the joystick that will be considered neutral
 const RSTICK_THRESHOLD = 0.5; // right stick is now normailzed
-const LSTICK_THRESHOLD = 500;
+
+const LSTICK_THRESHOLD = 0.2f;
 const LSTICK_MAX_THRESHOLD = 3300; 
 const RSTICK_MAX_THRESHOLD = 550; 
 const LTRIGGER_MAX_THRESHOLD = 1.0; 
@@ -105,6 +106,7 @@ var bool m_bConsumedBy3DFlashCached;
 var bool m_bConsumedByFlash;
 
 var config bool bForceEnableController; 
+var bool bAllowAllInput; //Override for range type checking, useful in the options menu.
 var bool m_bInputSinceMouseMovement; 
 var float aMouseXCached;
 var float aMouseYCached; 
@@ -371,8 +373,8 @@ simulated function bool IsControllerActive()
 	if( `XENGINE.m_SteamControllerManager.IsSteamControllerActive() )
 		return true; 
 
-	//TODO: 
-	//if( profileSetting.usingController) return true;
+	if( XComPlayerController(Outer).Pres != none && !Get2DMovie().IsMouseActive()  )
+		return true; 
 
 	return false; 
 }
@@ -434,6 +436,7 @@ final function InputEvent( int cmd , optional int ActionMask = class'UIUtilities
 	local UIRedScreen RedScreen;
 	local int iFilteredUICmd;
 	local bool bConsume;
+	local bool bValidDiagonalInput;
 	bConsume = false;
 
 	if( `ONLINEEVENTMGR.CopyProtection!=none && `ONLINEEVENTMGR.CopyProtection.ProtectionFailed() )
@@ -498,18 +501,27 @@ final function InputEvent( int cmd , optional int ActionMask = class'UIUtilities
 	// CheckMouseSmartToggle(cmd);
 
 	//Sending input to the UI first
-	iFilteredUICmd = FilterCmdForUI(cmd, ActionMask);
-	if( iFilteredUICmd != class'UIUtilities_Input'.const.FXS_INPUT_NONE )
-	{
-		if( !bConsume )
-			bConsume = CheckSteamControllerSmartToggle(cmd, ActionMask);
-		
-		//We want this to happen before the main UI processes it.
-		if( !bConsume && ActionMask == class'UIUtilities_Input'.const.FXS_ACTION_RELEASE )
-			bConsume = AttemptSteamControllerConfirm(cmd);
+	// This makes it so if we meant to send diagonal input, we wont also send a normal direction input in addition.
+	iFilteredUICmd = FilterCmdForUIWithDiag(cmd, ActionMask);
+	bValidDiagonalInput = (iFilteredUICmd >= class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_UP_LEFT && iFilteredUICmd <= class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_DOWN_LEFT);
+	if(bValidDiagonalInput && iFilteredUICmd != class'UIUtilities_Input'.const.FXS_INPUT_NONE)
+		bConsume = GetScreenStack().OnInput( iFilteredUICmd, ActionMask );
 
-		if( !bConsume )
-			bConsume = GetScreenStack().OnInput(iFilteredUICmd, ActionMask);
+	if(!bValidDiagonalInput)
+	{
+		iFilteredUICmd = FilterCmdForUI(cmd, ActionMask);
+		if( iFilteredUICmd != class'UIUtilities_Input'.const.FXS_INPUT_NONE )
+		{
+			if( !bConsume )
+				bConsume = CheckSteamControllerSmartToggle(cmd, ActionMask);
+		
+			//We want this to happen before the main UI processes it.
+			if( !bConsume && ActionMask == class'UIUtilities_Input'.const.FXS_ACTION_RELEASE )
+				bConsume = AttemptSteamControllerConfirm(cmd);
+
+			if( !bConsume )
+				bConsume = GetScreenStack().OnInput(iFilteredUICmd, ActionMask);
+		}
 	}
 
 
@@ -810,8 +822,13 @@ simulated function bool IsKeyboardRangeEvent( int cmd )
 
 simulated function bool IsEventWithinInputTypeRange( int cmd )
 {
+	if( bAllowAllInput ) return true; 
 
-	if( IsControllerRangeEvent(cmd) )
+	if (IsKeyboardRangeEvent(cmd)) // Allowing keyboard all of the time, per PD 9/29/2016 - bsteiner 
+	{
+		return true;
+	}
+	else if( IsControllerRangeEvent(cmd) )
 	{
 		if( bForceEnableController )
 			return true; 
@@ -893,6 +910,84 @@ protected function IMouseInteractionInterface GetMouseInterfaceTarget()
 
 	LastInterface = HUD.CachedMouseInteractionInterface; 
 	return( LastInterface );
+}
+
+// Something to note is that currently this has only been setup for the Left Stick, because so far there's no need for the right stick to work this way.
+simulated function int FilterCmdForUIWithDiag( int cmd, int ActionMask )
+{
+	local int iFilteredCmd;
+	//local bool isPushingLeft;
+	//local bool isPushingRight;
+	//local bool isPushingUp;
+	//local bool isPushingDown;
+	local Vector2D stickDirection;
+	local Vector2D upLeft;
+	local Vector2D upRight;
+	local Vector2D downRight;
+	local Vector2D downLeft;
+	local float stickMagnitude;
+	local float tuningAngle;
+	local float checkAngle;
+
+	//45 degrees
+	tuningAngle = 0.7853981;
+	
+	upLeft.X = -0.707106f;
+	upLeft.Y = 0.707106f;
+
+	upRight.X = 0.707106f;
+	upRight.Y = 0.707106f;
+
+	downLeft.X = -0.707106f;
+	downLeft.Y = -0.707106f;
+
+	downRight.X = 0.707106f;
+	downRight.Y = -0.707106f;
+
+	stickDirection.X = m_fLSXAxis;
+	stickDirection.Y = m_fLSYAxis;
+	stickMagnitude = sqrt((m_fLSXAxis * m_fLSXAxis) + (m_fLSYAxis * m_fLSYAxis));
+	if(stickMagnitude < LSTICK_THRESHOLD)
+		return class'UIUtilities_Input'.const.FXS_BUTTON_LSTICK;
+	stickDirection.X = stickDirection.X / stickMagnitude;
+	stickDirection.Y = stickDirection.Y / stickMagnitude;
+
+	iFilteredCmd = cmd;
+
+	switch( cmd )
+	{
+		//Left stick ----------------------------------------------------------------------------------
+	case class'UIUtilities_Input'.const.FXS_BUTTON_LSTICK:
+
+		checkAngle = (stickDirection.X * upLeft.X) + (stickDirection.Y * upLeft.Y);
+		if(checkAngle > tuningAngle)
+		{
+			iFilteredCmd = class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_UP_LEFT;
+			break;
+		}
+		checkAngle = (stickDirection.X * upRight.X) + (stickDirection.Y * upRight.Y);
+		if(checkAngle > tuningAngle)
+		{
+			iFilteredCmd = class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_UP_RIGHT;
+			break;
+		}
+		checkAngle = (stickDirection.X * downLeft.X) + (stickDirection.Y * downLeft.Y);
+		if(checkAngle > tuningAngle)
+		{
+			iFilteredCmd = class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_DOWN_LEFT;
+			break;
+		}
+		checkAngle = (stickDirection.X * downRight.X) + (stickDirection.Y * downRight.Y);
+		if(checkAngle > tuningAngle)
+		{
+			iFilteredCmd = class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_DOWN_RIGHT;
+			break;
+		}
+		iFilteredCmd = class'UIUtilities_Input'.const.FXS_BUTTON_LSTICK;
+		
+		break;
+	}
+	return iFilteredCmd;
 }
 
 //Translates input into virtual buttons for UI consumption
@@ -1425,4 +1520,5 @@ defaultproperties
 	m_bConsumedBy3DFlashCached=false
 	m_bConsumedByFlash=false
 	m_bInputSinceMouseMovement=false
+	bAllowAllInput=false
 }

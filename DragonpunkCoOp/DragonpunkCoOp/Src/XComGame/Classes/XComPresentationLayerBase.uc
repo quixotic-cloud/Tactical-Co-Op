@@ -566,15 +566,15 @@ simulated function InitUIScreens()
 	if(WorldInfo.NetMode == NM_Standalone && m_kNarrativeUIMgr == none)
 		m_kNarrativeUIMgr = new(self) class'UINarrativeMgr'; 
 	
-	if( !WorldInfo.IsConsoleBuild() )
+	
+	if( m_kTooltipMgr == none )
 	{
-		if( m_kTooltipMgr == none )
-		{
-			m_kTooltipMgr = Spawn(class'UITooltipMgr', self );
-			m_kTooltipMgr.InitScreen(XComPlayerController(Owner), Get2DMovie());
-			Get2DMovie().LoadScreen(m_kTooltipMgr);
-		}
-		
+		m_kTooltipMgr = Spawn(class'UITooltipMgr', self );
+		m_kTooltipMgr.InitScreen(XComPlayerController(Owner), Get2DMovie());
+		Get2DMovie().LoadScreen(m_kTooltipMgr);
+	}
+	if( !WorldInfo.IsConsoleBuild() )
+	{	
 		if( m_kUIMouseCursor == none )
 		{
 			// Mouse Cursor does not need to be on the Stack
@@ -606,6 +606,14 @@ simulated function InitUIScreens()
 		m_kDebugInfo.InitScreen(XComPlayerController(Owner), Get2DMovie());
 		Get2DMovie().LoadScreen(m_kDebugInfo);
 	}
+}
+simulated function UpdateStrategyMapVisuals()
+{
+	//local UIStrategyMap StrategyMap;
+	
+//	StrategyMap = UIStrategyMap(ScreenStack.GetScreen(class'UIStrategyMap'));
+	//TODO: bsteiner StrategyMap.UpdateVisuals();
+	//todo StrategyMap.ClearUIMapRef(StrategyMap2D);
 }
 
 simulated function OnMovieInitialized()
@@ -827,7 +835,7 @@ reliable client function bool UIKeyboard( string sTitle, string sDefaultText, de
 
 	bLaunchSuccess = false;
 	OnlineSub = class'GameEngine'.static.GetOnlineSubsystem();
-	if( OnlineSub != none )
+	if( OnlineSub != none && `ISCONTROLLERACTIVE == false )
 	{
 		PlayerInterface = OnlineSub.PlayerInterface;
 		if( PlayerInterface != none )
@@ -1118,7 +1126,7 @@ simulated function UICloseProgressDialog()
 
 simulated function UIControllerUnplugDialog(int ControllerId, optional bool bInOptionsScreen=false) 
 {
-	local UIMovie_2D InterfaceMgr;
+	local UIMovie_2d InterfaceMgr;
 	local int ControllerNum; // User friendly controller number
 
 	m_kControllerUnplugDialogData.fnCallback = None;
@@ -1142,11 +1150,13 @@ simulated function UIControllerUnplugDialog(int ControllerId, optional bool bInO
 
 		InterfaceMgr = Get2DMovie();
 		InterfaceMgr.PushForceShowUI();
+	
+		m_kControllerUnplugDialog = Spawn( class'UIReconnectController', self );
+		m_kControllerUnplugDialog.m_kData = m_kControllerUnplugDialogData; 	
+		m_kControllerUnplugDialog.m_bOnOptionsScreen = bInOptionsScreen; 	
+		ScreenStack.Push( m_kControllerUnplugDialog, GetModalMovie());
 		
-		TempScreen = Spawn( class'UIReconnectController', self );
-		UIReconnectController(TempScreen).m_kData = m_kControllerUnplugDialogData; 	
-		UIReconnectController(TempScreen).m_bOnOptionsScreen = bInOptionsScreen; 	
-		ScreenStack.Push( TempScreen );
+		PushState('State_ProgressDialog');
 	}
 }
 
@@ -1165,6 +1175,10 @@ simulated function UICloseControllerUnplugDialog()
 		InterfaceMgr.PopForceShowUI();
 		ScreenStack.Pop( m_kControllerUnplugDialog );
 		m_kControllerUnplugDialog = none;
+	}
+	if (ScreenStack.IsInStack(class'UIOptionsPCScreen'))
+	{
+		UIOptionsPCScreen(ScreenStack.GetScreen(class'UIOptionsPCScreen')).RefreshConnectedControllers();
 	}
 }
 
@@ -1345,8 +1359,19 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 //TODO: this needs to work in the shell pres layer also. -bsteiner 
 simulated function UIControllerMap() 
 {
+	local UIStrategyMap StrategyMap;
+	
 	TempScreen = Spawn( class'UIControllerMap', self );
-	UIControllerMap(TempScreen).layout = ( m_eUIMode == eUIMode_Strategy ) ? eLayout_MissionControl : eLayout_Battlescape ; 
+	StrategyMap = UIStrategyMap(ScreenStack.GetScreen(class'UIStrategyMap'));
+	if (StrategyMap != none )
+	{
+		UIControllerMap(TempScreen).layout = eLayout_Geoscape;
+	}
+	else
+	{
+		UIControllerMap(TempScreen).layout = (m_eUIMode == eUIMode_Strategy) ? eLayout_MissionControl : eLayout_Battlescape; 
+	}
+
 	ScreenStack.Push( TempScreen );
 } 
 
@@ -2048,6 +2073,12 @@ simulated function UIPlayMovie( string strMovieName, optional bool wait = true, 
 		`XENGINE.StopCurrentMovie();
 	}
 }
+
+simulated function StartFadeToBlack(float speed, UINarrativeMgr Manager)
+{
+	Manager.DoStartFadeToBlack(speed);
+}
+
 //----------------------------------------------------
 function AudioComponent Speak( string strText, optional ETTSSpeaker eSpeaker = TTSSPEAKER_Betty )
 {

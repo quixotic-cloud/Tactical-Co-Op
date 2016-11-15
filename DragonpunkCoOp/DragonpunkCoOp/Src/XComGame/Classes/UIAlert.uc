@@ -532,6 +532,7 @@ var StateObjectReference TechRef;
 var StateObjectReference DarkEventRef;
 var StateObjectReference POIRef;
 var StateObjectReference UFORef;
+var StateObjectReference ActionRef;
 var X2SpecialRoomFeatureTemplate SpecialRoomFeatureTemplate;
 var X2FacilityTemplate FacilityTemplate;
 var X2FacilityUpgradeTemplate UpgradeTemplate;
@@ -832,7 +833,6 @@ simulated function BuildAlert()
 		break;
 	case eAlert_LaunchMissionWarning:
 		BuildLaunchMissionWarningAlert();
-		break;
 
 	default:
 		AddBG(MakeRect(0, 0, 1000, 500), eUIState_Normal).SetAlpha(0.75f);
@@ -841,6 +841,10 @@ simulated function BuildAlert()
 
 	// Set  up the navigation *after* the alert is built, so that the button visibility can be used. 
 	RefreshNavigation();
+	if (!Movie.IsMouseActive())
+	{
+		Navigator.Clear();
+	}
 }
 
 simulated function BindLibraryItem()
@@ -853,27 +857,50 @@ simulated function BindLibraryItem()
 		LibraryPanel = Spawn(class'UIPanel', self);
 		LibraryPanel.bAnimateOnInit = false; 
 		LibraryPanel.InitPanel('AlertLibraryPanel', AlertLibID);
-		LibraryPanel.SetSelectedNavigation();
+		//LibraryPanel.SetSelectedNavigation();
+		LibraryPanel.DisableNavigation();
 
 		ButtonGroup = Spawn(class'UIPanel', LibraryPanel);
 		ButtonGroup.bAnimateOnInit = false;
 		ButtonGroup.bCascadeFocus = false;
 		ButtonGroup.InitPanel('ButtonGroup', '');
-		ButtonGroup.SetSelectedNavigation();
+		//ButtonGroup.SetSelectedNavigation();
+		ButtonGroup.DisableNavigation();
 
 		Button1 = Spawn(class'UIButton', ButtonGroup);
+		if (`ISCONTROLLERACTIVE) 
+			Button1.InitButton('Button0', "", OnConfirmClicked, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+		else
+			Button1.InitButton('Button0', "", OnConfirmClicked);
+	
 		Button1.bAnimateOnInit = false;
-		Button1.SetResizeToText(false);
-		Button1.InitButton('Button0', "", OnConfirmClicked);
+		Button1.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+		Button1.OnSizeRealized = OnButtonSizeRealized;
+		Button1.SetX(-150.0 / 2.0);
+		Button1.SetY(-Button1.Height / 2.0);
+		//Button1.DisableNavigation();
 
 		Button2 = Spawn(class'UIButton', ButtonGroup);
-		Button2.bAnimateOnInit = false; 
-		Button2.SetResizeToText(false);
-		Button2.InitButton('Button1', "", OnCancelClicked);
+		if (`ISCONTROLLERACTIVE) 
+			Button2.InitButton('Button1', "", OnCancelClicked, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+		else
+			Button2.InitButton('Button1', "", OnCancelClicked, );
+
+		Button2.bAnimateOnInit = false; 	
+		Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetBackButtonIcon());
+		Button2.OnSizeRealized = OnButtonSizeRealized;
+		Button2.SetX(-150.0 / 2.0);
+		Button2.SetY(Button2.Height / 2.0);
+		//Button2.DisableNavigation();
 		
 		//TODO: bsteiner: remove this when the strategy map handles it's own visibility
 		`HQPRES.StrategyMap2D.Hide();
 	}
+}
+simulated function OnButtonSizeRealized()
+{
+	Button1.SetX(-Button1.Width / 2.0);
+	Button2.SetX(-Button2.Width / 2.0);
 }
 
 simulated function Name GetLibraryID()
@@ -985,12 +1012,12 @@ simulated function RefreshNavigation()
 {
 	if( Button1.IsVisible() )
 	{
-		ButtonGroup.Navigator.SetSelected(Button1);
+		//ButtonGroup.Navigator.SetSelected(Button1);
 	}
 	else
 	{
 		Button1.DisableNavigation();
-		ButtonGroup.Navigator.SetSelected(Button2);
+		//ButtonGroup.Navigator.SetSelected(Button2);
 	}
 
 	if( !Button2.IsVisible() )
@@ -1354,6 +1381,7 @@ simulated function BuildObjectiveAlert()
 	LibraryPanel.MC.EndOp();
 	
 	Button2.OnClickedDelegate = TellMeMore;
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
 
 	// Don't show the Tell Me More button if tutorial is active
 	if (class'UIUtilities_Strategy'.static.GetXComHQ().AnyTutorialObjectivesInProgress())
@@ -1496,6 +1524,7 @@ simulated function BuildContactAlert()
 	bRestoreCameraPosition = true;	
 	XComHQPresentationLayer(Movie.Pres).CAMSaveCurrentLocation();
 
+	`HQPRES.StrategyMap2D.HideCursor();
 	if(bInstantInterp)
 	{
 		XComHQPresentationLayer(Movie.Pres).CAMLookAtEarth(GetRegion().Get2DLocation(), 0.5f, 0);
@@ -1526,7 +1555,12 @@ simulated function BuildContactAlert()
 	LibraryPanel.MC.QueueString(m_strCancel);
 	LibraryPanel.MC.EndOp();
 	
-	Button1.SetDisabled(!bCanAfford || !CanMakeContact());
+	if (!bCanAfford || !CanMakeContact())
+	{
+		Button1.SetDisabled(true);
+		if (`ISCONTROLLERACTIVE)
+			Button1.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+	}
 }
 
 simulated function String GetContactCostHelp()
@@ -1631,6 +1665,10 @@ simulated function BuildOutpostAlert()
 	//LibraryPanel.MC.EndOp();
 }
 
+simulated function bool CanAffordOutpost()
+{
+	return XCOMHQ().CanAffordAllStrategyCosts(GetRegion().CalcOutpostCost(), GetRegion().OutpostCostScalars);
+}
 simulated function String GetOutpostTimeString()
 {
 	local int iMinDays, iMaxDays;
@@ -2054,8 +2092,8 @@ simulated function BuildPointOfInterestCompleteAlert()
 	LibraryPanel.MC.QueueString(POIState.GetRewardValuesString());
 	LibraryPanel.MC.QueueString(class'UIUtilities_Image'.const.MissionIcon_POI);
 	LibraryPanel.MC.QueueString(POIState.GetImage());
-	LibraryPanel.MC.QueueString(m_strPOIReturnToHQ);
 	LibraryPanel.MC.QueueString(m_strOk);
+	LibraryPanel.MC.QueueString(m_strPOIReturnToHQ);
 	LibraryPanel.MC.EndOp();
 
 	if (class'XComGameState_HeadquartersXCom'.static.GetObjectiveStatus('T2_M0_CompleteGuerillaOps') == eObjectiveState_InProgress)
@@ -2081,8 +2119,9 @@ simulated function BuildResourceCacheCompleteAlert()
 	kInfo.strReport = CacheState.GetDisplayName();
 	kInfo.strReward = "";
 	kInfo.strRewardIcon = "";
-	kInfo.strInvestigate = m_strPOIReturnToHQ;
-	kInfo.strIgnore = m_strIgnore;
+
+	kInfo.strInvestigate = m_strIgnore;
+	kInfo.strIgnore = m_strPOIReturnToHQ;
 	kInfo.strFlare = m_strResourceCacheCompleteFlare;
 	kInfo.strUIIcon = CacheState.GetUIButtonIcon();
 	
@@ -2443,8 +2482,12 @@ simulated function BuildTrainingCompleteAlert(string TitleLabel)
 	LibraryPanel.MC.QueueString(m_strCarryOn);
 	LibraryPanel.MC.EndOp();
 
+	//Set icons before hiding the button.
+	Button1.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+
 	// Hide "View Soldier" button if player is on top of avenger, prevents ui state stack issues
-	if(Movie.Pres.ScreenStack.IsInStack(class'UIArmory_Promotion'))
+	if (Movie.Pres.ScreenStack.IsInStack(class'UIArmory_Promotion'))
 		Button1.Hide();
 }
 
@@ -2541,6 +2584,9 @@ simulated function BuildPsiOperativeIntroAlert()
 
 	//This panel has only one button, for confirm.
 	Button2.Hide();
+
+	if (`ISCONTROLLERACTIVE)
+		Button1.SetPosition(Button1.X, Button1.Y + 25);
 }
 
 simulated function BuildConstructionSlotOpenAlert()
@@ -2935,7 +2981,7 @@ simulated function BuildNewStaffAvailableAlert()
 
 		UnitTypeIcon = class'UIUtilities_Image'.const.EventQueue_Engineer;
 	}
-	else if (UnitState.IsASoldier())
+	else if (UnitState.IsSoldier())
 	{
 		if (arrStaffSlots.Length > 0)
 			StaffBonusStr = m_strNewEngAvailable; // "New staffing opportunities available!"
@@ -3027,7 +3073,7 @@ simulated function BuildStaffInfoAlert()
 		StaffAvailableStr = UnitState.GetFullName();
 		UnitTypeIcon = class'UIUtilities_Image'.const.EventQueue_Engineer;
 	}
-	else if (UnitState.IsASoldier())
+	else if (UnitState.IsSoldier())
 	{
 		StaffAvailableStr = UnitState.GetName(eNameType_RankFull);
 
@@ -3375,6 +3421,7 @@ simulated function BuildSoldierCustomizationsAvailableAlert()
 	LibraryPanel.MC.QueueString(m_strOK); // Button 1
 	LibraryPanel.MC.EndOp();
 
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 	Button1.Hide();
 }
 
@@ -3389,6 +3436,7 @@ simulated function BuildForceUnderstrengthAlert()
 	LibraryPanel.MC.QueueString(m_strOK); // Button 1
 	LibraryPanel.MC.EndOp();
 
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 	Button1.Hide();
 }
 
@@ -3402,6 +3450,7 @@ simulated function BuildWoundedSoldiersAllowedAlert()
 	LibraryPanel.MC.QueueString(""); // Button 0
 	LibraryPanel.MC.QueueString(m_strOK); // Button 1
 	LibraryPanel.MC.EndOp();
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 
 	Button1.Hide();
 }
@@ -3439,7 +3488,7 @@ simulated function BuildAvailableAlert(TAlertAvailableInfo kInfo)
 		return;
 	}
 
-	if(Staff.IsASoldier())
+	if(Staff.IsSoldier())
 		UnitName = Staff.GetName(eNameType_RankFull);
 	else
 		UnitName = Staff.GetName(eNameType_Full);
@@ -3551,6 +3600,7 @@ simulated function BuildLowIntelAlert()
 	Info.strCarryOn = m_strOK;
 
 	BuildHelpAlert(Info);
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 }
 
 simulated function BuildLowSuppliesAlert()
@@ -3569,7 +3619,8 @@ simulated function BuildLowSuppliesAlert()
 	Info.strHeader = m_strLowSuppliesHeader;
 	Info.strDescription = LowSuppliesBody;
 	Info.strImage = m_strLowSuppliesImage;
-	Info.strCarryOn = m_strOK;
+	//Info.strCarryOn = m_strOK;
+	Info.strConfirm = m_strOK;
 
 	BuildHelpAlert(Info);
 }
@@ -3590,7 +3641,7 @@ simulated function BuildLowScientistsAlert()
 	Info.strHeader = m_strLowScientistsHeader;
 	Info.strDescription = LowScientistsBody;
 	Info.strImage = m_strLowScientistsImage;
-	Info.strCarryOn = m_strOK;
+	Info.strConfirm = m_strOK; //bsg-jneal (7.14.16): alert prompt uses A/X to close
 
 	BuildHelpAlert(Info);
 }
@@ -3611,7 +3662,8 @@ simulated function BuildLowEngineersAlert()
 	Info.strHeader = m_strLowEngineersHeader;
 	Info.strDescription = LowEngineersBody;
 	Info.strImage = m_strLowEngineersImage;
-	Info.strCarryOn = m_strOK;
+
+	Info.strConfirm = m_strOK;
 
 	BuildHelpAlert(Info);
 }
@@ -3652,6 +3704,7 @@ simulated function BuildSupplyDropReminderAlert()
 	LibraryPanel.MC.EndOp();
 
 	Button1.Hide();
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 }
 
 simulated function BuildPowerCoilShieldedAlert()
@@ -3675,6 +3728,7 @@ simulated function BuildPowerCoilShieldedAlert()
 	LibraryPanel.MC.EndOp();
 
 	Button1.Hide();
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
 }
 
 simulated function BuildLaunchMissionWarningAlert()
@@ -3715,6 +3769,7 @@ simulated function OnReceiveFocus()
 		`XEVENTMGR.TriggerEvent(EventToTrigger, EventData, EventData, NewGameState);
 		`XCOMGAME.GameRuleset.SubmitGameState(NewGameState);
 	}
+	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
 }
 
 simulated function OnConfirmClicked(UIButton button)
@@ -3757,6 +3812,7 @@ simulated function OnRemoved()
 	if (bRestoreCameraPosition && !bAlertTransitionsToMission)
 	{
 		XComHQPresentationLayer(Movie.Pres).CAMRestoreSavedLocation();
+		`HQPRES.StrategyMap2D.ShowCursor();
 	}
 
 	super.OnRemoved();
@@ -3789,7 +3845,7 @@ simulated function bool CanBackOut()
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local bool bHandled;
-	local UIButton CurrentButton; 
+	//local UIButton CurrentButton; 
 
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
@@ -3804,15 +3860,67 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
 		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
-			OnCancelClicked(none);
+			if (eAlert == eAlert_ScanComplete || eAlert == eAlert_ResourceCacheComplete)
+			{
+				OnConfirmClicked(none);
+			}
+			else if(!Button2.bIsVisible || !Button1.bIsVisible) //Button1+2 both can be "cancel"
+			{
+				//if we don't tell the user they can exit using the back button, we can't allow it
+				return true;
+			}
+			else
+			{
+				if (!(eAlert == eAlert_TrainingComplete || eAlert == eAlert_SoldierPromoted))
+				{
+					OnCancelClicked(none);
+				}
+			}
 			break;
 		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
 		case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 		case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-			CurrentButton = UIButton(ButtonGroup.Navigator.GetSelected());
-
-			if( CurrentButton != none )
-				CurrentButton.Click();
+			if (eAlert == eAlert_Contact && (!CanAffordContact() || !CanMakeContact()))
+			{
+				break;
+			}
+			if (eAlert == eAlert_Outpost && !CanAffordOutpost())
+			{
+				break;
+			}
+			if (eAlert == eAlert_ScanComplete || eAlert == eAlert_ResourceCacheComplete)
+			{
+				if (class'XComGameState_HeadquartersXCom'.static.GetObjectiveStatus('T2_M0_CompleteGuerillaOps') != 
+					eObjectiveState_InProgress)
+				{
+					OnConfirmClicked(none);
+				}
+			}
+			else if (eAlert == eAlert_TrainingComplete || eAlert == eAlert_SoldierPromoted)
+			{
+				OnCancelClicked(none);
+			}
+			else
+			{
+				OnConfirmClicked(none);
+			}
+			
+			break;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			if (eAlert == eAlert_Objective)
+			{
+				if (!(class'UIUtilities_Strategy'.static.GetXComHQ().AnyTutorialObjectivesInProgress())) //Button prompt hidden; disallow input too - BET 2016-06-08
+				{
+					TellMeMore(none);
+				}
+			}
+			else if (eAlert == eAlert_TrainingComplete || eAlert == eAlert_SoldierPromoted)
+			{
+				if (!Movie.Pres.ScreenStack.IsInStack(class'UIArmory_Promotion'))
+				{
+					OnConfirmClicked(none);
+				}
+			}
 
 			break;
 		default:

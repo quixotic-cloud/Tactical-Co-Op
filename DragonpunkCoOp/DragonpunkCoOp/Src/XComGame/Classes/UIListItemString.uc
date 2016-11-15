@@ -95,6 +95,7 @@ simulated function NeedsAttention( bool bNeedsAttention, optional bool bIsObject
 		AttentionIcon = Spawn(class'UIPanel', self).InitPanel('attentionIconMC', class'UIUtilities_Controls'.const.MC_AttentionIcon);
 		AttentionIcon.SetSize(70, 70); //the animated rings count as part of the size. 
 		AttentionIcon.SetPosition(2, 4);
+		AttentionIcon.DisableNavigation();
 	}
 
 	//We only need to call across if the icon has been created, to update the icon and textfield placement. 
@@ -230,12 +231,16 @@ simulated function UIListItemString SetConfirmButtonStyle( EUIConfirmButtonStyle
 		}
 
 		if( ConfirmButtonStyle == eUIConfirmButtonStyle_Default )
+		{
 			ConfirmButton.SetText(ConfirmText);
+			//ConfirmButton.SetHeight(48);
+		}
 
 		ConfirmButton.SetX(Width - ConfirmButton.Width - ConfirmButtonStoredRightCol);
 		ConfirmButton.SetDisabled(bDisabled);
 		ConfirmButton.SetBad(bIsBad);
 		RefreshConfirmButtonVisibility();
+		Navigator.SetSelected(ConfirmButton);
 	}
 
 	return self;
@@ -261,13 +266,17 @@ simulated function RefreshConfirmButtonVisibility()
 	{
 		if( bIsFocused )
 		{
+			// initially it seems as though the visible flag gets stuck to true when it hasn't displayed yet. Turn off and on again.
+			ConfirmButton.SetVisible(false);
 			ConfirmButton.SetVisible(!bIsBad && !bDisabled);
 			MC.FunctionNum("setRightColPadding", ConfirmButton.Width + ConfirmButtonArrowWidth + AttentionIconPadding + ConfirmButtonStoredRightCol);
+			if( `ISCONTROLLERACTIVE )ConfirmButton.OnReceiveFocus();
 		}
 		else
 		{
 			ConfirmButton.SetVisible(false);
 			MC.FunctionNum("setRightColPadding", ConfirmButtonStoredRightCol + AttentionIconPadding);
+			if( `ISCONTROLLERACTIVE )ConfirmButton.OnLoseFocus();
 		}
 	}
 	else

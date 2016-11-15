@@ -699,21 +699,21 @@ simulated static function string GetButtonName( int iGameCoreButtonEnum )
 	{
 		case eButton_None:      return "";
 		case eButton_A:         return class'UIUtilities_Input'.static.GetAdvanceButtonIcon();
-		case eButton_X:         return class'UIUtilities_Input'.const.ICON_X_SQUARE;
-		case eButton_Y:         return class'UIUtilities_Input'.const.ICON_Y_TRIANGLE;
+		case eButton_X:         return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE;
+		case eButton_Y:         return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE;
 		case eButton_B:         return class'UIUtilities_Input'.static.GetBackButtonIcon();
-		case eButton_Start:     return class'UIUtilities_Input'.const.ICON_START;
-		case eButton_Back:      return class'UIUtilities_Input'.const.ICON_BACK_SELECT;
-		case eButton_Up:        return class'UIUtilities_Input'.const.ICON_DPAD_UP;
-		case eButton_Down:      return class'UIUtilities_Input'.const.ICON_DPAD_DOWN;
-		case eButton_Left:      return class'UIUtilities_Input'.const.ICON_DPAD_LEFT;
-		case eButton_Right:     return class'UIUtilities_Input'.const.ICON_DPAD_RIGHT;
-		case eButton_LBumper:   return class'UIUtilities_Input'.const.ICON_LB_L1;
-		case eButton_RBumper:   return class'UIUtilities_Input'.const.ICON_RB_R1;
-		case eButton_LTrigger:  return class'UIUtilities_Input'.const.ICON_LT_L2;
-		case eButton_RTrigger:  return class'UIUtilities_Input'.const.ICON_RT_R2;
-		case eButton_LStick:    return class'UIUtilities_Input'.const.ICON_RSTICK;
-		case eButton_RStick:    return class'UIUtilities_Input'.const.ICON_LSTICK;
+		case eButton_Start:     return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_START;
+		case eButton_Back:      return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_BACK_SELECT;
+		case eButton_Up:        return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_DPAD_UP;
+		case eButton_Down:      return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_DPAD_DOWN;
+		case eButton_Left:      return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_DPAD_LEFT;
+		case eButton_Right:     return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_DPAD_RIGHT;
+		case eButton_LBumper:   return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LB_L1;
+		case eButton_RBumper:   return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RB_R1;
+		case eButton_LTrigger:  return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LT_L2;
+		case eButton_RTrigger:  return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RT_R2;
+		case eButton_LStick:    return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RSTICK;
+		case eButton_RStick:    return class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LSTICK;
 	}
 	`warn("Unknown button enum " $ String(iGameCoreButtonEnum) $ ")" );
 	return "_unknown";

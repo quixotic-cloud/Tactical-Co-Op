@@ -183,6 +183,8 @@ simulated function UpdateData()
 		}
 	}
 
+	Navigator.SetSelected(List);
+	
 	if (currentSel > -1 && currentSel < List.ItemCount)
 	{
 		//Don't use GetItem(..), because it overwrites enable.disable option indiscriminately. 
@@ -405,8 +407,18 @@ reliable client function ChangeClass(UIList _list, int itemIndex)
 simulated function CustomizeVoice()
 {
 	CustomizeManager.UpdateCamera();
-	Movie.Pres.UICustomize_Trait(m_strVoice, "", CustomizeManager.GetCategoryList(eUICustomizeCat_Voice),
-		none, ChangeVoice, CanCycleTo, CustomizeManager.GetCategoryIndex(eUICustomizeCat_Voice), m_strPreviewVoice, ChangeVoice);
+	if(Movie.IsMouseActive())
+	{
+		Movie.Pres.UICustomize_Trait(m_strVoice, "", CustomizeManager.GetCategoryList(eUICustomizeCat_Voice),
+			none, ChangeVoice, CanCycleTo, CustomizeManager.GetCategoryIndex(eUICustomizeCat_Voice), m_strPreviewVoice, ChangeVoice);
+	}
+	else //IF MOUSELESS, calls custom class with voice-specific controls
+	{
+		//Below: copied/modified code from Movie.Pres.UICustomize_Trait() - wanted to keep Mouseless changes as minimal as possible, rather than create a new function in a different class - JTA
+		Movie.Pres.ScreenStack.Push(Spawn(class'UICustomize_Voice', Movie.Pres), Movie.Pres.Get3DMovie());
+		UICustomize_Trait(Movie.Pres.ScreenStack.GetCurrentScreen()).UpdateTrait( m_strVoice, "", CustomizeManager.GetCategoryList(eUICustomizeCat_Voice),
+			none, ChangeVoice, CanCycleTo, CustomizeManager.GetCategoryIndex(eUICustomizeCat_Voice), m_strPreviewVoice, ChangeVoice);
+	}
 }
 reliable client function ChangeVoice(UIList _list, int itemIndex)
 {

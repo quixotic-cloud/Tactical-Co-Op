@@ -1722,6 +1722,10 @@ event OnMeleeStrike()
 	}
 }
 
+
+native function GeoscapePauseInterpActions();
+native function GeoscapeUnpauseInterpActions();
+
 DefaultProperties
 {
 	Begin Object Class=SkeletalMeshComponent Name=SkeletalMeshComponent		

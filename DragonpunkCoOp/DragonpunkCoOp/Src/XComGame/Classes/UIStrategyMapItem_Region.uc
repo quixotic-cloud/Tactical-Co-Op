@@ -28,8 +28,10 @@ var UIButton OutpostButton;
 var UIPanel BGPanel;
 var UIScanButton ScanButton;
 
+//var UIPanel ButtonHint; //bsg-jneal (9.14.16): adding button hint for when the region is available to build an outpost
 var array<float> CumulativeTriangleArea;
 
+var string PreviousTooltipString;
 simulated function UIStrategyMapItem InitMapItem(out XComGameState_GeoscapeEntity Entity)
 {
 	local XComGameState NewGameState;
@@ -48,13 +50,24 @@ simulated function UIStrategyMapItem InitMapItem(out XComGameState_GeoscapeEntit
 	ContactButton = Spawn(class'UILargeButton', self);
 	OutpostButton = Spawn(class'UIButton', self);
 
+	//ButtonHint = Spawn(class'UIPanel', self); //bsg-jneal (9.14.16): adding button hint for when the region is available to build an outpost
+
 	super.InitMapItem(Entity);
 
 	BGPanel.InitPanel('regionLabelBG'); // on stage
 	BGPanel.ProcessMouseEvents(OnBGMouseEvent);
 
+	//bsg-jneal (9.14.16): adding button hint for when the region is available to build an outpost
+	//ButtonHint.InitPanel('consoleHint'); // on stage
+	//MC.FunctionBool("SetHintIcon", class'UIUtilities_Input'.static.IsAdvanceButtonSwapActive()); //bsg-jneal (8.30.16): no longer using the contact button for button image, call it on the main clip now
+	//bsg-jneal (9.14.16): end
+
 	ContactButton.InitButton('contactButtonMC', m_strButtonMakeContact, OnContactClicked); // on stage
 	ContactButton.OnMouseEventDelegate = ContactButtonOnMouseEvent; 
+	// nlong (8.9.16) TTP - 6830: This flash function displays the appropriate "accept" button according to the system
+	// This is for region buttons, like establishing a resistance contact
+//	ContactButton.MC.FunctionBool("SetHintIcon", class'UIUtilities_Input'.static.IsAdvanceButtonSwapActive());
+	// nlong (8.9.16) TTP - 6830: end
 
 	OutpostButton.InitButton('towerButtonMC', , OnOutpostClicked); // on stage
 
@@ -62,6 +75,7 @@ simulated function UIStrategyMapItem InitMapItem(out XComGameState_GeoscapeEntit
 	ScanButton.SetY(118); //This location is to stop overlapping the pin art.
 	ScanButton.SetButtonIcon("");
 	ScanButton.SetDefaultDelegate(OnDefaultClicked);
+//	ScanButton.OnSizeRealized = OnButtonSizeRealized;
 
 	History = `XCOMHISTORY;
 
@@ -101,6 +115,19 @@ simulated function UIStrategyMapItem InitMapItem(out XComGameState_GeoscapeEntit
 	}
 	
 	return self;
+}
+simulated function OnButtonSizeRealized()
+{
+	return; //bsteiner do we need all of this? 
+	ScanButton.SetX(-ScanButton.Width / 2.0);
+	
+	ContactButton.SetX(-ContactButton.Width / 2.0);
+	OutpostButton.SetX(-OutpostButton.Width / 2.0 - 5.0);
+
+	//bsg-jneal (9.14.16): adding button hint for when the region is available to build an outpost
+	//ButtonHint.SetX((-ContactButton.Width / 2.0) - 34); //bsg-jneal (8.31.16): set correct position and visibility after flyover text is set as they were not properly being set before, appears to be a timing issue
+	//ButtonHint.Hide();
+	//bsg-jneal (9.14.16): end
 }
 
 simulated function InitRegionComponent(int idx, X2WorldRegionTemplate tmpl)
@@ -232,6 +259,7 @@ function UpdateFlyoverText()
 	if( ShowOutpostButton() )
 	{
 		HoverInfo = PotentialSuppliesWithOutpost();
+		
 		OutpostButton.Show();
 	}
 	else
@@ -251,8 +279,6 @@ function UpdateFlyoverText()
 	}
 
 	SetRegionInfo(RegionLabel, HavenLabel, StateLabel, iResLevel, HoverInfo);
-
-	//SetLevel(RegionState.AlienProgress);
 }
 
 function UpdateFromGeoscapeEntity(const out XComGameState_GeoscapeEntity GeoscapeEntity)
@@ -316,6 +342,10 @@ function UpdateFromGeoscapeEntity(const out XComGameState_GeoscapeEntity Geoscap
 	ScanButton.Realize();
 }
 
+function OnGeoscapeEntityUpdated()
+{
+	GenerateTooltip(MapPin_Tooltip);
+}
 function EUIState GetIncomeColor(EResistanceLevelType eResLevel)
 {
 	switch( eResLevel )
@@ -354,22 +384,34 @@ function UpdateVisuals()
 function UpdateMaterials()
 {
 	local int i;
+	local XComGameState_WorldRegion RegionState;
+	local EResistanceLevelType eResistance;
+	local bool HasAlienFacilityOrGoldenPathMission;
+	local UIStrategyMap kMap;
+
+	// These variables are being calculated outside so it doesn't have to calculate everytime that we loop.
+	kMap = UIStrategyMap(`SCREENSTACK.GetScreen(class'UIStrategyMap'));
+	RegionState = GetRegion();
+	eResistance = RegionState.ResistanceLevel;
+	HasAlienFacilityOrGoldenPathMission = RegionState.HasAlienFacilityOrGoldenPathMission();
 	for( i = 0; i < NUM_TILES; ++i)
 	{
-		UpdateRegionMaterial(i);
+		//UpdateRegionMaterial(i);
+		UpdateRegionMaterial(i, kMap, RegionState, eResistance, HasAlienFacilityOrGoldenPathMission);
 	}
 }
-function UpdateRegionMaterial(int idx)
+//function UpdateRegionMaterial(int idx)
+function UpdateRegionMaterial(int idx, UIStrategyMap kMap, XComGameState_WorldRegion RegionState, EResistanceLevelType eResistance, bool HasAlienFacilityOrGoldenPathMission)
 {
 	local XComGameStateHistory History;
-	local XComGameState_WorldRegion RegionState;
+	//local XComGameState_WorldRegion RegionState;
 	local string CurrentBorderPath, CurrentInteriorPath, DesiredBorderPath, DesiredInteriorPath;
 	local MaterialInstanceConstant NewMaterial;
 	local Object MaterialObject;
-	local EResistanceLevelType eResistance;
+	//local EResistanceLevelType eResistance;
 	local XComGameState_HeadquartersXCom XComHQ;
 	local StaticMeshComponent curRegion;
-	local UIStrategyMap kMap;
+	//local UIStrategyMap kMap;
 	
 	curRegion = RegionComponents[idx];
 
@@ -377,9 +419,9 @@ function UpdateRegionMaterial(int idx)
 	CurrentInteriorPath = PathName(curRegion.GetMaterial(1));
 
 	History = `XCOMHISTORY;
-	RegionState = GetRegion();
-
-	eResistance = RegionState.ResistanceLevel;
+	//RegionState = GetRegion();
+	//
+	//eResistance = RegionState.ResistanceLevel;
 
 	XComHQ = XComGameState_HeadquartersXCom(History.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
 
@@ -388,7 +430,7 @@ function UpdateRegionMaterial(int idx)
 		eResistance = eResLevel_Unlocked;
 	}
 
-	kMap = UIStrategyMap(`SCREENSTACK.GetScreen(class'UIStrategyMap'));
+	//kMap = UIStrategyMap(`SCREENSTACK.GetScreen(class'UIStrategyMap'));
 
 	if(eResistance == eResLevel_Unlocked && kMap != none && kMap.m_eUIState != eSMS_Resistance)
 	{
@@ -398,7 +440,8 @@ function UpdateRegionMaterial(int idx)
 	DesiredBorderPath = class'X2StrategyGameRulesetDataStructures'.default.ResistanceLevelBorderPaths[eResistance];
 	DesiredInteriorPath = class'X2StrategyGameRulesetDataStructures'.default.ResistanceLevelInteriorPaths[eResistance];
 
-	if(RegionState.HasAlienFacilityOrGoldenPathMission() && !RegionState.HaveMadeContact())
+	//if(RegionState.HasAlienFacilityOrGoldenPathMission() && !RegionState.HaveMadeContact())
+	if(HasAlienFacilityOrGoldenPathMission && !RegionState.HaveMadeContact())
 	{
 		DesiredBorderPath = class'X2StrategyGameRulesetDataStructures'.default.FullControlBorderPath;
 		DesiredInteriorPath = class'X2StrategyGameRulesetDataStructures'.default.FullControlInteriorPath;
@@ -428,6 +471,7 @@ function UpdateRegionMaterial(int idx)
 
 function GenerateTooltip(string tooltipHTML)
 {
+	local UITextTooltip ActiveTooltip;
 	local XComGameState_WorldRegion RegionState;
 	local String strIncome, strTooltip;
 	local XGParamTag ParamTag;
@@ -468,21 +512,56 @@ function GenerateTooltip(string tooltipHTML)
 			break;
 		}
 
-		Movie.Pres.m_kTooltipMgr.AddNewTooltipTextBox(strTooltip, 15, 0, string(MCPath), , false, , true);
+
+		if (strTooltip != PreviousTooltipString)
+		{
+			if (CachedTooltipID >= 0)
+			{
+				ActiveTooltip = UITextTooltip(Movie.Pres.m_kTooltipMgr.GetTooltipByID(CachedTooltipID));
+			}
+
+			if (ActiveTooltip == none)
+			{
+				CachedTooltipID = Movie.Pres.m_kTooltipMgr.AddNewTooltipTextBox(strTooltip, 15, 0, string(MCPath),, false,, true);
+			}
+			else
+			{
+				ActiveTooltip.SetText(strTooltip);
+				ActiveTooltip.UpdateData();
+			}
+			
+			PreviousTooltipString = strTooltip;
+		}
+		
 		bHasTooltip = true;
 	}
 }
 
 simulated function OnReceiveFocus()
 {
-	if( !bIsFocused )
-	{
-		bIsFocused = true;
-		MC.FunctionVoid("onReceiveFocus");
-	}
+	super.OnReceiveFocus(); //bsg-jneal (9.14.16): receive focus on the super to help set proper ui states
 
 	//ContactButton.OnLoseFocus();
 	//OutpostButton.OnLoseFocus();
+	ScanButton.OnReceiveFocus();
+	ContactButton.OnReceiveFocus();
+	OutpostButton.OnReceiveFocus();
+
+	/*if(`ISCONTROLLERACTIVE && ShowOutpostButton()) 
+	{
+		ButtonHint.Show();
+	}*/
+}
+simulated function OnLoseFocus()
+{
+	//bsg-jneal (9.14.16): call lose focus on the super to help set correct animation states
+	super.OnLoseFocus();
+
+	//bsg-jneal (9.14.16): end
+	ScanButton.OnLoseFocus();
+	ContactButton.OnLoseFocus();
+	OutpostButton.OnLoseFocus();
+	//ButtonHint.Hide();
 }
 
 // Handle mouse hover special behavior
@@ -539,7 +618,7 @@ simulated function OnBGMouseEvent(UIPanel control, int cmd)
 	//Connect this to the base map item mouse behavior. 
 	EmptyArgs.length = 0;
 	super.OnMouseEvent(cmd, EmptyArgs);
-	//Do nothing, per Jake. Bu7t, maybe this will come back. -bsteiner 6/2/2015 
+	//Do nothing, per Jake. But, maybe this will come back. -bsteiner 6/2/2015 
 }
 
 function OnContactClicked(UIButton Button)
@@ -571,6 +650,48 @@ function OnDefaultClicked()
 	GetRegion().AttemptSelectionCheckInterruption();
 }
 
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return true;
+	}
+
+	switch(cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		if (ShowContactButton())
+		{
+			OnContactClicked(ContactButton);
+		}
+		else if (ShowOutpostButton())
+		{
+			OnOutpostClicked(OutpostButton);
+		}
+		else if (IsAvengerLandedHere())
+		{
+			ScanButton.ClickButtonScan();
+		}
+		else
+		{
+			OnDefaultClicked();
+		}
+
+		return true;		
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function bool IsSelectable()
+{
+	return !IsResHQRegion() && 
+		(ScanButton.GetButtonType() == eUIScanButtonType_Default || 
+		ScanButton.GetButtonType() == eUIScanButtonType_Contact ||
+		ScanButton.GetButtonType() == eUIScanButtonType_Tower) &&
+		((ShowOutpostButton() || ShowContactButton()) ||
+		(GetRegion().bCanScanForOutpost || GetRegion().bCanScanForContact));
+}
 simulated function bool ShowOutpostButton()
 {
 	return class'UIUtilities_Strategy'.static.GetXComHQ().IsOutpostResearched() && GetRegion().ResistanceLevel == eResLevel_Contact && !GetRegion().bCanScanForOutpost;

@@ -22,12 +22,14 @@ simulated function UIRoomContainer InitRoomContainer(optional name InitName, opt
 {
 	if (Title != "")
 	{
-		RoomTitle = Title;
+
+		RoomTitle = caps(Title);
 	}
 
 	InitPanel(InitName);
 	AnchorBottomCenter();
 	SetY(YOffsetFromBottomOfScreen);
+	
 	AS_SetTitle(RoomTitle); 
 	return self;
 }
@@ -58,6 +60,22 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 			OnLoseFocus();
 			break;
 	}
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+		return false;
+
+	if(RoomFuncs.Length > 0)
+	{
+		if(Navigator.GetSelected() != none)
+			return Navigator.GetSelected().OnUnrealCommand(cmd, arg);
+		else
+			return RoomFuncs[0].OnUnrealCommand(cmd, arg);
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 defaultproperties

@@ -1373,19 +1373,25 @@ function EventListenerReturn OnUnitDiedWithParthenogenicPoison(Object EventData,
 	local XComGameStateHistory History;
 	local XComGameState NewGameState;
 	
-	NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("OnUnitDiedWithParthenogenicPoison");
-	
 	History = `XCOMHISTORY;
 
 	TargetUnitState = XComGameState_Unit(History.GetGameStateForObjectID(ApplyEffectParameters.TargetStateObjectRef.ObjectID));
-	`assert(TargetUnitState != none);
-
 	EffectTemplate = X2Effect_ParthenogenicPoison(GetX2Effect());
-	`assert(EffectTemplate != none);
 
-	EffectTemplate.TriggerSpawnEvent(ApplyEffectParameters, TargetUnitState, NewGameState);
-
-	SubmitNewGameState(NewGameState);
+	if( TargetUnitState == none )
+	{
+		`RedScreen("TargetUnitState in OnUnitDiedWithParthenogenicPoison does not exist. @dslonneger");
+	}	
+	else if( EffectTemplate == none )
+	{
+		`RedScreen("EffectTemplate in OnUnitDiedWithParthenogenicPoison does not exist. @dslonneger");
+	}
+	else
+	{
+		NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("OnUnitDiedWithParthenogenicPoison");
+		EffectTemplate.TriggerSpawnEvent(ApplyEffectParameters, TargetUnitState, NewGameState);
+		SubmitNewGameState(NewGameState);
+	}
 
 	return ELR_NoInterrupt;
 }

@@ -66,8 +66,150 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	//TestTutorialBladeMessages();
 	//TestTutorialArrows();
-	TestCommanderKilledPopup();
+	//TestCommanderKilledPopup();
 
+	TestHotlinkButton();
+	TestNavHelpBarWithHotlinks();
+
+}
+
+simulated function TestKeyboardInput()
+{
+	local TInputDialogData kData;
+
+	kData.strTitle = "EDIT STUFF";
+	kData.iMaxChars = 500;
+	kData.strInputBoxText = "Text goes here...";
+	kData.fnCallback = OnInputBoxClosed;
+	kData.DialogType = eDialogType_MultiLine;
+
+	Movie.Pres.UIInputDialog(kData);
+
+	return; 
+
+	Movie.Pres.UIKeyboard("TYPE SOME STUFF HERE!",
+						  "Heyo",
+						  VirtualKeyboard_OnNameInputBoxAccepted,
+						  VirtualKeyboard_OnNameInputBoxCancelled,
+						  false,
+						  class'XComCharacterCustomization'.const.NICKNAME_NAME_MAX_CHARS);
+}
+
+function OnInputBoxClosed(string text)
+{
+	`log("closed input");
+}
+
+function VirtualKeyboard_OnNameInputBoxAccepted(string text, bool bWasSuccessful)
+{
+	`log("Accepted Keyboard. bWasSuccessful = " $bWasSuccessful );
+}
+
+function VirtualKeyboard_OnNameInputBoxCancelled()
+{
+	`log("Cancelled Keyboard." );
+}
+
+simulated function TestNavHelpBarWithHotlinks()
+{
+	local UINavigationHelp kNavHelp;
+
+	kNavHelp = Spawn(class'UINavigationHelp', self);
+	kNavHelp.InitNavHelp('NavigationHelp');
+	kNavHelp.SetY(900);
+
+	kNavHelp.AddBackButton(OnCancel);
+	kNavHelp.AddRightHelp("RIGHT HELP OF LONGER TEXT", class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_RB_R1);
+	kNavHelp.AddCenterHelp("CENTER HELP LONG TEXT HERE HOW LONG CAN IT GET RESIZING", class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
+	kNavHelp.bIsVerticalHelp = true;
+	kNavHelp.AddLeftHelp("Stacked help 1", class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_RB_R1);
+
+	kNavHelp.AddLeftHelp("Stacked help 2", class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_LB_L1);
+}
+
+
+function TestHotlinkButton()
+{
+	local UIButton Button0, Button1, Button2;
+
+	local float IconSizeRatio;
+	local float newHeight;
+	local float newWidth;
+	local UIGamepadIcons LeftBumperIcon, RightBumperIcon, RightBumperIcon2; 
+	local UILargeButton LaunchButton;
+	local UILargeButton ExcavateButton;
+
+
+	ExcavateButton = Spawn(class'UILargeButton', self);
+	ExcavateButton.LibID = 'X2ContinueButton';
+	ExcavateButton.InitLargeButton('ExcavateButton', class'UIUtilities_Text'.static.InjectImage(
+	class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, -13) @ "EXCAVATE", "", );
+	ExcavateButton.AnchorTopCenter();
+
+	
+	LaunchButton = Spawn(class'UILargeButton', self);
+	LaunchButton.bAnimateOnInit = false;
+
+	LaunchButton.InitLargeButton(,class'UIUtilities_Text'.static.InjectImage(
+			class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, -13) @ "LAUNCH MISSION",, );
+	LaunchButton.SetAsNavHelpDisplay(true);
+
+	LaunchButton.AnchorBottomRight();
+	LaunchButton.DisableNavigation();
+	LaunchButton.ShowBG(true);
+
+
+	//original icon ratio that was used before.
+	IconSizeRatio = 71.5 / 44;
+	newHeight = 35;
+	newWidth = newHeight * IconSizeRatio;
+
+	//Distorted
+	LeftBumperIcon = Spawn(class'UIGamepadIcons', Self);
+	LeftBumperIcon.InitGamepadIcon('NavBtn_Left', class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+	LeftBumperIcon.SetSize(newWidth, newHeight);//71.5, 44);
+	LeftBumperIcon.SetY(200);
+
+	// correct
+	RightBumperIcon = Spawn(class'UIGamepadIcons', Self);
+	RightBumperIcon.InitGamepadIcon('NavBtn_Right', class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_RB_R1);
+	RightBumperIcon.SetSize(newWidth, newHeight);//71.5, 44);
+	RightBumperIcon.SetY(300);
+
+	//too small
+	RightBumperIcon2 = Spawn(class'UIGamepadIcons', Self);
+	RightBumperIcon2.InitGamepadIcon('NavBtn_Right2', class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_RB_R1);
+	RightBumperIcon2.SetSize(newWidth/2, newHeight/2);//71.5, 44);
+	RightBumperIcon2.SetY(330);
+
+
+	Button0 = Spawn(class'UIButton', self);
+	Button0.SetResizeToText(true);
+
+	Button0.InitButton('Button0', "Hotlink button test",, eUIButtonStyle_SELECTED_SHOWS_HOTLINK);
+	Button0.SetGamepadIcon(class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+	Button0.SetSelectedNavigation();
+	//Button0.SetGamepadIcon(class'UIUtilities_Image'.const.FacilityStatus_Health);
+
+	
+	Button1 = Spawn(class'UIButton', self);
+	Button1.SetResizeToText(true);
+
+	Button1.InitButton('Button1', "Disable Button test",, eUIButtonStyle_SELECTED_SHOWS_HOTLINK);
+	Button1.SetY(50);
+	Button1.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
+	Button1.SetSelectedNavigation();
+	Button1.SetDisabled(true);
+
+	
+	Button2 = Spawn(class'UIButton', self);
+	Button2.SetResizeToText(true);
+
+	Button2.InitButton('Button2', "Hotlink Sans Mouse test",, eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE);
+	Button2.SetY(150);
+	Button2.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+	//Button2.SetSelectedNavigation();
+	Button2.DisableNavigation();
 }
 
 function TestCommanderKilledPopup()
@@ -884,6 +1026,11 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
 			Movie.Stack.Pop(self);
 			break;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A :
+			TestKeyboardInput();
+			break;
+
 		default:
 			bHandled = false;
 			break;

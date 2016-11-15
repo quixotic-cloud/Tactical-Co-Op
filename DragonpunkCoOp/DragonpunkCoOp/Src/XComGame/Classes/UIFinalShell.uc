@@ -112,6 +112,13 @@ simulated function OnMenuButtonClicked(UIButton button)
 
 simulated function OnReceiveFocus()
 {
+	m_my2kButton.OnLoseFocus();
+
+	if(Navigator.SelectedIndex == 1)
+	{
+		Navigator.SelectFirstAvailable();
+	}
+
 	super.OnReceiveFocus();
 	XComShellPresentationLayer(Movie.Pres).UIShellScreen3D();
 }

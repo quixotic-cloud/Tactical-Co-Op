@@ -79,8 +79,16 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	{
 		NavHelp = Spawn(class'UINavigationHelp', self).InitNavHelp('helpBarMC');
 
-		NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericCancel, class'UIUtilities_Input'.static.GetBackButtonIcon(), OnMouseCancel);
-		NavHelp.AddRightHelp(class'UIUtilities_Text'.default.m_strGenericConfirm, class'UIUtilities_Input'.static.GetAdvanceButtonIcon(), OnMouseAccept);
+		if( `ISCONTROLLERACTIVE )
+		{
+			NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericCancel, class'UIUtilities_Input'.static.GetBackButtonIcon(), OnMouseCancel);
+			NavHelp.AddRightHelp(class'UIUtilities_Text'.default.m_strGenericConfirm, class'UIUtilities_Input'.static.GetAdvanceButtonIcon(), OnMouseAccept);
+		}
+		else
+		{
+			NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericCancel, "", OnMouseCancel);
+			NavHelp.AddRightHelp(class'UIUtilities_Text'.default.m_strGenericConfirm, "", OnMouseAccept);
+		}
 
 		XComInputBase(PC.PlayerInput).RawInputListener = RawInputHandler;
 	}
@@ -97,13 +105,12 @@ simulated function OnInit()
 
 simulated function bool RawInputHandler(Name Key, int ActionMask, bool bCtrl, bool bAlt, bool bShift)
 {
-	if(!Movie.IsMouseActive())
-		return false;
-
 	// NOTE: When editing large text, don't trigger accept when user presses 'Enter', so they can enter line breaks -sbatista
-	if(Key == 'Enter' && m_kData.DialogType == eDialogType_SingleLine)
+	if( Key == 'Enter' && m_kData.DialogType == eDialogType_SingleLine )
 		OnAccept();
-	else if(Key == 'Escape' || Key == 'RightMouseButton')
+	else if( Key == 'XboxTypeS_A' )
+		OnAccept();
+	else if(Key == 'Escape' || Key == 'RightMouseButton' || Key == 'XboxTypeS_B' )
 		OnCancel();
 
 	return true;

@@ -246,7 +246,7 @@ simulated function OnSelectionChanged(UIList ContainerList, int ItemIndex)
 {
 	local XComGameState_Unit UnitState;
 	local string Description, CustomizeDesc;
-
+	
 	// Index order matches order that elements get added in 'PopulateData'
 	switch(ItemIndex)
 	{

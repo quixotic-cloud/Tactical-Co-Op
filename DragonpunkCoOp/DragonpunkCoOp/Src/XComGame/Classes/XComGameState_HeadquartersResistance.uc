@@ -40,6 +40,8 @@ var bool								  bInactive; // Resistance isn't active at the beginning of the 
 var() bool								  bEndOfMonthNotify;
 var() bool								  bHasSeenNewResistanceGoods;
 var() bool								  bIntelMode; // If scanning at Resistance HQ is intel mode
+var() bool								  bFirstPOIActivated; // If ResHQ should spawn the first POI upon the next Geoscape entry
+var() bool								  bFirstPOISpawned; // Has the first POI been spawned yet
 
 // Resistance Scanning Mode
 var() name								  ResistanceMode;
@@ -1204,6 +1206,11 @@ function StateObjectReference ChoosePOI(XComGameState NewGameState, optional boo
 		if (bSpawnImmediately)
 		{
 			POIState.Spawn(NewGameState);
+
+			if( !ResHQ.bFirstPOISpawned )
+			{
+				ResHQ.bFirstPOISpawned = true;
+			}
 		}
 	}
 

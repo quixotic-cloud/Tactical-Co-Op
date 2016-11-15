@@ -23,8 +23,13 @@ simulated function UIStrategyMapItem InitMapItem(out XComGameState_GeoscapeEntit
 	ScanButton.SetButtonIcon("");
 	ScanButton.SetDefaultDelegate(OnDefaultClicked);
 	ScanButton.SetButtonType(eUIScanButtonType_Supplies);
+	ScanButton.OnSizeRealized = OnButtonSizeRealized;
 	
 	return self;
+}
+simulated function OnButtonSizeRealized()
+{
+	ScanButton.SetX(-ScanButton.Width / 2.0);
 }
 
 function UpdateFromGeoscapeEntity(const out XComGameState_GeoscapeEntity GeoscapeEntity)
@@ -67,6 +72,52 @@ simulated function XComGameState_ResourceCache GetCache()
 	return XComGameState_ResourceCache(`XCOMHISTORY.GetGameStateForObjectID(GeoscapeEntityRef.ObjectID));
 }
 
+simulated function OnReceiveFocus()
+{
+	ScanButton.OnReceiveFocus();
+}
+
+simulated function OnLoseFocus()
+{
+	ScanButton.OnLoseFocus();
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return true;
+	}
+
+	switch(cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		if (IsAvengerLandedHere())
+		{
+			ScanButton.ClickButtonScan();
+		}
+		else
+		{
+			OnDefaultClicked();
+		}
+
+		return true;		
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function bool IsSelectable()
+{
+	return true;
+}
+
+simulated function SetZoomLevel(float ZoomLevel)
+{
+	super.SetZoomLevel(ZoomLevel);
+
+	ScanButton.SetY(30.0 * (1.0 - FClamp(ZoomLevel, 0.0, 0.95)));
+}
 defaultproperties
 {
 	bProcessesMouseEvents = false;

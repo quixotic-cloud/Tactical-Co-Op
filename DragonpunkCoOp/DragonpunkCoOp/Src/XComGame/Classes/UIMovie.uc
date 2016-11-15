@@ -44,6 +44,7 @@ var array<int> RemovalCache;	            // Array of indices into the CachedPane
 var int NumModalScreens;			        // Used to determine if a model Screens are up
 
 var EConsoleType ConsoleType;
+var int ConsoleTypeIcons; 
 
 // DEBUG: 
 var bool DebugHardHide;						 // Debug: Hide UI despite other show/hide commands;
@@ -71,12 +72,7 @@ simulated function InitMovie(XComPresentationlayerBase InitPres)
 
 	//---------------------------------------------
 
-	if ( Pres.WorldInfo.IsConsoleBuild( CONSOLE_PS3 ) )
-		ConsoleType = CONSOLE_PS3;
-	else if ( Pres.WorldInfo.IsConsoleBuild( CONSOLE_Xbox360 ) )
-		ConsoleType = CONSOLE_Xbox360;
-	else
-		ConsoleType = CONSOLE_Any;
+	ConsoleType = CONSOLE_Any;
 
 	//---------------------------------------------
 
@@ -118,9 +114,13 @@ simulated function OnInit()
 
 	// Init mouse
 	SetMouseActive( `XPROFILESETTINGS == none ? true : `XPROFILESETTINGS.Data.IsMouseActive() );
+	SetPlatformIcons(`XPROFILESETTINGS.Data.m_eControllerIconType );
 
 	Pres.SubscribeToUIUpdate( ProcessQueuedCommands );
 	Pres.SubscribeToUIUpdate( WatchForFullscreenChanges );
+
+	//DEBUG bsteiner 
+	AS_ToggleControlOpsDebugging();
 }
 
 event Destroyed()
@@ -180,6 +180,7 @@ simulated native function GetScreenDimensions( out int RenderedWidth, out int Re
 simulated event RefreshResolutionAndSafeArea()
 {
 	SetResolutionAndSafeArea();
+	SetPlatformIcons(ConsoleTypeIcons);
 }
 
 // The order of creating the parameters to send to flash is awkward, because the latter params were added late, 
@@ -291,16 +292,16 @@ simulated function SetResolutionAndSafeArea()
 	}
 	
 	//Set console type directly 
-	if( ConsoleType == CONSOLE_PS3 )
+	if (ConsoleType == CONSOLE_PS3)
 		myValue.n = 2;	
-	else if( ConsoleType == CONSOLE_Xbox360 )
+	else if( ConsoleType == CONSOLE_Xbox360)
 		myValue.n = 1;
 	else
 		myValue.n = 0;	
 
 	myArray.AddItem( myValue );
 
-	// Does the vertical location alreday have the safe zone accoutned for? 
+	// Does the vertical location already have the safe zone accounted for? 
 	myValue.Type = AS_Boolean;
 	myValue.b = bool(AlreadyAdjustedVerticalSafeZone);	
 	myArray.AddItem( myValue );
@@ -315,6 +316,29 @@ simulated function SetResolutionAndSafeArea()
 	`log( "bAlreadyAdjustedVerticalSafeZone: " $AlreadyAdjustedVerticalSafeZone,,'uixcom');
 
 	Invoke(MCPath $ ".SetUIView", myArray);
+}
+
+simulated function SetPlatformIcons(int IconConsoleType)
+{
+	local ASValue myValue;
+	local Array<ASValue> myArray;
+	
+	ConsoleTypeIcons = IconConsoleType;
+	myValue.Type = AS_Number;
+
+	if( ConsoleTypeIcons == CONSOLE_PS3 )
+		myValue.n = 2;
+	else if( ConsoleTypeIcons == CONSOLE_Xbox360 )
+		myValue.n = 1;
+	else
+		myValue.n = 0;
+
+	myArray.AddItem(myValue);
+
+	Invoke(MCPath $ ".SetPlatform", myArray);
+
+
+	`log( "SetPlatformIcons: "$ myArray[0].n, , 'uixcom');
 }
 
 simulated function WatchForFullscreenChanges()
@@ -814,6 +838,13 @@ simulated function ShowUninitializedMC(string Path)
 	BatchedFunctions.AddItem(ASVal);
 }
 
+// A means for actionscript to log statements that are visible in the output
+// In actionscript, should call ExternalInterface.call("PrintString", Message)
+simulated function PrintString(String Message)
+{
+
+	`log("Actionscript Log:" @ Message,,'uiflash');
+}
 // OPT: Queue the remove function to be called when this movie ticks.
 simulated function RemoveUninitializedMC(string Path)
 {
@@ -871,7 +902,7 @@ simulated function FlashRaiseMouseEvent( string strPath, int cmd, string arg )
 
 	`log("Flash raise mouse event: " $ strPath $ ", " $ cmd $ ", " $ arg ,,'uicore');
 
-	if( !MouseActive )
+	if( !MouseActive && !XComInputBase(XComPlayerController(Pres.Owner).PlayerInput).bForceEnableController)
 		return;
 
 	// Don't let the mouse work if we're still in alt-tab mode
@@ -922,7 +953,7 @@ simulated function SetMouseActive(bool bActive)
 {
 	//ScriptTrace();
 	`log("GFX_INPUT: SetMouseActive: " $ bActive,,'uixcom');
-	if( MouseActive != bActive )
+	if( bIsInited && MouseActive != bActive )
 	{
 		MouseActive = bActive;
 		NotifyFlashMouseStateChange();

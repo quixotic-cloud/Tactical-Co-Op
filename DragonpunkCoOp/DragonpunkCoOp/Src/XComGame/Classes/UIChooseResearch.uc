@@ -24,6 +24,7 @@ var public localized String m_strSwitchShadowProjectTitle;
 var public localized String m_strSwitchShadowProjectText;
 var public localized String m_strSwitchResearchTitle;
 var public localized String m_strSwitchResearchText;
+var localized string m_strPauseResearch;
 
 var config array<name> MustChooseResearchObjectives; // Some tutorial objectives require research to be chosen (can't back out of screen)
 
@@ -523,6 +524,25 @@ simulated function OnCancel()
 	}	
 }
 
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	switch (cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+		if (bShadowChamber && XComHQ.HasActiveShadowProject())
+		{
+			`HQPRES.PauseShadowProjectPopup();
+			return true;
+		}
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
 function bool HasCurrentResearch()
 {
 	XComHQ = class'UIUtilities_Strategy'.static.GetXComHQ();
@@ -570,12 +590,21 @@ simulated function OnReceiveFocus()
 }
 simulated function RefreshNavHelp()
 {
-	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
+	local UINavigationHelp NavHelp;
 
-	if( !MustChooseResearch() || HasCurrentResearch() )
-	{
-		`HQPRES.m_kAvengerHUD.NavHelp.AddBackButton(OnCancel);
-	}
+	NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
+	NavHelp.ClearButtonHelp();
+
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
+	
+	if(!MustChooseResearch() || HasCurrentResearch())
+		NavHelp.AddBackButton(OnCancel);
+
+	if(`ISCONTROLLERACTIVE)
+		NavHelp.AddSelectNavHelp();
+	
+	if(bShadowChamber && XComHQ.HasActiveShadowProject())
+		NavHelp.AddLeftHelp(m_strPauseResearch, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE, `HQPRES.PauseShadowProjectPopup);
 }
 
 simulated function SetShadowChamber()

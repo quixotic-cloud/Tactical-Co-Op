@@ -168,7 +168,7 @@ simulated function UpdateAlienActivity()
 	arrActions = RESHQ().GetMonthlyActivity(true);
 
 	for (iAction = 0; iAction < arrActions.Length; iAction++)
-	{
+	{ 
 		strAction = class'UIUtilities_Text'.static.GetColoredText(arrActions[iAction].Title @ string(arrActions[iAction].Count), arrActions[iAction].Rating);
 		
 		strActivityList $= strAction;
@@ -190,6 +190,27 @@ simulated function UpdateAvatarProgress()
 	{
 		AS_UpdateCouncilReportCardAvatarProgress(m_strAvatarProgressLabel, ALIENHQ().GetCurrentDoom());
 	}
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	switch(cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+	case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
+		OnContinue();
+		return true;
+		break;
+	case class'UIUtilities_Input'.const.FXS_BUTTON_B:
+		return false;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 //-------------- EVENT HANDLING ----------------------------------------------------------

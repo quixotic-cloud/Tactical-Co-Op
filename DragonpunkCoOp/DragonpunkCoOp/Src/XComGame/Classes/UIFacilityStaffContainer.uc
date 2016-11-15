@@ -12,6 +12,7 @@ class UIFacilityStaffContainer extends UIStaffContainer;
 simulated function UIStaffContainer InitStaffContainer(optional name InitName, optional string NewTitle = DefaultStaffTitle)
 {
 	return super.InitStaffContainer(InitName, NewTitle);
+	Navigator.HorizontalNavigation = true;
 }
 
 simulated function Refresh(StateObjectReference LocationRef, delegate<UIStaffSlot.OnStaffUpdated> onStaffUpdatedDelegate)
@@ -30,49 +31,49 @@ simulated function Refresh(StateObjectReference LocationRef, delegate<UIStaffSlo
 	}
 	else 
 	{
-	// Show or create slots for the currently requested facility
-	for (i = 0; i < Facility.StaffSlots.Length; i++)
-	{
+		// Show or create slots for the currently requested facility
+		for (i = 0; i < Facility.StaffSlots.Length; i++)
+		{
 			// If the staff slot is locked and no upgrades are available, or it is always hidden, do not initialize or show the staff slot
 			StaffSlot = Facility.GetStaffSlot(i);
 			if ((StaffSlot.IsLocked() && !Facility.CanUpgrade()) || StaffSlot.IsHidden())
-			continue;
+				continue;
 			else
 				bSlotVisible = true;
 
-		if (i < StaffSlots.Length)
-			StaffSlots[i].UpdateData();
-		else
-		{
-			switch (Movie.Stack.GetCurrentClass())
+			if (i < StaffSlots.Length)
+				StaffSlots[i].UpdateData();
+			else
 			{
-			case class'UIFacility_Academy':
-				StaffSlots.AddItem(Spawn(class'UIFacility_AcademySlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
-				break;
-			case class'UIFacility_AdvancedWarfareCenter':
+				switch (Movie.Stack.GetCurrentClass())
+				{
+				case class'UIFacility_Academy':
+					StaffSlots.AddItem(Spawn(class'UIFacility_AcademySlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
+					break;
+				case class'UIFacility_AdvancedWarfareCenter':
 					if (StaffSlot.IsSoldierSlot())
-					StaffSlots.AddItem(Spawn(class'UIFacility_AdvancedWarfareCenterSlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
-				else
-					StaffSlots.AddItem(Spawn(class'UIFacility_StaffSlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
-				break;
-			case class'UIFacility_PsiLab':
+						StaffSlots.AddItem(Spawn(class'UIFacility_AdvancedWarfareCenterSlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
+					else
+						StaffSlots.AddItem(Spawn(class'UIFacility_StaffSlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
+					break;
+				case class'UIFacility_PsiLab':
 					if (StaffSlot.IsSoldierSlot())
-					StaffSlots.AddItem(Spawn(class'UIFacility_PsiLabSlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
-				else
+						StaffSlots.AddItem(Spawn(class'UIFacility_PsiLabSlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
+					else
+						StaffSlots.AddItem(Spawn(class'UIFacility_StaffSlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
+					break;
+				default:
 					StaffSlots.AddItem(Spawn(class'UIFacility_StaffSlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
-				break;
-			default:
-				StaffSlots.AddItem(Spawn(class'UIFacility_StaffSlot', self).InitStaffSlot(self, LocationRef, i, onStaffUpdatedDelegate));
-				break;
+					break;
+				}
 			}
 		}
-	}
-
+		
 		if (bSlotVisible) // Show the container only if at least one slot is visible
-		Show();
-	else
-		Hide();
-}
+			Show();
+		else
+			Hide();
+	}
 }
 
 simulated function bool OnUnrealCommand(int cmd, int arg)
@@ -99,4 +100,5 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 defaultproperties
 {
+	bCascadeFocus = false;
 }

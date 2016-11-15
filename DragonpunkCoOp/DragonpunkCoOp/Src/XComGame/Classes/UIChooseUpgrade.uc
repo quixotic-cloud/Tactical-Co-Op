@@ -41,6 +41,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	// UI
 	m_Title = Spawn(class'UIX2PanelHeader', self).InitPanelHeader(, m_strTitle);
+	Navigator.RemoveControl(m_Title);
 
 	m_List = Spawn(class'UIList', self).InitList(, 260, 820, 456, 238);
 	m_List.OnItemDoubleClicked = ConfirmSelection;
@@ -50,7 +51,10 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	AS_SetHeaders(m_strListLabel, m_strRequirementsLabel);
 
 	m_HelpBar = Spawn(class'UINavigationHelp', self).InitNavHelp();
+	m_HelpBar.bIsVerticalHelp = `ISCONTROLLERACTIVE;
 	m_HelpBar.AddBackButton(OnCancel);
+	if(`ISCONTROLLERACTIVE)
+		m_HelpBar.AddSelectNavHelp();
 
 	PopulateList();
 }

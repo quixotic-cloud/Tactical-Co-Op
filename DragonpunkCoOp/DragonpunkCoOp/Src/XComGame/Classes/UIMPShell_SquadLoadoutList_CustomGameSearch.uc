@@ -47,10 +47,13 @@ simulated function UpdateNavHelp()
 {
 	super.UpdateNavHelp();
 
+	if( `ISCONTROLLERACTIVE ) return;
+
 	if(EditSquadButton == none)
 	{
-		EditSquadButton = IntegratedNavHelp.AddCenterButton(m_strEditSquad,, EditSquadButtonCallback, m_kSquadLoadout == none);
+		EditSquadButton = IntegratedNavHelp.AddCenterButton(m_strEditSquad,, EditSquadButtonCallback, m_kSquadLoadout == none, , class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
 		EditSquadButton.OnClickedDelegate = EditSquadClickedButtonCallback;
+		EditSquadButton.SetText(m_strEditSquad);
 		Navigator.AddControl(EditSquadButton);
 	}
 

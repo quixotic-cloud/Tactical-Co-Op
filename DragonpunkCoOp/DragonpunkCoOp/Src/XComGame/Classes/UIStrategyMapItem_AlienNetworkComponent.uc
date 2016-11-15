@@ -19,6 +19,10 @@ function UpdateFlyoverText()
 	SetLevel(MissionState.Doom);
 }
 
+simulated function bool IsSelectable()
+{
+	return true;
+}
 
 defaultproperties
 {

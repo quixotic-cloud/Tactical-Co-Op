@@ -74,7 +74,7 @@ simulated function CinematicModeToggled(bool bInCinematicMode, bool bAffectsMove
 	}
 }
 
-simulated function SetInputState( name nStateName )
+simulated function SetInputState( name nStateName, optional bool bForce )
 {
 	XComHeadquartersInput( PlayerInput ).GotoState( nStateName );
 }
@@ -200,7 +200,12 @@ simulated function bool IsInCinematicMode()
 }
 simulated function bool ShouldBlockPauseMenu()
 {
-	return m_bInCinematicMode && m_bAffectsHUD;
+	local bool bShouldBlock; 
+
+	bShouldBlock = m_bInCinematicMode && m_bAffectsHUD;
+	bShouldBlock = bShouldBlock || XComHQPresentationLayer(Pres).ScreenStack.IsInStack(class'UISquadSelect');
+
+	return bShouldBlock; 
 }
 simulated function bool IsStartingGame()
 {

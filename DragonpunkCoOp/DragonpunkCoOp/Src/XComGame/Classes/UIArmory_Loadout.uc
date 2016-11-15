@@ -43,6 +43,7 @@ var localized string m_strTooltipStripGearDisabled;
 var localized string m_strTooltipStripWeapons;
 var localized string m_strTooltipStripWeaponsDisabled;
 var localized string m_strCannotEdit;
+var localized string m_strMakeAvailable;
 
 var XGParamTag LocTag; // optimization
 var bool bGearStripped;
@@ -66,6 +67,7 @@ simulated function InitArmory(StateObjectReference UnitRef, optional name DispEv
 	EquippedListContainer.bAnimateOnInit = false;
 	EquippedListContainer.InitPanel('leftPanel');
 	EquippedList = CreateList(EquippedListContainer);
+	EquippedList.OnSelectionChanged = OnSelectionChanged;
 	EquippedList.OnItemClicked = OnItemClicked;
 	EquippedList.OnItemDoubleClicked = OnItemClicked;
 
@@ -88,27 +90,46 @@ simulated function PopulateData()
 	ChangeActiveList(EquippedList, true);
 }
 
+simulated function bool CanCancel()
+{
+	if (ActiveList == EquippedList)
+	{
+		if (!Movie.Pres.ScreenStack.HasInstanceOf(class'UISquadSelect') || 
+			class'XComGameState_HeadquartersXCom'.static.GetObjectiveStatus('T0_M5_EquipMedikit') != eObjectiveState_InProgress)
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	return true;
+}
+
 simulated function UpdateNavHelp()
 {
 	super.UpdateNavHelp();
+
 	if(bUseNavHelp && XComHQPresentationLayer(Movie.Pres) != none)
 	{
 		if(bItemsStripped)
 		{
-			NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripItems, "", none, true, m_strTooltipStripItemsDisabled, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
+			if( `ISCONTROLLERACTIVE == false )
+				NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripItems, "", none, true, m_strTooltipStripItemsDisabled, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
 		}
 		else
 		{
-			NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripItems, "", OnStripItems, false, m_strTooltipStripItems, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
+			NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripItems, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LT_L2, OnStripItems, false, m_strTooltipStripItems, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
 		}
 		
 		if (bWeaponsStripped)
 		{
-			NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripWeapons, "", none, true, m_strTooltipStripWeaponsDisabled, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
+			if( `ISCONTROLLERACTIVE == false )
+				NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripWeapons, "", none, true, m_strTooltipStripWeaponsDisabled, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
 		}
 		else
 		{
-			NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripWeapons, "", OnStripWeapons, false, m_strTooltipStripWeapons, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
+			NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripWeapons, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RSCLICK_R3, OnStripWeapons, false, m_strTooltipStripWeapons, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
 		}
 
 		if(bGearStripped)
@@ -117,9 +138,55 @@ simulated function UpdateNavHelp()
 		}
 		else
 		{
-			NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripGear, "", OnStripGear, false, m_strTooltipStripGear, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
+			NavHelp.AddRightHelp(class'UISquadSelect'.default.m_strStripGear, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RT_R2, OnStripGear, false, m_strTooltipStripGear, class'UIUtilities'.const.ANCHOR_BOTTOM_CENTER);
+		}
+	
+	}
+}
+
+//This function handles Item-specific NavHelp, based on the currently selected item
+simulated function UpdateNavHelp_LoadoutItem()
+{
+	local UIArmory_LoadoutItem Item;
+
+	if(NavHelp != None && bUseNavHelp && EquippedList != None) // bsg-dforrest (7.15.16): null access warnings
+	{
+		Item = UIArmory_LoadoutItem(EquippedList.GetSelectedItem());
+		if(Item != None && Item.bCanBeCleared && ActiveList == EquippedList)
+		{
+			NavHelp.AddLeftHelp(m_strMakeAvailable,class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
 		}
 	}
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	// Only pay attention to presses or repeats; ignoring other input types
+	// NOTE: Ensure repeats only occur with arrow keys
+	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
+		return false;
+
+	switch( cmd )
+	{
+		case class'UIUtilities_Input'.const.FXS_BUTTON_LTRIGGER:
+			if(!bItemsStripped)
+				OnStripItems();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RTRIGGER :
+			if( !bGearStripped )
+				OnStripGear();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_R3 :
+			if( !bWeaponsStripped )
+				OnStripWeapons();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			if(UIArmory_LoadoutItem(EquippedList.GetSelectedItem()) != None)
+				UIArmory_LoadoutItem(EquippedList.GetSelectedItem()).OnDropItemClicked(None);
+			return true;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 simulated function OnStripItems()
@@ -132,6 +199,9 @@ simulated function OnStripItems()
 	DialogData.strAccept = class'UIDialogueBox'.default.m_strDefaultAcceptLabel;
 	DialogData.strCancel = class'UIDialogueBox'.default.m_strDefaultCancelLabel;
 	Movie.Pres.UIRaiseDialog(DialogData);
+	InfoTooltip.currentPath = string(ActiveList.GetSelectedItem().MCPath);
+	InfoTooltip.ShowTooltip();
+	NavHelp.ClearButtonHelp();
 }
 simulated function OnStripItemsDialogCallback(eUIAction eAction)
 {
@@ -165,9 +235,10 @@ simulated function OnStripItemsDialogCallback(eUIAction eAction)
 		`GAMERULES.SubmitGameState(NewGameState);
 
 		bItemsStripped = true;
-		UpdateNavHelp();
+		//UpdateNavHelp();
 		UpdateLockerList();
 	}
+	UpdateNavHelp();
 }
 
 simulated function OnStripGear()
@@ -180,6 +251,9 @@ simulated function OnStripGear()
 	DialogData.strAccept = class'UIDialogueBox'.default.m_strDefaultAcceptLabel;
 	DialogData.strCancel = class'UIDialogueBox'.default.m_strDefaultCancelLabel;
 	Movie.Pres.UIRaiseDialog(DialogData);
+	InfoTooltip.currentPath = string(ActiveList.GetSelectedItem().MCPath);
+	InfoTooltip.ShowTooltip();
+	NavHelp.ClearButtonHelp();
 }
 simulated function OnStripGearDialogCallback(eUIAction eAction)
 {
@@ -212,7 +286,7 @@ simulated function OnStripGearDialogCallback(eUIAction eAction)
 		`GAMERULES.SubmitGameState(NewGameState);
 
 		bGearStripped = true;
-		UpdateNavHelp();
+		//UpdateNavHelp();
 		UpdateLockerList();
 	}
 }
@@ -227,6 +301,9 @@ simulated function OnStripWeapons()
 	DialogData.strAccept = class'UIDialogueBox'.default.m_strDefaultAcceptLabel;
 	DialogData.strCancel = class'UIDialogueBox'.default.m_strDefaultCancelLabel;
 	Movie.Pres.UIRaiseDialog(DialogData);
+	InfoTooltip.currentPath = string(ActiveList.GetSelectedItem().MCPath);
+	InfoTooltip.ShowTooltip();
+	NavHelp.ClearButtonHelp();
 }
 simulated function OnStripWeaponsDialogCallback(eUIAction eAction)
 {
@@ -260,9 +337,10 @@ simulated function OnStripWeaponsDialogCallback(eUIAction eAction)
 		`GAMERULES.SubmitGameState(NewGameState);
 
 		bWeaponsStripped = true;
-		UpdateNavHelp();
+		//UpdateNavHelp();
 		UpdateLockerList();
 	}
+	UpdateNavHelp();
 }
 
 simulated function ResetAvailableEquipment()
@@ -378,7 +456,9 @@ simulated function UpdateEquippedList()
 	local UIArmory_LoadoutItem Item;
 	local array<XComGameState_Item> UtilityItems;
 	local XComGameState_Unit UpdatedUnit;
+	local int prevIndex;
 
+	prevIndex = EquippedList.SelectedIndex;
 	UpdatedUnit = GetUnit();
 	EquippedList.ClearItems();
 
@@ -457,6 +537,7 @@ simulated function UpdateEquippedList()
 		else
 			Item.InitLoadoutItem(GetEquippedItem(eInvSlot_AmmoPocket), eInvSlot_AmmoPocket, true);
 	}
+	EquippedList.SetSelectedIndex(prevIndex < EquippedList.ItemCount ? prevIndex : 0);
 }
 
 function int GetNumAllowedUtilityItems()
@@ -503,6 +584,15 @@ simulated function UpdateLockerList()
 	{
 		UIArmory_LoadoutItem(LockerList.CreateItem(class'UIArmory_LoadoutItem')).InitLoadoutItem(LockerItem.Item, SelectedSlot, false, LockerItem.DisabledReason);
 	}
+	// If we have an invalid SelectedIndex, just try and select the first thing that we can.
+	// Otherwise let's make sure the Navigator is selecting the right thing.
+	if(LockerList.SelectedIndex < 0 || LockerList.SelectedIndex >= LockerList.ItemCount)
+		LockerList.Navigator.SelectFirstAvailable();
+	else
+	{
+		LockerList.Navigator.SetSelected(LockerList.GetSelectedItem());
+	}
+	OnSelectionChanged(ActiveList, ActiveList.SelectedIndex);
 }
 
 function GetInventory(out array<StateObjectReference> Inventory)
@@ -700,6 +790,17 @@ simulated function ChangeActiveList(UIList kActiveList, optional bool bSkipAnima
 		Header.PopulateData(GetUnit());
 		Navigator.RemoveControl(LockerListContainer);
 		Navigator.AddControl(EquippedListContainer);
+		EquippedList.EnableNavigation();
+		LockerList.DisableNavigation();
+		Navigator.SetSelected(EquippedListContainer);
+		if (EquippedList.SelectedIndex < 0)
+		{
+			EquippedList.SetSelectedIndex(0);
+		}
+		else
+		{
+			EquippedList.GetSelectedItem().OnReceiveFocus();
+		}
 	}
 	else
 	{
@@ -715,6 +816,10 @@ simulated function ChangeActiveList(UIList kActiveList, optional bool bSkipAnima
 		LockerList.SetSelectedIndex(0, true);
 		Navigator.RemoveControl(EquippedListContainer);
 		Navigator.AddControl(LockerListContainer);
+		EquippedList.DisableNavigation();
+		LockerList.EnableNavigation();
+		Navigator.SetSelected(LockerListContainer);
+		LockerList.Navigator.SelectFirstAvailable();
 	}
 }
 
@@ -728,6 +833,16 @@ simulated function OnSelectionChanged(UIList ContainerList, int ItemIndex)
 
 	if(!UIArmory_LoadoutItem(ContainerList.GetItem(ItemIndex)).IsDisabled)
 		Header.PopulateData(GetUnit(), Item.GetReference(), UIArmory_LoadoutItem(EquippedList.GetSelectedItem()).ItemRef);
+
+	InfoTooltip.HideTooltip();
+	ClearTimer(nameof(DelayedShowTooltip));
+	SetTimer(0.21f, false, nameof(DelayedShowTooltip));
+	UpdateNavHelp();
+}
+simulated function DelayedShowTooltip()
+{
+	InfoTooltip.currentPath = string(ActiveList.GetSelectedItem().MCPath);
+	InfoTooltip.ShowTooltip();
 }
 
 simulated function OnAccept()
@@ -766,6 +881,11 @@ simulated function OnItemClicked(UIList ContainerList, int ItemIndex)
 			{
 				OnCancel();
 			}
+		}
+		
+		if (EquippedList.SelectedIndex < 0)
+		{
+			EquippedList.SetSelectedIndex(0);
 		}
 	}
 }
@@ -806,6 +926,7 @@ simulated function OnCancel()
 	else
 	{
 		ChangeActiveList(EquippedList);
+		OnSelectionChanged(EquippedList, EquippedList.SelectedIndex);
 	}
 }
 
@@ -813,6 +934,12 @@ simulated function OnRemoved()
 {
 	ResetAvailableEquipment();
 	super.OnRemoved();
+}
+simulated function OnReceiveFocus()
+{
+	super.OnReceiveFocus();
+	if( `ISCONTROLLERACTIVE )
+		DelayedShowTooltip();
 }
 
 simulated function SetUnitReference(StateObjectReference NewUnit)
@@ -1085,4 +1212,5 @@ defaultproperties
 	DisplayTag = "UIBlueprint_Loadout";
 	CameraTag = "UIBlueprint_Loadout";
 	bAutoSelectFirstNavigable = false;
+	bHideOnLoseFocus = false;
 }

@@ -58,6 +58,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	ExcavationPanel = Spawn(class'UIPanel', self);
 	ExcavationPanel.bAnimateOnInit = false; 
 	ExcavationPanel.InitPanel('', 'ExcavationStatus');
+	ExcavationPanel.DisableNavigation();
 	
 	BuildScreen();
 	UpdateData();
@@ -128,6 +129,7 @@ simulated function UpdateData()
 	{
 		DisableExcavateButton();
 	}
+	RealizeNavHelp();
 }
 
 simulated function RealizeNavHelp()
@@ -137,11 +139,16 @@ simulated function RealizeNavHelp()
 	Room = GetRoom();
 
 	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
+
 	if (class'XComGameState_HeadquartersXCom'.static.IsObjectiveCompleted('T0_M9_ExcavateRoom'))
 	{
 		NavHelp.AddBackButton(OnCancel);
 		NavHelp.AddGeoscapeButton();
 	}
+
+	if(`ISCONTROLLERACTIVE)
+		NavHelp.AddSelectNavHelp();
 
 	if (Room.HasSpecialFeature() && !Room.ClearingRoom && !Room.bSpecialRoomFeatureCleared)
 		ShowExcavateButton();
@@ -201,10 +208,21 @@ simulated function ShowExcavateButton()
 		ExcavateButton = Spawn(class'UILargeButton', self);
 		ExcavateButton.LibID = 'X2ContinueButton';
 		ExcavateButton.bHideUntilRealized = true;
-		ExcavateButton.InitLargeButton('ExcavateButton', m_strExcavate, "", StartExcavation);
+		if( `ISCONTROLLERACTIVE ) 
+		{
+			ExcavateButton.InitLargeButton('ExcavateButton', class'UIUtilities_Text'.static.InjectImage(
+				class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, -13) @ m_strExcavate, "", StartExcavation);
+		}
+		else
+		{
+			ExcavateButton.InitLargeButton('ExcavateButton', m_strExcavate, "", StartExcavation);
+		}
 		ExcavateButton.AnchorTopCenter();
 		ExcavateButton.OffsetX = 10;
 		ExcavateButton.OffsetY = 150;
+		ExcavateButton.DisableNavigation();
+		if(!Movie.IsMouseActive())
+			ExcavateButton.ShowBG(false);
 	}
 	else
 	{
@@ -225,6 +243,8 @@ simulated function DisableExcavateButton()
 	if (ExcavateButton != none)
 	{
 		ExcavateButton.DisableButton();
+		if(!Movie.IsMouseActive())
+			ExcavateButton.SetText(m_strEngineerRequired);
 	}
 }
 
@@ -233,6 +253,8 @@ simulated function EnableExcavateButton()
 	if (ExcavateButton != none)
 	{
 		ExcavateButton.EnableButton();
+		if(!Movie.IsMouseActive())
+			ExcavateButton.SetText(class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, -13) @ m_strExcavate);
 	}
 }
 
@@ -438,6 +460,10 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
 		return false;
 
+	if (m_kStaffSlotContainer.OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
 	bHandled = true;
 
 	switch (cmd)
@@ -451,6 +477,13 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 	case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
 		OnAccept();
+		break;
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+		if (ExcavateButton != None && !ExcavateButton.IsDisabled)
+		{
+			StartExcavation(None);
+		}
+
 		break;
 	default:
 		bHandled = false;

@@ -17,6 +17,7 @@ var() int                                 PanicEventValue;			// Defines strength
 var() bool                                PanicFlamethrower;        // True only when flamethrower has triggered panic
 var() int								  TurnsUntilAbilityExpires; // If >0, after this many turns, this ability will be removed from the Unit that owns it (and become unavailable for use)
 var() private transient bool              HasBeenPostPlayInited;    // Safety to prevent multiple post play inits 
+var bool								  CustomCanActivateFlag;	// If we need a flag to specify ourselves if this ability should be able to get used or not.
 	
 function InitAbilityForUnit(XComGameState_Unit OwnerUnit, XComGameState NewGameState)
 {
@@ -152,6 +153,10 @@ simulated function name CanActivateAbility(XComGameState_Unit Unit, optional EIn
 		AvailableCode = m_Template.CheckShooterConditions(self, kUnit, Revalidation);
 		if (AvailableCode != 'AA_Success')
 			return AvailableCode;
+	}
+	if(!CustomCanActivateFlag)
+	{
+		return 'AA_CustomNoSuccess';
 	}
 
 	return 'AA_Success';
@@ -810,15 +815,15 @@ simulated function name GetFireAnimationName(XComUnitPawn UnitPawn, bool UseMove
 		if ((kContent.IsInState('ActionActive') || kContent.IsInState('DurationAction')) &&
 			kContent.CasterActivationAnim.PlayAnimation &&
 			!kContent.CasterActivationAnim.AdditiveAnim)
-	{
-		AnimName = class'XComPerkContent'.static.ChooseAnimationForCover( Unit, kContent.CasterActivationAnim );
+		{
+			AnimName = class'XComPerkContent'.static.ChooseAnimationForCover(Unit, kContent.CasterActivationAnim);
 
 			if (AnimName != '')
-		{
+			{
 				if (SavedPerkAnimName == '')
 				{
 					SavedPerkAnimName = AnimName;
-		}
+				}
 				else
 				{
 					`Redscreen("XComGameState_Ability::GetFireAnimationName - Multiple Perks are trying to play non-additive animations.");
@@ -3201,4 +3206,5 @@ DefaultProperties
 {
 	iCharges = -1
 	TurnsUntilAbilityExpires = -1
+	CustomCanActivateFlag = true;
 }

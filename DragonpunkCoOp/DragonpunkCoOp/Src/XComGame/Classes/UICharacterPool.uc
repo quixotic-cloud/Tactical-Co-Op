@@ -39,6 +39,7 @@ var localized string m_strImportCharacter;
 var localized string m_strExportSelection;
 var localized string m_strDeleteSelection;
 var localized string m_strEditCharacter;
+var localized string m_strUpdateUsage;
 
 var localized string m_strDeleteCharacterDialogueTitle;
 var localized string m_strDeleteCharacterDialogueBody;
@@ -93,53 +94,58 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	TitleHeader.SetPosition(10, RunningY);
 	RunningY += TitleHeader.Height;
 
-	//Create buttons
-	CreateButton = Spawn(class'UIButton', Container);
-	CreateButton.ResizeToText = true;
-	CreateButton.InitButton('', m_strCreateCharacter, OnButtonCallback, eUIButtonStyle_HOTLINK_BUTTON);
-	CreateButton.SetPosition(10, RunningY);
-	CreateButton.OnSizeRealized = OnCreateButtonSizeRealized;
+	if(Movie.IsMouseActive())
+	{
+		//Create buttons
+		CreateButton = Spawn(class'UIButton', Container);
+		CreateButton.ResizeToText = true;
+		CreateButton.InitButton('', m_strCreateCharacter, OnButtonCallback, eUIButtonStyle_NONE);
+		CreateButton.SetPosition(10, RunningY);
+		CreateButton.OnSizeRealized = OnCreateButtonSizeRealized;
 
-	ImportButton = Spawn(class'UIButton', Container);
-	ImportButton.InitButton('', m_strImportCharacter, OnButtonCallback, eUIButtonStyle_HOTLINK_BUTTON);
-	ImportButton.SetPosition(180, RunningY);
+		ImportButton = Spawn(class'UIButton', Container);
+		ImportButton.InitButton('', m_strImportCharacter, OnButtonCallback, eUIButtonStyle_NONE);
+		ImportButton.SetPosition(180, RunningY);
 
-	RunningY += ImportButton.Height + 10;
+		RunningY += ImportButton.Height + 10;
+	}
 
 	//Create bottom buttons
 	OptionsList = Spawn(class'UIList', Container);
 	OptionsList.InitList('OptionsListMC', 10, RunningYBottom - class'UIMechaListItem'.default.Height, Container.Width - 20, 300, , false);
 
-	RunningYBottom -= class'UIMechaListItem'.default.Height + 10;
+	RunningYBottom -= class'UIMechaListItem'.default.Height + 10;   
 
-	ExportButton = Spawn(class'UIButton', Container);
-	ExportButton.ResizeToText = true;
-	ExportButton.InitButton('', m_strExportSelection, OnButtonCallback, eUIButtonStyle_HOTLINK_BUTTON);
-	ExportButton.SetPosition(10, RunningYBottom - ExportButton.Height);
-	ExportButton.DisableButton(m_strNothingSelected);
-	ExportButton.OnSizeRealized = OnExportButtonSizeRealized;
+	if (Movie.IsMouseActive())
+	{
+		ExportButton = Spawn(class'UIButton', Container);
+		ExportButton.ResizeToText = true;
+		ExportButton.InitButton('', m_strExportSelection, OnButtonCallback, eUIButtonStyle_NONE);
+		ExportButton.SetPosition(10, RunningYBottom - ExportButton.Height);
+		ExportButton.DisableButton(m_strNothingSelected);
+		ExportButton.OnSizeRealized = OnExportButtonSizeRealized;
 
-	DeselectAllButton = Spawn(class'UIButton', Container);
-	DeselectAllButton.InitButton('', m_strDeselectAll, OnButtonCallback, eUIButtonStyle_HOTLINK_BUTTON);
-	DeselectAllButton.SetPosition(180, RunningYBottom - DeselectAllButton.Height);
-	DeselectAllButton.DisableButton(m_strNothingSelected);
+		DeselectAllButton = Spawn(class'UIButton', Container);
+		DeselectAllButton.InitButton('', m_strDeselectAll, OnButtonCallback, eUIButtonStyle_NONE);
+		DeselectAllButton.SetPosition(180, RunningYBottom - DeselectAllButton.Height);
+		DeselectAllButton.DisableButton(m_strNothingSelected);
 
-	RunningYBottom -= ExportButton.Height + 10;
+		RunningYBottom -= ExportButton.Height + 10;
 
-	DeleteButton = Spawn(class'UIButton', Container);
-	DeleteButton.ResizeToText = true;
-	DeleteButton.InitButton('', m_strDeleteSelection, OnButtonCallback, eUIButtonStyle_HOTLINK_BUTTON);
-	DeleteButton.SetPosition(10, RunningYBottom - DeleteButton.Height);
-	DeleteButton.DisableButton(m_strNothingSelected);
-	DeleteButton.OnSizeRealized = OnDeleteButtonSizeRealized;
+		DeleteButton = Spawn(class'UIButton', Container);
+		DeleteButton.ResizeToText = true;
+		DeleteButton.InitButton('', m_strDeleteSelection, OnButtonCallback, eUIButtonStyle_NONE);
+		DeleteButton.SetPosition(10, RunningYBottom - DeleteButton.Height);
+		DeleteButton.DisableButton(m_strNothingSelected);
+		DeleteButton.OnSizeRealized = OnDeleteButtonSizeRealized;
 
-	SelectAllButton = Spawn(class'UIButton', Container);
-	SelectAllButton.InitButton('', m_strSelectAll, OnButtonCallback, eUIButtonStyle_HOTLINK_BUTTON);
-	SelectAllButton.SetPosition(180, RunningYBottom - SelectAllButton.Height);
-	SelectAllButton.DisableButton(m_strNoCharacters);
+		SelectAllButton = Spawn(class'UIButton', Container);
+		SelectAllButton.InitButton('', m_strSelectAll, OnButtonCallback, eUIButtonStyle_NONE);
+		SelectAllButton.SetPosition(180, RunningYBottom - SelectAllButton.Height);
+		SelectAllButton.DisableButton(m_strNoCharacters);
 
-	RunningYBottom -= DeleteButton.Height + 10;
-
+		RunningYBottom -= DeleteButton.Height + 10;
+	}
 
 	List = Spawn(class'UIList', Container);
 	List.bAnimateOnInit = false;
@@ -150,7 +156,6 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	// --------------------------------------------------------
 
 	NavHelp = Spawn(class'UINavigationHelp', self).InitNavHelp();
-	NavHelp.AddBackButton(OnCancel);
 
 	// ---------------------------------------------------------
 
@@ -175,11 +180,68 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	SetTimer(2.0, false, nameof(ForceShow));
 }
 
+	simulated function OnInit()
+	{	
+		super.OnInit();
+
+		if( `ISCONTROLLERACTIVE )
+		{
+			UpdateGamepadFocus();
+		}
+	}
+
+simulated function UpdateGamepadFocus()
+{
+	if(List.ItemCount > 0)
+	{
+		List.SetSelectedIndex(0);
+		Navigator.SetSelected(List);
+	}
+
+	UpdateNavHelp();
+}
+
+simulated function UpdateNavHelp()
+{
+	if( `ISCONTROLLERACTIVE == false ) return; 
+
+	NavHelp.ClearButtonHelp();
+
+	NavHelp.AddBackButton(OnCancel);
+
+	//Toggle selection is constant
+	if(List.ItemCount > 0)
+		NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericToggle, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+
+	//TWO MODES:
+	if(SelectedCharacters.Length == 0) //NOTHING IS SELECTED
+	{		
+		NavHelp.AddLeftHelp(m_strCreateCharacter, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+		if(List.ItemCount > 0)
+			NavHelp.AddLeftHelp(m_strEditCharacter, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);			
+	}
+	else //ONE OR MORE ITEMS ARE SELECTED
+	{		
+		NavHelp.AddLeftHelp(m_strDeleteSelection, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
+		NavHelp.AddLeftHelp(m_strDeselectAll, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);				
+	}	
+
+	NavHelp.AddLeftHelp(m_strImportCharacter, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_LSCLICK_L3);
+	NavHelp.AddLeftHelp(m_strUpdateUsage, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RB_R1);
+	NavHelp.AddLeftHelp(m_strExportSelection, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.ICON_RT_R2);
+}
+
+simulated function SaveCharacterPool()
+{
+	CharacterPoolMgr.SaveCharacterPool();
+	Movie.Stack.PopFirstInstanceOfClass(class'UIProgressDialogue', false);
+}
+
+
 function CreateOptionsList()
 {
 	local int i;
 	local UIMechaListItem ListItem; 
-
 	
 	// list needs to be created backwards for depth sorting
 	for( i = NUM_OptionsListITEMS - 1; i >= 0; i-- )
@@ -193,11 +255,16 @@ function CreateOptionsList()
 	// ------------------------------------------------------------------------
 	// Random vs. Pool usage dropdown: 
 	ListItem = UIMechaListItem(OptionsList.GetItem(eUICP_Usage));
+	
 	ListItem.UpdateDataDropdown(m_strUsage_Desc, GetCharacterPoolDropdownLabels(), m_iCurrentUsage, UpdateCharacterPoolUsage);
 	ListItem.BG.SetTooltipText(m_strUsage_Tooltip, , , 10, , , , 0.0f);
 	
 	ListItem.Dropdown.SetSelected(m_iCurrentUsage);
 
+	if (!Movie.IsMouseActive())
+	{
+		ListItem.SetDisabled(true);
+	}
 	// ------------------------------------------------------------------------
 
 }
@@ -277,7 +344,11 @@ simulated function UpdateDisplay()
 			EditSoldier);
 	}
 
-	UpdateEnabledButtons();
+
+	if( `ISCONTROLLERACTIVE )
+		UpdateNavHelp();
+	else
+		UpdateEnabledButtons();
 }
 
 simulated function OnReceiveFocus()
@@ -286,6 +357,7 @@ simulated function OnReceiveFocus()
 	super.OnReceiveFocus();
 	UpdateData();
 	ForceShow();
+	UpdateGamepadFocus();
 }
 
 simulated function OnLoseFocus()
@@ -307,26 +379,68 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
 			OnCancel();
 			break; 
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+			if(List.ItemCount > 0)
+				SimulateMouseClickOnCheckbox();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			if(SelectedCharacters.Length == 0 && List.ItemCount > 0) //edit
+				EditSoldier();
+			else if(SelectedCharacters.Length > 0) //unselect all
+			{
+				SelectedCharacters.Length = 0;
+				UpdateDisplay();
+			}
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
+			if(SelectedCharacters.Length == 0) //create new
+				OnButtonCallbackCreateNew();
+			else //delete
+				DeleteSoldiersDialogue();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_L3:
+			PC.Pres.UICharacterPool_ImportPools();
+			SelectedCharacters.Length = 0;
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
+			IncrementCharacterPoolUsage();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_RTRIGGER:
+			if (SelectedCharacters.Length > 0)
+			{
+				PC.Pres.UICharacterPool_ExportPools(SelectedCharacters);
+				SelectedCharacters.Length = 0;
+			}
+			return true;
 	}
 
 	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function SimulateMouseClickOnCheckbox()
+{
+	local UIMechaListItem ListItem;
+
+	ListItem = UIMechaListItem(List.GetSelectedItem());
+	if(ListItem != None)
+	{
+		if(ListItem.CheckBox != None)
+		{
+			ListItem.Checkbox.SetChecked(!ListItem.Checkbox.bChecked);
+		}
+	}
 }
 
 //------------------------------------------------------
 
 simulated function OnButtonCallback(UIButton kButton)
 {
-	local XComGameState_Unit			NewSoldierState;
+
 	local int i;
 
 	if (kButton == CreateButton)
 	{
-		NewSoldierState = CharacterPoolMgr.CreateSoldier('Soldier');
-		NewSoldierState.PoolTimestamp = class'X2StrategyGameRulesetDataStructures'.static.GetSystemDateTimeString();
-		CharacterPoolMgr.CharacterPool.AddItem(NewSoldierState);
-		PC.Pres.UICustomize_Menu( NewSoldierState, none ); // If sending in 'none', needs to create this character.
-		CharacterPoolMgr.SaveCharacterPool();	
-		SelectedCharacters.Length = 0;
+		OnButtonCallbackCreateNew();
 	}
 	else if (kButton == ImportButton)
 	{
@@ -360,6 +474,22 @@ simulated function OnButtonCallback(UIButton kButton)
 		SelectedCharacters.Length = 0;
 		UpdateDisplay();
 	}
+}
+
+simulated function OnButtonCallbackCreateNew()
+{
+	local XComGameState_Unit	NewSoldierState;
+
+	NewSoldierState = CharacterPoolMgr.CreateSoldier('Soldier');
+	NewSoldierState.PoolTimestamp = class'X2StrategyGameRulesetDataStructures'.static.GetSystemDateTimeString();
+	CharacterPoolMgr.CharacterPool.AddItem(NewSoldierState);
+	PC.Pres.UICustomize_Menu( NewSoldierState, none ); // If sending in 'none', needs to create this character.
+	//<workshop> CHARACTER_POOL RJM 2016/02/05
+	//WAS:
+	//CharacterPoolMgr.SaveCharacterPool();	
+	SaveCharacterPool();
+	//</workshop>
+	SelectedCharacters.Length = 0;
 }
 
 simulated function OnCancel()
@@ -416,7 +546,12 @@ simulated function SelectSoldier(UICheckbox CheckBox)
 	else
 		SelectedCharacters.RemoveItem(SelectedUnit);
 	
-	UpdateEnabledButtons();
+
+	if( `ISCONTROLLERACTIVE )
+		UpdateNavHelp();
+	else
+		UpdateEnabledButtons();
+
 }
 
 simulated function UpdateEnabledButtons()
@@ -457,6 +592,8 @@ simulated function UpdateEnabledButtons()
 		if (AllSelected)
 			SelectAllButton.DisableButton(m_strEverythingSelected);
 	}
+
+	//CreateOptionsList();
 }
 
 function XComGameState_Unit GetSoldierInSlot( int iSlot )
@@ -517,6 +654,9 @@ simulated public function DeleteSoldiersDialogueCallback(eUIAction eAction)
 	SelectedCharacters.Length = 0;
 	CharacterPoolMgr.SaveCharacterPool();
 	UpdateDisplay();
+	
+	if( `ISCONTROLLERACTIVE == false )
+		UpdateGamepadFocus();
 }
 
 public function array<string> GetCharacterPoolDropdownLabels()
@@ -541,6 +681,23 @@ public function UpdateCharacterPoolUsage(UIDropdown DropdownControl)
 	`ONLINEEVENTMGR.SaveProfileSettings();
 
 	Movie.Pres.PlayUISound(eSUISound_MenuSelect);
+}
+
+public function IncrementCharacterPoolUsage()
+{
+	local UIMechaListItem ListItem; 
+	
+	ListItem = UIMechaListItem(OptionsList.GetItem(eUICP_Usage));
+	if(m_iCurrentUsage +1 == ListItem.Dropdown.Items.Length)
+	{
+		ListItem.Dropdown.SetSelected(0);
+	}
+	else
+	{
+		ListItem.Dropdown.SetSelected(m_iCurrentUsage +1);
+	}
+
+	UpdateCharacterPoolUsage(ListItem.Dropdown);
 }
 
 

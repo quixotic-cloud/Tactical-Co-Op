@@ -3945,6 +3945,11 @@ function array<StateObjectReference> GetTradingPostItems()
 		}
 	}
 
+	//<workshop> BLACK_MARKET_FIXES, BET, 2016-04-22
+	//INS:
+	class'XComGameState_Item'.static.FilterOutGoldenPathItems(TradingPostItems);
+	//</workshop>
+
 	return TradingPostItems;
 }
 
@@ -7191,10 +7196,12 @@ function StartUFOChase(StateObjectReference UFORef)
 	UFOState.FlyTo(self); // Tell the UFO to follow the Avenger
 }
 
-final function SetPendingPointOfTravel(const out XComGameState_GeoscapeEntity GeoscapeEntity, optional bool bInstantCamInterp = false)
+//final function SetPendingPointOfTravel(const out XComGameState_GeoscapeEntity GeoscapeEntity, optional bool bInstantCamInterp = false)
+final function SetPendingPointOfTravel(const out XComGameState_GeoscapeEntity GeoscapeEntity, optional bool bInstantCamInterp = false, optional bool bRTB = false)
 {
 	local XComGameState NewGameState;
 	local XComGameState_HeadquartersXCom XComHQ;
+	local UIStrategyMapItem MapItem;
 
 	NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("Set Pending Point Of Travel");
 	XComHQ = XComGameState_HeadquartersXCom(NewGameState.CreateStateObject(class'XComGameState_HeadquartersXCom', ObjectID));
@@ -7203,6 +7210,14 @@ final function SetPendingPointOfTravel(const out XComGameState_GeoscapeEntity Ge
 
 	NewGameState.AddStateObject(XComHQ);
 	`XCOMGAME.GameRuleset.SubmitGameState(NewGameState);
+	MapItem = `HQPRES.StrategyMap2D.GetMapItem(GeoscapeEntity);
+	if (MapItem != none && !bRTB)
+	{
+		//bsg-jneal (8.17.16): set the last map item to the selected point of travel then select it, this fixes an issue where the strategy map would focus back on a previously selected different map item incorrectly because LastSelectedMapItem was not updated before opening screens like Mission Ops.
+		`HQPRES.StrategyMap2D.LastSelectedMapItem = MapItem;
+		`HQPRES.StrategyMap2D.SelectLastSelectedMapItem();
+		//bsg-jneal (8.17.16): end
+	}
 
 	// Trigger an update of flight status for the Skyanger/Avenger
 	XComHQ.UpdateFlightStatus(bInstantCamInterp);
@@ -7505,6 +7520,8 @@ function OnLanded()
 	
 	// Show map UI elements which were hidden while flying
 	PresLayer.StrategyMap2D.SetUIState(eSMS_Default);
+
+	PresLayer.StrategyMap2D.SelectedMapItem = none; //bsg-jneal (8.17.16): when we land at a new location, clear the currently selected map item so it can be properly refocused and reselected
 
 	OnFlightCompleted(TargetEntity, true);
 }

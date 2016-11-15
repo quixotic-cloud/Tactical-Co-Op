@@ -55,23 +55,24 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	// Create Add / Remove Slot + Launch Tactical Map buttons
 	m_kAddUnitButton = Spawn(class'UIButton', m_kContainer);
-	m_kAddUnitButton.InitButton('', "ADD UNIT", AddSlot, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_kAddUnitButton.InitButton('', "ADD UNIT", AddSlot, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
 	m_kAddUnitButton.SetPosition(320, 10);
+	m_kAddUnitButton.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_X_SQUARE);
 
 	m_kRemoveUnitButton = Spawn(class'UIButton', m_kContainer);
-	m_kRemoveUnitButton.InitButton('', "REMOVE UNIT", RemoveSlot, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_kRemoveUnitButton.InitButton('', "REMOVE UNIT", RemoveSlot, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
 	m_kRemoveUnitButton.SetPosition(480, 10);
+	m_kRemoveUnitButton.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_Y_TRIANGLE);
 
 	m_kNewSquadButton = Spawn(class'UIButton', m_kContainer);
-	m_kNewSquadButton.InitButton('', "NEW SQUAD", NewSquad, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_kNewSquadButton.InitButton('', "NEW SQUAD", NewSquad, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
 	m_kNewSquadButton.SetPosition(680, 10);
+	m_kNewSquadButton.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_RB_R1);
 
 	m_kLaunchButton = Spawn(class'UIButton', m_kContainer);
-	if(!Movie.Stack.IsInStack(class'UITacticalQuickLaunch'))
-		m_kLaunchButton.InitButton('', "LAUNCH", LaunchTacticalMap, eUIButtonStyle_BUTTON_WHEN_MOUSE);
-	else
-		m_kLaunchButton.InitButton('', "SAVE & EXIT", LaunchTacticalMap, eUIButtonStyle_BUTTON_WHEN_MOUSE);
+	m_kLaunchButton.InitButton('', "SAVE & EXIT", LaunchTacticalMap, (`ISCONTROLLERACTIVE) ? eUIButtonStyle_HOTLINK_WHEN_SANS_MOUSE : eUIButtonStyle_NONE);
 	m_kLaunchButton.SetPosition(kBG.width - 160, 10);
+	m_kLaunchButton.SetGamepadIcon(class'UIUtilities_Input'.const.ICON_START);
 	
 	// Add divider line
 	kLine = Spawn(class'UIPanel', m_kContainer);
@@ -99,6 +100,8 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	// Load units from GameState
 	LoadUnits();
+	Navigator.SetSelected(m_kSoldierList);
+	m_kSoldierList.SetSelectedIndex(0);
 }
 
 simulated private function CreateColumnHeader(string label)
@@ -206,7 +209,10 @@ simulated function LoadUnits()
 		UnitSlot = UITacticalQuickLaunch_UnitSlot(m_kSoldierList.CreateItem(class'UITacticalQuickLaunch_UnitSlot'));
 		UnitSlot.LoadTemplatesFromCharacter(Unit, GameState); // load template data first, then init
 		UnitSlot.InitSlot();
-		m_kSoldierList.MoveItemToTop(UnitSlot);
+		
+		if( `ISCONTROLLERACTIVE == false )
+			m_kSoldierList.MoveItemToTop(UnitSlot);
+			
 		createdUnits = true;
 	}
 
@@ -275,16 +281,29 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 		return false;
 
 	bHandled = true;
+	if (m_kSoldierList.OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
 
 	switch( cmd )
 	{
-	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
-	case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
-	case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-	case class'UIUtilities_Input'.const.FXS_BUTTON_START:
-		if(m_kSoldierList.ItemCount > 0)
-			LaunchTacticalMap(none);
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X :
+		AddSlot(none);
 		break;
+	case class'UIUtilities_Input'.const.FXS_BUTTON_Y :
+		RemoveSlot(none);
+		break;
+	case class'UIUtilities_Input'.const.FXS_BUTTON_START :
+		LaunchTacticalMap(none);
+		break;
+
+	//case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
+	//case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
+	//case class'UIUtilities_Input'.const.FXS_BUTTON_START:
+	//	if(m_kSoldierList.ItemCount > 0)
+	//		LaunchTacticalMap(none);
+	//	break;
 
 	case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:

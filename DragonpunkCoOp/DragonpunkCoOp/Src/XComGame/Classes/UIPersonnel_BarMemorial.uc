@@ -22,7 +22,7 @@ simulated function UpdateData()
 	{
 		Unit = XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(HQState.DeadCrew[i].ObjectID));
 
-		if(Unit.IsASoldier() && !Unit.IsAlive())
+		if(Unit.IsSoldier() && !Unit.IsAlive())
 		{
 			m_arrDeceased.AddItem(Unit.GetReference());
 		}

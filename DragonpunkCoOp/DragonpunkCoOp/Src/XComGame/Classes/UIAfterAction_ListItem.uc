@@ -22,6 +22,7 @@ var localized string m_strKillsLabel;
 var UIImage PsiMarkup;
 var UIButton PromoteButton;
 var bool bShowPortrait;
+var bool m_bCanPromote;
 
 simulated function UIAfterAction_ListItem InitListItem()
 {
@@ -90,6 +91,9 @@ simulated function UpdateData(optional StateObjectReference UnitRef)
 	WorldInfo.RemoteEventListeners.AddItem(self); //Listen for the remote event that tells us when we can capture a portrait
 
 	bCanPromote = Unit.ShowPromoteIcon(); 
+	//If there's no promote icon, the list item shouldn't be navigable
+	bIsNavigable = bCanPromote;
+	m_bCanPromote = bCanPromote; //stores a non-local version of the boolean
 
 	// Don't show class label for rookies since their rank is shown which would result in a duplicate string
 	if(Unit.GetRank() > 0)
@@ -125,6 +129,23 @@ simulated function UpdateData(optional StateObjectReference UnitRef)
 		DisableNavigation();
 		Navigator.SelectFirstAvailable();
 	}
+	Navigator.Clear();
+}
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	switch (cmd)
+	{
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+			OnClickedPromote(None);
+			return true;
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
 }
 
 simulated function OnClickedPromote(UIButton Button)
@@ -238,6 +259,25 @@ simulated function AS_SetUnitHealth(int CurrentHP, int MaxHP)
 	mc.EndOp();
 }
 
+simulated function OnReceiveFocus()
+{
+	super.OnReceiveFocus();
+
+	if(PromoteButton != None && m_bCanPromote)
+	{
+		PromoteButton.OnReceiveFocus();
+	}
+}
+
+simulated function OnLoseFocus()
+{
+	super.OnLoseFocus();
+
+	if(PromoteButton != None)
+	{
+		PromoteButton.OnLoseFocus();
+	}
+}
 defaultproperties
 {
 	LibID = "AfterActionListItem";

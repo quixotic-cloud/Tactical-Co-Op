@@ -77,19 +77,27 @@ simulated function RefreshNav()
 
 	NavHelp.ClearButtonHelp();
 
-	if( !bResistanceReport )
-	{
-		if( ActiveDarkEvents.Length > 0 )
-		{
-			if( bShowActiveEvents )
-				NavHelp.AddCenterHelp(m_strShowPendingButton, , FlipScreenMode);
-			else
-				NavHelp.AddCenterHelp(m_strShowActiveButton, , FlipScreenMode);
-		}
-	}
-
 	// Carry On
 	NavHelp.AddBackButton(OnContinueClicked);
+	if ( `ISCONTROLLERACTIVE && bResistanceReport)
+	{
+		NavHelp.AddContinueButton();
+	}
+
+	if( !bResistanceReport )
+	{
+		if( ALIENHQ().ActiveDarkEvents.Length > 0 )
+		{
+			if (bShowActiveEvents)
+			{
+				NavHelp.AddCenterHelp(m_strShowPendingButton, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE, FlipScreenMode);
+			}
+			else
+			{
+				NavHelp.AddCenterHelp(m_strShowActiveButton, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_Y_TRIANGLE, FlipScreenMode);
+			}
+		}
+	}
 }
 
 simulated function BuildTitlePanel()
@@ -215,10 +223,12 @@ simulated function BuildDarkEventPanel(int Index, bool bActiveDarkEvent)
 	if(bActiveDarkEvent)
 	{
 		DarkEventState = XComGameState_DarkEvent(History.GetGameStateForObjectID(ALIENHQ().ActiveDarkEvents[Index].ObjectID));
+		ActiveDarkEvents[Index] = DarkEventState.GetReference();
 	}
 	else
 	{
 		DarkEventState = XComGameState_DarkEvent(History.GetGameStateForObjectID(ALIENHQ().ChosenDarkEvents[Index].ObjectID));
+		ChosenDarkEvents[Index] = DarkEventState.GetReference();
 	}
 	
 	if(DarkEventState != none)
@@ -226,8 +236,17 @@ simulated function BuildDarkEventPanel(int Index, bool bActiveDarkEvent)
 
 		if(DarkEventState.bSecretEvent) 
 		{
-			UnlockButtonLabel = m_strReveal;
-			ChosenDarkEvents[Index] = DarkEventState.GetReference();
+			if( `ISCONTROLLERACTIVE )
+			{
+			
+				UnlockButtonLabel = class'UIUtilities_Text'.static.InjectImage(
+					class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE, 20, 20, -10) @ m_strReveal;
+			}
+			else
+			{
+				UnlockButtonLabel = m_strReveal;
+				ChosenDarkEvents[Index] = DarkEventState.GetReference();
+			}
 			bCanAfford = XComHQ.CanAffordAllStrategyCosts(DarkEventState.RevealCost, CostScalars);
 
 			MC.BeginFunctionOp("UpdateDarkEventCardLocked");
@@ -247,7 +266,12 @@ simulated function BuildDarkEventPanel(int Index, bool bActiveDarkEvent)
 
 			Quote = DarkEventState.GetQuote();
 			QuoteAuthor = DarkEventState.GetQuoteAuthor();
-			ActiveDarkEvents[Index] = DarkEventState.GetReference();
+
+			//<workshop> MULTIPLE_SECRET_EVENT_REVEAL, BET, 2016-03-24
+			//This was wrong - a nonsecret chosen (non-active) dark event would be improperly cached
+			//DEL:
+			// ActiveDarkEvents[Index] = DarkEventState.GetReference();
+			//</workshop>
 
 			MC.BeginFunctionOp("UpdateDarkEventCard");
 			MC.QueueNumber(index);
@@ -274,6 +298,31 @@ simulated function OnRevealClicked(int idx)
 	
 	History = `XCOMHISTORY;
 
+	//<workshop> MULTIPLE_SECRET_EVENT_REVEAL, BET, 2016-03-24
+	//For the console version, we only have one button prompt to reveal a hidden dark event.
+	//There may be multiple dark events to reveal, though. (To the user, they are equivalent until revealed.)
+	//Pick the first one that we're able to reveal in this case.
+	//INS:
+	XComHQ = XComGameState_HeadquartersXCom(History.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
+	CostScalars.Length = 0;
+	if(idx == -1)
+	{
+		for(idx = 0; idx < ChosenDarkEvents.Length; idx++)
+		{
+			DarkEventState = XComGameState_DarkEvent(History.GetGameStateForObjectID(ChosenDarkEvents[idx].ObjectID));
+			bCanAfford = XComHQ.CanAffordAllStrategyCosts(DarkEventState.RevealCost, CostScalars);
+			if(DarkEventState != none && DarkEventState.bSecretEvent && bCanAfford)
+				break;
+		}
+	}
+
+	if(idx < 0 || idx >= ChosenDarkEvents.Length)
+	{
+		//No valid events to reveal; abort.
+		return;
+	}
+	//</workshop>
+
 	DarkEventState = XComGameState_DarkEvent(History.GetGameStateForObjectID(ChosenDarkEvents[idx].ObjectID));
 	XComHQ = XComGameState_HeadquartersXCom(History.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
 	CostScalars.Length = 0;
@@ -287,7 +336,10 @@ simulated function OnRevealClicked(int idx)
 		NewGameState.AddStateObject(DarkEventState);
 		DarkEventState.RevealEvent(NewGameState);
 		`XCOMGAME.GameRuleset.SubmitGameState(NewGameState);
-		ChosenDarkEvents.Remove(idx, 1);
+		//<workshop> MULTIPLE_SECRET_EVENT_REVEAL, BET, 2016-03-24
+		//DEL:
+		//ChosenDarkEvents.Remove(idx, 1); //This was wrong - see prior comment about accounting for non-secret non-active events
+		//</workshop>
 		BuildDarkEventPanel(idx, false);
 	}
 }
@@ -302,9 +354,8 @@ simulated function CloseScreen()
 {
 	local XComHeadquartersCheatManager CheatMgr;
 
-	super.CloseScreen();
-	
 	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
+	super.CloseScreen();	
 
 	if (bResistanceReport)
 	{
@@ -342,7 +393,46 @@ simulated function OnMouseEvent(int cmd, array<string> args)
 	}
 }
 
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+	
+	switch (cmd)
+	{
+		case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+			if (bResistanceReport)
+			{
+				OnContinueClicked();
+			}
+			
+			return true;
 
+		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
+			OnContinueClicked();
+			return true;	
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+			if (!bShowActiveEvents)
+			{
+				OnRevealClicked(-1); //Changed parameter from 2 to -1; Added handling code within OnRevealClicked. -MULTIPLE_SECRET_EVENT_REVEAL, BET, 2016-03-24 
+			}
+
+			return true;	
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_Y:
+			if (ALIENHQ().ActiveDarkEvents.Length > 0)
+			{
+				FlipScreenMode();
+			}
+
+			return true;		
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
 //-------------- GAME DATA HOOKUP --------------------------------------------------------
 
 defaultproperties

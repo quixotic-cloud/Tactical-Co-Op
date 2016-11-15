@@ -11,6 +11,11 @@ class UIFacility_ProvingGround extends UIFacility;
 var public UIEventQueue m_NewBuildQueue;
 var public UIFacility_ResearchProgress m_BuildProgress;
 
+var localized string m_strEditQueue;
+var localized string m_strMoveItemUp;
+var localized string m_strMoveItemDown;
+var localized string m_strRemoveItem;
+
 var public localized string m_strStartProject;
 var public localized string m_strProjectedHours;
 var public localized string m_strProjectedDays;
@@ -35,8 +40,12 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_NewBuildQueue = Spawn(class'UIEventQueue', self).InitEventQueue();
 	m_BuildProgress = Spawn(class'UIFacility_ResearchProgress', self).InitResearchProgress();
 
+	Navigator.OnSelectedIndexChanged = NavigatorSelectionChanged;
+	Navigator.SelectFirstAvailable();
+
 	UpdateBuildQueue();
 	UpdateBuildProgress();
+	RealizeNavHelp();
 
 	if (NeedResearchReportPopup(TechRefs))
 	{
@@ -47,6 +56,33 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 			// Check for additional unlocks from this tech to generate popups
 			TechState = XComGameState_Tech(`XCOMHISTORY.GetGameStateForObjectID(TechRefs[idx].ObjectID));
 			TechState.DisplayTechCompletePopups();
+		}
+	}
+}
+
+simulated function NavigatorSelectionChanged(int newIndex)
+{
+	RealizeNavHelp();
+}
+
+simulated function RealizeNavHelp()
+{
+	super.RealizeNavHelp();
+
+	if(`ISCONTROLLERACTIVE)
+	{
+		if(Navigator.GetSelected() == m_NewBuildQueue)
+		{
+			NavHelp.ClearButtonHelp();
+			NavHelp.bIsVerticalHelp = true;
+			NavHelp.AddBackButton(OnCancel);
+			NavHelp.AddLeftHelp(m_strRemoveItem, class'UIUtilities_Input'.const.ICON_LSCLICK_L3);
+			NavHelp.AddLeftHelp(m_strMoveItemDown, class'UIUtilities_Input'.const.ICON_LT_L2);
+			NavHelp.AddLeftHelp(m_strMoveItemUp, class'UIUtilities_Input'.const.ICON_RT_R2);
+		}
+		else if(m_NewBuildQueue.GetListItemCount() > 1)
+		{
+			NavHelp.AddLeftHelp(m_strEditQueue, class'UIUtilities_Input'.const.ICON_LSCLICK_L3);
 		}
 	}
 }
@@ -271,28 +307,6 @@ simulated function OnChooseProject()
 
 // ------------------------------------------------------------
 
-simulated function bool OnUnrealCommand(int cmd, int arg)
-{
-	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
-		return false;
-
-	switch (cmd)
-	{
-	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
-	case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
-	case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
-		OnChooseProject();
-		return true;
-
-	case class'UIUtilities_Input'.const.FXS_BUTTON_B:
-	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
-	case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
-		OnCancel();
-		return true;
-	}
-
-	return super.OnUnrealCommand(cmd, arg);
-}
 
 simulated function RealizeStaffSlots()
 {
@@ -308,7 +322,7 @@ simulated function OnLoseFocus()
 		m_kTitle.Hide();
 
 	m_NewBuildQueue.DeactivateButtons();
-}
+} 
 
 simulated function OnReceiveFocus()
 {
@@ -345,6 +359,45 @@ function bool NeedResearchReportPopup(out array<StateObjectReference> TechRefs)
 
 	return bNeedPopup;
 }
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if(!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+		return false;
+	
+	if(Navigator.GetSelected() != m_NewBuildQueue && m_NewBuildQueue.GetListItemCount() > 1 && cmd == class'UIUtilities_Input'.const.FXS_BUTTON_L3)
+	{
+		if(Navigator.GetSelected() != none)
+			Navigator.GetSelected().OnLoseFocus();
+
+		m_NewBuildQueue.EnableNavigation();
+		m_NewBuildQueue.Navigator.SelectFirstAvailable();
+		Navigator.SetSelected(m_NewBuildQueue);
+		RealizeNavHelp();
+		return true;
+	}
+	
+	if(Navigator.GetSelected() == m_NewBuildQueue)
+	{
+		if(cmd == class'UIUtilities_Input'.const.FXS_BUTTON_B || cmd == class'UIUtilities_Input'.const.FXS_KEY_ESCAPE)
+		{
+			m_NewBuildQueue.DeactivateButtons();
+			m_NewBuildQueue.DisableNavigation();
+			Navigator.SelectFirstAvailable();
+			RealizeNavHelp();
+		}
+		else
+		{
+			if(!m_NewBuildQueue.OnUnrealCommand(cmd, arg))
+				m_NewBuildQueue.Navigator.OnUnrealCommand(cmd, arg);
+		}
+
+		return true; // consume all events if build queue is being manipulated
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
+
 
 //==============================================================================
 

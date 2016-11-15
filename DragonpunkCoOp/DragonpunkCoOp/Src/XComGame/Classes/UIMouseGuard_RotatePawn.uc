@@ -18,13 +18,14 @@ var Rotator ActorRotation;
 var Vector2D MouseLocation;
 var Actor ActorPawn;
 
+var private Vector2D StickVector;
+var config float StickRotationMultiplier;
 var config float DragRotationMultiplier;
 var config float WheelRotationMultiplier;
 
 simulated function SetActorPawn(Actor NewPawn, optional Rotator NewRotation)
 {
 	local Rotator ZeroRotation;
-	local XComHumanPawn HumanPawn;
 
 	ActorPawn = NewPawn;
 	if(ActorPawn != none)
@@ -36,13 +37,12 @@ simulated function SetActorPawn(Actor NewPawn, optional Rotator NewRotation)
 		ActorRotation = NewRotation;
 	else if(ActorRotation == ZeroRotation && ActorPawn != none)
 		ActorRotation = ActorPawn.Rotation;
+}
 
-	HumanPawn = XComHumanPawn(ActorPawn);
-	if( HumanPawn != None )
-	{
-		HumanPawn.CustomizationRotation = ActorRotation;
-		HumanPawn.CustomizationRotationSet = true;
-	}
+simulated function UpdateStickVector(float newX, float newY)
+{
+	StickVector.X = newX;
+	bRotatingPawn = newX > 0.2f || newX < -0.2f;
 }
 
 simulated function OnUpdate()
@@ -53,15 +53,17 @@ simulated function OnUpdate()
 	local Quat ResultRotation;
 	local Rotator RotatorLerp;
 	local float RotatorDiff;
-	local XComHumanPawn HumanPawn;
-	
-	HumanPawn = XComHumanPawn(ActorPawn);
-	if( ActorPawn != none && HumanPawn != None )
+
+	if( ActorPawn != none )
 	{
 		if(bRotatingPawn && bCanRotate)
 		{
 			MouseDelta = Movie.Pres.m_kUIMouseCursor.m_v2MouseFrameDelta;
 			ActorRotation.Yaw += -1 * MouseDelta.X * DragRotationMultiplier;
+			if( `ISCONTROLLERACTIVE )
+			{
+				ActorRotation.Yaw -= 1.0 * StickVector.X * StickRotationMultiplier;
+				}
 		}
 	
 		RotatorDiff = RDiff(ActorPawn.Rotation, ActorRotation);
@@ -72,8 +74,7 @@ simulated function OnUpdate()
 	
 			ResultRotation = QuatSlerp(StartRotation, GoalRotation, 0.1f, true);
 			RotatorLerp = QuatToRotator(ResultRotation);
-			HumanPawn.CustomizationRotation = RotatorLerp;
-			HumanPawn.CustomizationRotationSet = true;
+			ActorPawn.SetRotation(RotatorLerp);
 		}
 	}
 }
@@ -113,15 +114,21 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 	if(bCanRotate)
 	{
-	switch( cmd )
-	{
-	case class'UIUtilities_Input'.const.FXS_MOUSE_SCROLL_DOWN:
-		if(bMouseIn) RotateInPlace(-1);
-		return true;
-	case class'UIUtilities_Input'.const.FXS_MOUSE_SCROLL_UP:
-		if(bMouseIn) RotateInPlace(1);
-		return true;
-	}
+		switch( cmd )
+		{
+		case class'UIUtilities_Input'.const.FXS_MOUSE_SCROLL_DOWN:
+			if(bMouseIn) RotateInPlace(-1);
+			return true;
+		case class'UIUtilities_Input'.const.FXS_MOUSE_SCROLL_UP:
+			if(bMouseIn) RotateInPlace(1);
+			return true;
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_RSTICK_LEFT:
+			RotateInPlace(1);
+			return true;
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_RSTICK_RIGHT:
+			RotateInPlace(-1);
+			return true;
+		}
 	}
 
 	return super.OnUnrealCommand(cmd, arg);
@@ -168,6 +175,7 @@ simulated function OnRemoved()
 	SetActorPawn(none);
 	super.OnRemoved();
 }
+
 simulated function SetCanRotate(bool Rotate)
 {
 	bCanRotate = Rotate;

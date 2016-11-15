@@ -10,7 +10,10 @@ var bool bForceShowGrid;
 var localized string MenuPause;
 var localized string MenuGridOn;
 var localized string MenuGridOff;
+var localized string BuildFacilities;
 
+var array<int> shortcutRoomIndices;
+var int ShortcutIndex;
 //----------------------------------------------------------------------------
 // MEMBERS
 
@@ -48,6 +51,9 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	FacilityOverlays.Sort(SortFacilityOverlaysByMapIndex);
 
 	InitializeNavigationGrid(); 
+	Navigator.OnlyUsesNavTargets = true;
+	Navigator.SetSelected(FacilityOverlays[15]);
+	ShortcutIndex = -1;
 
 	SetBorderSize(Movie.UI_RES_X * 0.9, Movie.UI_RES_Y * 0.9);
 
@@ -67,6 +73,60 @@ simulated function OnInit()
 	SelectedPanel = Navigator.GetSelected(); 
 	if( SelectedPanel!= none )
 		SelectedPanel.OnLoseFocus();
+	Navigator.SetSelected(FacilityOverlays[15]);
+	Navigator.OnSelectedIndexChanged = OnSelectedRoomChanged;
+}
+simulated function LookAtSelectedRoom()
+{
+	local array<vector> RoomCorners;
+	local Vector RoomLocation;
+
+	RoomCorners = UIFacilityGrid_FacilityOverlay(Navigator.GetSelected()).Corners;
+	RoomLocation.X = RoomCorners[0].X + RoomCorners[1].X;
+	RoomLocation.Z = RoomCorners[0].Z + RoomCorners[1].Z;
+	RoomLocation.X /= 2.0f;
+	RoomLocation.Z /= 2.0f;
+	XComHQPresentationLayer(Movie.Pres).GetCamera().LookAtLocation(RoomLocation);
+}
+
+simulated function OnSelectedRoomChanged(int NewIndex)
+{
+	local UIAvengerShortcuts AvengerShortcuts;
+	local int i, j;
+
+	//This changes the look at point to a room but from an outside perspective.
+	if (NewIndex != INDEX_NONE)
+	{
+		LookAtSelectedRoom();
+	}
+
+	UnHighlightAvengerShortcuts();
+
+	AvengerShortcuts = UIAvengerHUD(Movie.Stack.GetScreen(class'UIAvengerHUD')).Shortcuts;
+	if (AvengerShortcuts != none)
+	{
+		AvengerShortcuts.HighlightRoomButton(UIFacilityGrid_FacilityOverlay(Navigator.GetSelected()).GetFacility().GetReference());
+	}
+
+	for (i = 0; i < FacilityOverlays.Length; i++)
+	{
+		if (UIFacilityGrid_FacilityOverlay(Navigator.GetSelected()) == FacilityOverlays[i])
+		{
+			for (j = 0; j < shortcutRoomIndices.Length; j++)
+			{
+				if (i == shortcutRoomIndices[j])
+				{
+					ShortcutIndex = j;
+				}
+			}
+		}
+	}
+
+	//Check to see if Construction mode is active
+	//If it is, then update the navhelp for that screen
+	//(must be done here because UIBuildFacilities does not have it's own navigator to detect index changes)
+	if(Movie.Pres.ScreenStack.GetScreen(class'UIBuildFacilities') != None)
+		UIBuildFacilities(Movie.Pres.ScreenStack.GetScreen(class'UIBuildFacilities')).UpdateNavHelp();
 }
 
 simulated function UpdateData()
@@ -135,6 +195,8 @@ simulated function InitializeNavigationGrid()
 {
 	local UIFacilityGrid_FacilityOverlay FacilityOverlay, CommandersQuarters, CIC, Armory, Engineering, PowerCore, LivingQuarters, Memorial;
 	
+	local int ShadowChamberIndex;
+	local int i;
 	//CORE FACILITIES: ==============================================
 
 	PowerCore = FacilityOverlays[1];
@@ -145,38 +207,59 @@ simulated function InitializeNavigationGrid()
 	LivingQuarters = FacilityOverlays[16];
 	Memorial = FacilityOverlays[18];
 
-	//PowerCore.Navigator.AddNavTargetLeft(None);
-	PowerCore.Navigator.AddNavTargetRight(FacilityOverlays[3]); //Top left of grid
-	PowerCore.Navigator.AddNavTargetUp(CommandersQuarters);
-	//PowerCore.Navigator.AddNavTargetDown(None);
+	if(UIAvengerHUD(Movie.Stack.GetScreen(class'UIAvengerHUD')).AvengerSecondButtonNavigation)
+	{
+		if(shortcutRoomIndices.Length == 0)
+		{
+			shortcutRoomIndices.AddItem(1);		//Research
+			shortcutRoomIndices.AddItem(17);	//Engineering
+			shortcutRoomIndices.AddItem(2);		//Armory
+			shortcutRoomIndices.AddItem(0);		//Command
 
-	//CommandersQuarters.Navigator.AddNavTargetLeft(none);
+			ShadowChamberIndex = GetShadowChamberIndex();
+			if(ShadowChamberIndex != -1)
+				shortcutRoomIndices.AddItem(ShadowChamberIndex);
+		}
+	}
+
+	for(i = 0; i < 19; ++i)
+	{
+		FacilityOverlays[i].Navigator.ClearAllNavigationTargets();
+		FacilityOverlays[i].Navigator.OnlyUsesNavTargets = true;
+	}
+	PowerCore.Navigator.AddNavTargetRight(FacilityOverlays[9]);
+	PowerCore.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[3]);
+	PowerCore.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[12]);
 	CommandersQuarters.Navigator.AddNavTargetRight(CIC);
 	CommandersQuarters.Navigator.AddNavTargetDown(LivingQuarters);
-	//CommandersQuarters.Navigator.AddNavTargetUp(none);
+	CommandersQuarters.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[15]);
 
-	CIC.Navigator.AddNavTargetLeft(CommandersQuarters);
+
+	CIC.Navigator.AddNavTargetLeft(LivingQuarters);
 	CIC.Navigator.AddNavTargetRight(Armory);
-	//CIC.Navigator.AddNavTargetUp(None);
 	CIC.Navigator.AddNavTargetDown(FacilityOverlays[5]);
+	CIC.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[4]);
+	CIC.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[0]);
 
 	Armory.Navigator.AddNavTargetLeft(FacilityOverlays[5]);
-	//Armory.Navigator.AddNavTargetRight(None);
-	//Armory.Navigator.AddNavTargetUp(None);
-	Armory.Navigator.AddNavTargetDown(Engineering);
-	
-	Engineering.Navigator.AddNavTargetLeft(FacilityOverlays[8]);
-	//Engineering.Navigator.AddNavTargetRight(None);
-	Engineering.Navigator.AddNavTargetUp(Memorial);
-	//Engineering.Navigator.AddNavTargetDown(None);
-	
-	//LivingQuarters.Navigator.AddNavTargetLeft(none);
-	LivingQuarters.Navigator.AddNavTargetRight(CIC);
-	LivingQuarters.Navigator.AddNavTargetDown(FacilityOverlays[4]); //Top center column 
-	LivingQuarters.Navigator.AddNavTargetUp(CommandersQuarters);
 
-	Memorial.Navigator.AddNavTargetLeft(FacilityOverlays[5]);
-	//Memorial.Navigator.AddNavTargetRight(None);
+	Armory.Navigator.AddNavTargetDown(Memorial);
+	Armory.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[15]);
+	Armory.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[8]);
+	
+	Engineering.Navigator.AddNavTargetLeft(FacilityOverlays[11]);
+	Engineering.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[8]);
+	Engineering.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[14]);
+	Engineering.Navigator.AddNavTargetUp(Memorial);
+	LivingQuarters.Navigator.AddNavTargetRight(CIC);
+	LivingQuarters.Navigator.AddNavTargetDown(FacilityOverlays[3]);
+	LivingQuarters.Navigator.AddNavTargetUp(CommandersQuarters);
+	
+	Memorial.Navigator.AddNavTargetLeft(FacilityOverlays[8]);
+	Memorial.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[2]);
+	Memorial.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[5]);
+	Memorial.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[11]);
+	Memorial.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[17]);
 	Memorial.Navigator.AddNavTargetUp(Armory);
 	Memorial.Navigator.AddNavTargetDown(Engineering);
 
@@ -187,7 +270,10 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay = FacilityOverlays[3];
 	FacilityOverlay.Navigator.AddNavTargetLeft(PowerCore);
 	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[4]);
-	FacilityOverlay.Navigator.AddNavTargetUp(CIC);
+
+	FacilityOverlay.Navigator.AddNavTargetUp(LivingQuarters);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[1]);
 	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[6]);
 
 
@@ -195,7 +281,11 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay = FacilityOverlays[4];
 	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[3]);
 	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[5]);
-	FacilityOverlay.Navigator.AddNavTargetUp(LivingQuarters);
+	FacilityOverlay.Navigator.AddNavTargetUp(CIC);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[16]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[15]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[8]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[6]);
 	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[7]);
 
 	// Top Right 5
@@ -204,6 +294,10 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay.Navigator.AddNavTargetRight(Armory);
 	FacilityOverlay.Navigator.AddNavTargetUp(CIC);
 	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[8]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[15]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[2]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[18]);
 
 	// CENTER ROW 1 -------------------------------------------------------
 
@@ -213,6 +307,9 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[7]);
 	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[3]);
 	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[9]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[1]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[4]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[10]);
 
 	// Center middle 7
 	FacilityOverlay = FacilityOverlays[7];
@@ -220,6 +317,10 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[8]);
 	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[4]);
 	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[10]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[3]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[5]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[11]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[9]);
 
 	// Center right 8
 	FacilityOverlay = FacilityOverlays[8];
@@ -227,6 +328,10 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay.Navigator.AddNavTargetRight(Memorial);
 	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[5]);
 	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[11]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[4]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[2]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[17]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[10]);
 
 	// CENTER ROW 2 -------------------------------------------------------
 
@@ -236,6 +341,10 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[10]);
 	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[6]);
 	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[12]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[1]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[13]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[12]);
 
 	// Center middle 10
 	FacilityOverlay = FacilityOverlays[10];
@@ -243,6 +352,10 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[11]);
 	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[7]);
 	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[13]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[6]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[8]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[14]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[12]);
 
 	// Center right 11
 	FacilityOverlay = FacilityOverlays[11];
@@ -250,6 +363,10 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay.Navigator.AddNavTargetRight(Engineering);
 	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[8]);
 	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[14]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[18]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[17]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[13]);
 
 	// BOTTOM ROW 3 -------------------------------------------------------
 
@@ -258,24 +375,124 @@ simulated function InitializeNavigationGrid()
 	FacilityOverlay.Navigator.AddNavTargetLeft(PowerCore);
 	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[13]);
 	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[9]);
-	//FacilityOverlay.Navigator.AddNavTargetDown(None);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[1]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[10]);
 
-	// Bottom middle 12
+	// Bottom middle 13
 	FacilityOverlay = FacilityOverlays[13];
 	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[12]);
 	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[14]);
 	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[10]);
-	//FacilityOverlay.Navigator.AddNavTargetDown(None);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[9]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[11]);
 
 	// Bottom right 14
 	FacilityOverlay = FacilityOverlays[14];
 	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[13]);
 	FacilityOverlay.Navigator.AddNavTargetRight(Engineering);
 	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[11]);
-	//FacilityOverlay.Navigator.AddNavTargetDown(None);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[10]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[17]);
+}
 
-	// Initialize for keyboard navigation 
-	Navigator.SetSelected(CIC);
+simulated function InitializeBuildNavigationGrid()
+{
+	local UIFacilityGrid_FacilityOverlay FacilityOverlay;
+	local int i;
+
+	for(i = 0; i < 19; ++i)
+	{
+		FacilityOverlays[i].Navigator.ClearAllNavigationTargets();
+		FacilityOverlays[i].Navigator.OnlyUsesNavTargets = true;
+	}
+
+	FacilityOverlay = FacilityOverlays[3];
+	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[4]);
+	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[6]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[7]);
+
+	FacilityOverlay = FacilityOverlays[4];
+	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[3]);
+	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[5]);
+	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[8]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[6]);
+
+	FacilityOverlay = FacilityOverlays[5];
+	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[4]);
+	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[8]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[7]);
+
+	FacilityOverlay = FacilityOverlays[6];
+	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[3]);
+	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[9]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[4]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[10]);
+
+	FacilityOverlay = FacilityOverlays[7];
+	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[6]);
+	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[8]);
+	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[4]);
+	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[10]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[3]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[5]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[9]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[11]);
+
+	FacilityOverlay = FacilityOverlays[8];
+	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[5]);
+	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[11]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[4]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[10]);
+
+	FacilityOverlay = FacilityOverlays[9];
+	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[10]);
+	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[6]);
+	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[12]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[13]);
+
+	FacilityOverlay = FacilityOverlays[10];
+	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[9]);
+	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[11]);
+	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[13]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[8]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownRight(FacilityOverlays[14]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[12]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[6]);
+
+	FacilityOverlay = FacilityOverlays[11];
+	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[10]);
+	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[8]);
+	FacilityOverlay.Navigator.AddNavTargetDown(FacilityOverlays[14]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[7]);
+	FacilityOverlay.Navigator.AddNavTargetDiagDownLeft(FacilityOverlays[13]);
+
+	FacilityOverlay = FacilityOverlays[12];
+	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[13]);
+	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[9]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[10]);
+
+	FacilityOverlay = FacilityOverlays[13];
+	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[12]);
+	FacilityOverlay.Navigator.AddNavTargetRight(FacilityOverlays[14]);
+	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[10]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[9]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpRight(FacilityOverlays[11]);
+
+	FacilityOverlay = FacilityOverlays[14];
+	FacilityOverlay.Navigator.AddNavTargetLeft(FacilityOverlays[13]);
+	FacilityOverlay.Navigator.AddNavTargetUp(FacilityOverlays[11]);
+	FacilityOverlay.Navigator.AddNavTargetDiagUpLeft(FacilityOverlays[10]);
+}
+
+simulated function SelectGeoscape()
+{
+	Navigator.GetSelected().OnLoseFocus();
+	Navigator.SetSelected(FacilityOverlays[15]);
 }
 
 simulated function UIFacilityGrid_FacilityOverlay GetOverlayForRoom( StateObjectReference RoomRef )
@@ -299,17 +516,23 @@ simulated function RefreshButtonHelp()
 	NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
 
 	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
 	NavHelp.AddGeoscapeButton();
 
-	//NavHelp.AddLeftHelp(MenuPause,,ClickPauseButton);
-	/*if( bForceShowGrid ) 
-		NavHelp.AddLeftHelp(MenuGridOn,,ToggleGrid);
-	else
-		NavHelp.AddLeftHelp(MenuGridOff,,ToggleGrid);*/
+	if (`ISCONTROLLERACTIVE)
+	{
+		if(!class'UIUtilities_Strategy'.static.IsInTutorial(true))
+			NavHelp.AddLeftHelp(BuildFacilities, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
+
+		NavHelp.AddSelectNavHelp();
+	}
 }
-//xcom2/main/XCOM2/XComGame/Mods/AnnounceDemo/Classes/UIAnnounceDemoShell.uc
+
 simulated function OnReceiveFocus()
 {
+	local int ShadowChamberIndex;
+	`log("UIFacilityGrid::OnReceiveFocus <<<<<<<<<<<<<<<<<<<<<<",,'DebugHQCamera');
+	
 	super.OnReceiveFocus();
 	
 	XComHeadquartersController(`HQPRES.Owner).SetInputState('HQ_FreeMovement');
@@ -320,6 +543,30 @@ simulated function OnReceiveFocus()
 	if( bForceShowGrid ) 
 		ActivateGrid(); 
 
+	//when receiving focus we need to check the whereabouts of shadow chamber, it's possible
+	//that it changed or it may or may not exist
+	if(UIAvengerHUD(Movie.Stack.GetScreen(class'UIAvengerHUD')).AvengerSecondButtonNavigation)
+	{
+		ShadowChamberIndex = GetShadowChamberIndex();
+		if(ShadowChamberIndex != -1)
+		{
+			//if we have only 4, then let's add
+			if(shortcutRoomIndices.Length == 4)
+				shortcutRoomIndices.AddItem(ShadowChamberIndex);
+			else
+				shortcutRoomIndices[shortcutRoomIndices.Length - 1] = ShadowChamberIndex;
+		}
+		else
+		{
+			if(shortcutRoomIndices.Length > 4)
+			{
+				//we have no shadow chamber but we have 4 indices
+				shortcutRoomIndices.Remove(4, 1);
+			}
+		}
+		ShortcutIndex = -1;
+	}
+	
 	RefreshButtonHelp();
 
 	if(`HQPRES.GetCamera().PreviousRoom != 'Base')
@@ -338,12 +585,14 @@ simulated function OnReceiveFocus()
 			SetTimer(`HQINTERPTIME, false, 'CameraTravelFinished');
 		}
 	}
+	OnSelectedRoomChanged(INDEX_NONE);
 }
 
 // allows us to only show the UI once the camera finishes moving back to base view. Otherwise all of the 2D UI
 // floats around strangely
 simulated function CameraTravelFinished()
 {
+	`log("CameraTravelFinished",,'DebugHQCamera');
 	//CALLING UP, to skip the timer check.
 	super.Show();
 }
@@ -406,6 +655,19 @@ simulated function ActivateGrid()
 	//The grid may be requested to activate beneath another screen. 
 	if( !bIsFocused )
 		Movie.Pres.SubscribeToUIUpdate(UpdateOverlayPositions);
+	InitializeBuildNavigationGrid();
+	FacilityOverlay = UIFacilityGrid_FacilityOverlay(Navigator.GetSelected());
+	if (FacilityOverlay == FacilityOverlays[0] || 
+		FacilityOverlay == FacilityOverlays[1] ||
+		FacilityOverlay == FacilityOverlays[2] ||
+		FacilityOverlay == FacilityOverlays[15] ||
+		FacilityOverlay == FacilityOverlays[16] ||
+		FacilityOverlay == FacilityOverlays[17] ||
+		FacilityOverlay == FacilityOverlays[18])
+	{
+		Navigator.GetSelected().OnLoseFocus();
+		Navigator.SetSelected(FacilityOverlays[7]);
+	}
 }
 
 simulated function DeactivateGrid()
@@ -426,6 +688,7 @@ simulated function DeactivateGrid()
 	//The grid may be requested to deactivate beneath another screen. 
 	if( !bIsFocused )
 		Movie.Pres.UnsubscribeToUIUpdate(UpdateOverlayPositions);
+	InitializeNavigationGrid();
 }
 
 public function ToggleGrid()
@@ -441,20 +704,218 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local bool bHandled;
 
+	bHandled = true;
+
+	if (!bIsVisible)
+	{
+		return false;
+	}
+	
+	if (class'UIUtilities_Strategy'.static.IsInTutorial(true))
+	{
+		if( Movie.Stack.IsCurrentClass(class'UIFacilityGrid'))
+		{
+			switch( cmd )
+			{
+			case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
+				if (arg == class'UIUtilities_Input'.const.FXS_ACTION_PRESS)
+				{
+					SetNextShortcutRoomAsSelected();
+				}
+				break;
+
+			case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
+				if (arg == class'UIUtilities_Input'.const.FXS_ACTION_PRESS)
+				{
+					SetPrevShortcutRoomAsSelected();
+				}
+				break;
+
+			default:
+				bHandled = false;
+				break;
+			}
+		}
+		else
+			bHandled = false;
+
+		return bHandled || super.OnUnrealCommand(cmd, arg);
+	}
+	
 	// Ensure we're at the top of the input stack - navigation commands should only be processed on top screen
 	if ( Movie.Stack.GetCurrentScreen() != self )
 		return false;
 
-	bHandled = true;
+	// This was moved to the top of the function to support some of the tutorial stuff as well.
+	//bHandled = true;
 
 	switch( cmd )
 	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+		if (arg == class'UIUtilities_Input'.const.FXS_ACTION_RELEASE)
+		{
+			`HQPRES.UIBuildFacilities();
+		}
+			
+		break;
 	default:
 		bHandled = false;
 		break;
 	}
 
+	if(UIAvengerHUD(Movie.Stack.GetScreen(class'UIAvengerHUD')).AvengerSecondButtonNavigation)
+	{
+		if(!bHandled)
+		{
+			if( Movie.Stack.IsCurrentClass(class'UIFacilityGrid'))
+			{
+				bHandled = true;
+				switch( cmd )
+				{
+				case class'UIUtilities_Input'.const.FXS_BUTTON_RBUMPER:
+					if (arg == class'UIUtilities_Input'.const.FXS_ACTION_PRESS)
+					{
+						SetNextShortcutRoomAsSelected();
+					}
+					break;
+
+				case class'UIUtilities_Input'.const.FXS_BUTTON_LBUMPER:
+					if (arg == class'UIUtilities_Input'.const.FXS_ACTION_PRESS)
+					{
+						SetPrevShortcutRoomAsSelected();
+					}
+					break;
+/*
+				case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_UP:
+				case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DOWN:
+				case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT:
+				case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT:
+				//<workshop> DIAGONAL_NAVIGATION kmartinez 2016-01-25
+				//INS:
+				case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_UP_LEFT:
+				case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_UP_RIGHT:
+				case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_DOWN_RIGHT:
+				case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_DIAG_DOWN_LEFT:
+				//</workshop>
+				case class'UIUtilities_Input'.const.FXS_DPAD_UP:
+				case class'UIUtilities_Input'.const.FXS_DPAD_DOWN:
+				case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+				case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+					if (arg == class'UIUtilities_Input'.const.FXS_ACTION_PRESS)
+					{
+						UnHighlightAvengerShortcuts();
+					}
+
+					bHandled = false;
+					break;
+*/
+				default:
+					bHandled = false;
+					break;
+				}
+			}
+		}
+	}
 	return bHandled || super.OnUnrealCommand(cmd, arg);
+}
+simulated function UnHighlightAvengerShortcuts()
+{
+	local UIAvengerShortcuts AvengerShortcuts;
+	if(ShortcutIndex == -1)
+		return;
+
+	AvengerShortcuts = UIAvengerHUD(Movie.Stack.GetScreen(class'UIAvengerHUD')).Shortcuts;
+	if(AvengerShortcuts != none)
+	{
+		AvengerShortcuts.HighlightShortcutButton(ShortcutIndex, false);
+	}
+	ShortcutIndex = -1;
+}
+simulated function SetNextShortcutRoomAsSelected()
+{
+	local UIAvengerShortcuts AvengerShortcuts;
+	local int previousIndex;
+
+	previousIndex = ShortcutIndex;
+	++ShortcutIndex;
+	if(ShortcutIndex >= shortcutRoomIndices.Length)
+		ShortcutIndex = 0;
+
+	Navigator.OnLoseFocus();
+	Navigator.SetSelected(FacilityOverlays[shortcutRoomIndices[ShortcutIndex]]);
+	
+	// Camera transition from farm view only occurs if the corresponding Shortcut/Category Tab button is enabled.
+	AvengerShortcuts = UIAvengerHUD(Movie.Stack.GetScreen(class'UIAvengerHUD')).Shortcuts;
+	if(AvengerShortcuts != none && !AvengerShortcuts.Categories[ShortcutIndex].Button.IsDisabled)
+		OnSelectedRoomChanged(0);	//param literally does not matter
+	if(AvengerShortcuts != none)
+	{
+		AvengerShortcuts.HighlightShortcutButton(previousIndex, false);
+		AvengerShortcuts.HighlightShortcutButton(ShortcutIndex, true);
+	}
+}
+
+simulated function SetPrevShortcutRoomAsSelected()
+{
+	local UIAvengerShortcuts AvengerShortcuts;
+	local int previousIndex;
+
+	previousIndex = ShortcutIndex;
+	--ShortcutIndex;
+	if(ShortcutIndex < 0)
+		ShortcutIndex = shortcutRoomIndices.Length - 1;
+
+	Navigator.OnLoseFocus();
+	Navigator.SetSelected(FacilityOverlays[shortcutRoomIndices[ShortcutIndex]]);
+	
+	// Camera transition from farm view only occurs if the corresponding Shortcut/Category Tab button is enabled.
+	AvengerShortcuts = UIAvengerHUD(Movie.Stack.GetScreen(class'UIAvengerHUD')).Shortcuts;
+	if(AvengerShortcuts != none && !AvengerShortcuts.Categories[ShortcutIndex].Button.IsDisabled)
+		OnSelectedRoomChanged(0);	//param literally does not matter
+		
+	if(AvengerShortcuts != none)
+	{
+		AvengerShortcuts.HighlightShortcutButton(previousIndex, false);
+		AvengerShortcuts.HighlightShortcutButton(ShortcutIndex, true);
+	}
+}
+
+simulated function int GetShadowChamberIndex()
+{
+	local XComGameState_HeadquartersXCom XComHQ;
+	local UIFacilityGrid_FacilityOverlay FacilityOverlay;
+	local XComGameState_FacilityXCom ShadowChamberFacility;
+	local int resultIndex;
+
+	XComHQ = XComGameState_HeadquartersXCom(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
+	ShadowChamberFacility = XComHQ.GetFacilityByName('ShadowChamber');
+	if(ShadowChamberFacility == none)
+		return -1;
+
+	resultIndex = 0;
+	foreach FacilityOverlays(FacilityOverlay)
+	{
+		if(FacilityOverlay.GetRoom().Facility.ObjectID == ShadowChamberFacility.ObjectID)
+		{
+			return resultIndex;
+		}
+		++resultIndex;
+	}
+	return -1;
+}
+
+simulated function SelectRoomByReference(StateObjectReference Reference)
+{
+	local int i;
+
+	for (i = 0; i < FacilityOverlays.Length; i++)
+	{
+		FacilityOverlays[i].OnLoseFocus();
+		if (FacilityOverlays[i].GetRoom().Facility.ObjectID == Reference.ObjectID)
+		{
+			Navigator.SetSelected(FacilityOverlays[i]);
+		}
+	}
 }
 
 simulated function int SortCorners( vector vA, vector vB )

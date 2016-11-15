@@ -21,6 +21,9 @@ var localized string m_strSaveAsNewLoadoutButtonText;
 var localized string m_strSaveNewInputDialogTitle;
 var localized string m_strRenameLoadoutButtonText;
 var localized string m_strRenameInputDialogTitle;
+var localized string m_strSaveLoadout;
+var localized string m_strSquadLoadoutSaveFailedTitle;
+var localized string m_strSquadLoadoutSaveFailedText;
 
 var UIPawnMgr m_kPawnMgr;
 var XComGameState UpdateState;
@@ -35,11 +38,12 @@ var string UIDisplayCam;
 var  XComGameState m_kSquadLoadout;
 var  XComGameState m_kOriginalSquadLoadout;
 var  XComGameState m_kTempLobbyLoadout;
-var XComGameState_Unit DirtiedUnit;
+var  XComGameState_Unit DirtiedUnit;
 var  bool m_bLoadoutDirty;
 var  bool m_bSavingLoadout;
 var  bool m_bBackingOut;
 var  bool m_bAllowEditing;
+var  bool m_bKeyboardUp;
 var vector MaleSoldierOffset;
 var vector FemaleSoldierOffset;
 
@@ -71,8 +75,15 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_kPawnMgr = Spawn( class'UIPawnMgr', Owner );
 	m_kPawnMgr.SetCheckGameState(m_kSquadLoadout);
 
-	m_kSlotList = Spawn(class'UIList', self);
-	m_kSlotList.InitList('', listX, -400, Movie.UI_RES_X - 20, 310, true).AnchorBottomLeft();
+	if( `ISCONTROLLERACTIVE )	
+	{
+		m_kSlotList = Spawn(class'UIList_SquadEditor', self);
+	}
+	else
+	{
+		m_kSlotList = Spawn(class'UIList', self);
+	}
+	m_kSlotList.InitList('', listX, -450, Movie.UI_RES_X - 20, 310, true).AnchorBottomLeft();
 	m_kSlotList.itemPadding = listItemPadding;
 
 	m_MissionInfo = Spawn(class'UISquadSelectMissionInfo', self);
@@ -93,16 +104,46 @@ simulated function OnInit()
 
 	CreatePawns();
 	UpdateNavHelp();
+	if( `ISCONTROLLERACTIVE ) Navigator.Clear();
 }
 
+simulated function UpdateGamepadFocus()
+{
+	local UIList_SquadEditor SquadList;
+
+	SquadList = UIList_SquadEditor(m_kSlotList);
+	SquadList.GetActiveListItem().OnReceiveFocus();
+}
+
+simulated function OnFirstListItemInited(UIPanel Panel)
+{
+	// bsg-cwade (7.10.16) : removed check so can still check details on squad
+	UpdateGamepadFocus();
+	// bsg-cwade (7.10.16) : end
+//</workshop>
+}
 function UpdateNavHelp()
 {
 	NavHelp.ClearButtonHelp();
 
 	NavHelp.AddBackButton(BackButtonCallback);
-	NavHelp.AddRightHelp(m_strReadyButtonText, , EditorReadyButtonCallback);
-	NavHelp.AddCenterHelp(m_strRenameLoadoutButtonText, , RenameLoadoutButtonCallback);
-	NavHelp.AddCenterHelp(m_strSaveAsNewLoadoutButtonText, , SaveAsNewLoadoutButtonCallback);
+	
+	if( `ISCONTROLLERACTIVE )
+	{
+		NavHelp.AddSelectNavHelp();
+		NavHelp.AddRightHelp(m_strReadyButtonText, class'UIUtilities_Input'.const.ICON_X_SQUARE, EditorReadyButtonCallback);
+		NavHelp.AddCenterHelp(class'UIUtilities_Text'.default.m_strGenericDetails, class'UIUtilities_Input'.const.ICON_LSCLICK_L3, InfoButtonCallback);
+		NavHelp.AddCenterHelp(m_strRenameLoadoutButtonText, class'UIUtilities_Input'.const.ICON_RSCLICK_R3, RenameLoadoutButtonCallback);
+		NavHelp.AddCenterHelp(m_strSaveAsNewLoadoutButtonText, class'UIUtilities_Input'.const.ICON_Y_TRIANGLE, SaveAsNewLoadoutButtonCallback);
+		NavHelp.AddCenterHelp(class'UIPauseMenu'.default.m_sSaveAndExitGame, class'UIUtilities_Input'.const.ICON_LT_L2,SaveAndExitCallback);
+	}
+	else
+	{
+		NavHelp.AddRightHelp(m_strReadyButtonText, "", EditorReadyButtonCallback);
+		NavHelp.AddCenterHelp(m_strRenameLoadoutButtonText, "", RenameLoadoutButtonCallback);
+		NavHelp.AddCenterHelp(m_strSaveAsNewLoadoutButtonText, "", SaveAsNewLoadoutButtonCallback);
+		NavHelp.AddCenterHelp(class'UIPauseMenu'.default.m_sSaveAndExitGame, "",SaveAndExitCallback);
+	}
 }
 
 function InitSquadCostPanels()
@@ -121,6 +162,8 @@ function InitSquadEditor(XComGameState kSquadLoadout)
 
 	CreateSquadInfoItems();
 	UpdateData();
+
+	Navigator.SetSelected(UnitInfos[0]);
 }
 
 simulated function XComUnitPawn CreatePawn(XComGameState_Unit UnitRef, int index)
@@ -259,6 +302,17 @@ function BackButtonCallback()
 	OnCancel();
 }
 
+function ShowWriteProfileFailedDialog()
+{
+	local TDialogueBoxData  kDialogData;
+
+	kDialogData.strTitle = m_strSquadLoadoutSaveFailedTitle;
+	kDialogData.strText = m_strSquadLoadoutSaveFailedText;
+	kDialogData.strAccept = class'UIDialogueBox'.default.m_strDefaultAcceptLabel;
+
+	Movie.Pres.UIRaiseDialog(kDialogData);
+}
+
 function SaveProfileSettingsComplete_SaveButton(bool bSuccess)
 {
 	`log(self $ "::" $ GetFuncName() @ `ShowVar(bSuccess),, 'uixcom_mp');
@@ -268,8 +322,12 @@ function SaveProfileSettingsComplete_SaveButton(bool bSuccess)
 	{
 		m_bLoadoutDirty = false;
 		DirtiedUnit = none;
+		UpdateData();
 	}
-	UpdateData();
+	else
+	{
+		ShowWriteProfileFailedDialog();
+	}
 }
 function SaveAsNewLoadoutButtonCallback()
 {
@@ -283,6 +341,16 @@ function RenameLoadoutButtonCallback()
 	DisplayRenameSquadDialog();
 }
 
+function SaveAndExitCallback()
+{
+	if(!m_bSavingLoadout)
+	{
+		m_kMPShellManager.AddSaveProfileSettingsCompleteDelegate(SaveTempLobbyLoadoutComplete);
+		m_bBackingOut = true;
+		SaveLoadout();
+	}
+}
+
 function EditorReadyButtonCallback()
 {
 	if(!m_bSavingLoadout)
@@ -290,6 +358,19 @@ function EditorReadyButtonCallback()
 		`log(self $ "::" $ GetFuncName() @ "Saving loadout...",, 'uixcom_mp');
 		m_kMPShellManager.AddSaveProfileSettingsCompleteDelegate(SaveTempLobbyLoadoutComplete);
 		SaveLoadout();
+	}
+}
+function InfoButtonCallback()
+{
+	local UIMPSquadSelect_ListItem ListItem;
+
+	if(m_kSlotList != None && m_kSlotList.GetSelectedItem() != None)
+	{
+		ListItem = UIMPSquadSelect_ListItem(m_kSlotList.GetSelectedItem());
+		if(ListItem != None)
+		{
+			ListItem.OnClickedInfoButton(ListItem.InfoButton);
+		}
 	}
 }
 
@@ -315,6 +396,7 @@ function SaveTempLobbyLoadoutComplete(bool bSuccess)
 	else
 	{
 		`warn(self $ "::" $ GetFuncName() @ "Failed to save temporary loadout");
+		ShowWriteProfileFailedDialog();
 	}
 	m_bSavingLoadout = false;
 }
@@ -413,13 +495,41 @@ function DisplaySaveAsNewSquadDialog()
 
 	MAX_CHARS = 50;
 
-	kData.strTitle = m_strSaveAsNewLoadoutButtonText;
-	kData.strInputBoxText = GetSquadLoadoutName();
-	kData.iMaxChars = MAX_CHARS;
-	kData.fnCallbackAccepted = SaveAsNewDialogCallback_Accept;
-	kData.fnCallbackCancelled = SaveAsNewDialogCallback_Cancel;
+//	if(`ISCONTROLLERACTIVE == false )
+//	{
+		kData.strTitle = m_strSaveAsNewLoadoutButtonText;
+		kData.strInputBoxText = GetSquadLoadoutName();
+		kData.iMaxChars = MAX_CHARS;
+		kData.fnCallbackAccepted = SaveAsNewDialogCallback_Accept;
+		kData.fnCallbackCancelled = SaveAsNewDialogCallback_Cancel;
 		
-	Movie.Pres.UIInputDialog(kData);
+		Movie.Pres.UIInputDialog(kData);
+/*	}
+	else
+	{
+		//<workshop> FAILED_KEYBOARD_BUG JAS 2016/05/19
+		//WAS:
+		//Movie.Pres.UIKeyboard(m_strSaveAsNewLoadoutButtonText,
+		//	GetSquadLoadoutName(),
+		//	VirtualKeyboard_OnSaveAsNewDialogAccepted,
+		//	VirtualKeyboard_OnSaveAsNewDialogCancelled,
+		//	false,
+		//	MAX_CHARS
+		//	);
+		//INS:
+		m_bKeyboardUp = Movie.Pres.UIKeyboard(m_strSaveAsNewLoadoutButtonText,
+			GetSquadLoadoutName(), 
+			VirtualKeyboard_OnSaveAsNewDialogAccepted, 
+			VirtualKeyboard_OnSaveAsNewDialogCancelled,
+			//<workshop> XR-018 JPS 2016/04/14
+			//WAS:
+			//false,
+			true,
+			//</workshop>
+			MAX_CHARS
+		);
+		//</workshop>
+	}*/
 
 	NavHelp.Hide();
 }
@@ -441,6 +551,31 @@ function SaveAsNewDialogCallback_Cancel(string userInput)
 	NavHelp.Show();
 }
 
+function VirtualKeyboard_OnSaveAsNewDialogAccepted(string text, bool bWasSuccessful)
+{
+	//<workshop> FAILED_KEYBOARD_BUG JAS 2016/05/19
+	//INS:
+	m_bKeyboardUp = false;
+	//</workshop>
+
+	if(bWasSuccessful && text != "") //ADDED_SUPPORT_FOR_BLANK_STRINGS - JTA 2016/6/9
+	{
+		SaveAsNewDialogCallback_Accept(text);
+	}
+	else
+	{
+		VirtualKeyboard_OnSaveAsNewDialogCancelled();
+	}
+}
+
+function VirtualKeyboard_OnSaveAsNewDialogCancelled()
+{
+	//<workshop> FAILED_KEYBOARD_BUG JAS 2016/05/19
+	//INS:
+	m_bKeyboardUp = false;
+	//</workshop>
+	SaveAsNewDialogCallback_Cancel("");
+}
 function SaveProfileSettingsComplete_SaveAsNewButton(bool bSuccess)
 {
 	`log(self $ "::" $ GetFuncName() @ `ShowVar(bSuccess),, 'uixcom_mp');
@@ -450,8 +585,13 @@ function SaveProfileSettingsComplete_SaveAsNewButton(bool bSuccess)
 	{
 		m_bLoadoutDirty = false;
 		DirtiedUnit = none;
+
+		UpdateData();
 	}
-	UpdateData();
+	else
+	{
+		ShowWriteProfileFailedDialog();
+	}
 }
 
 // RENAME
@@ -462,13 +602,41 @@ function DisplayRenameSquadDialog()
 
 	MAX_CHARS = 50;
 
-	kData.strTitle = class'UIMPShell_SquadLoadoutList'.default.m_strRenameSquadDialogHeader;
-	kData.strInputBoxText = GetSquadLoadoutName();
-	kData.iMaxChars = MAX_CHARS;
-	kData.fnCallbackAccepted = RenameDialogCallback_Accept;
-	kData.fnCallbackCancelled = RenameDialogCallback_Cancel;
+	//if(`ISCONTROLLERACTIVE == false )
+	//{
+		kData.strTitle = class'UIMPShell_SquadLoadoutList'.default.m_strRenameSquadDialogHeader;
+		kData.strInputBoxText = GetSquadLoadoutName();
+		kData.iMaxChars = MAX_CHARS;
+		kData.fnCallbackAccepted = RenameDialogCallback_Accept;
+		kData.fnCallbackCancelled = RenameDialogCallback_Cancel;
 		
-	Movie.Pres.UIInputDialog(kData);
+		Movie.Pres.UIInputDialog(kData);
+/*	}
+	else
+	{
+		//<workshop> FAILED_KEYBOARD_BUG JAS 2016/05/19
+		//WAS:
+		//Movie.Pres.UIKeyboard(m_strSaveAsNewLoadoutButtonText,
+		//	GetSquadLoadoutName(),
+		//	VirtualKeyboard_OnSaveAsNewDialogAccepted,
+		//	VirtualKeyboard_OnSaveAsNewDialogCancelled,
+		//	false,
+		//	MAX_CHARS
+		//	);
+		//INS:
+		 m_bKeyboardUp = Movie.Pres.UIKeyboard(class'UIMPShell_SquadLoadoutList'.default.m_strRenameSquadDialogHeader,
+			GetSquadLoadoutName(), 
+			VirtualKeyboard_OnRenameDialogAccepted, 
+			VirtualKeyboard_OnRenameDialogCancelled,
+			//<workshop> XR-018 JPS 2016/04/14
+			//WAS:
+			//false,
+			true,
+			//</workshop>
+			MAX_CHARS
+		);
+		 //</workshop>
+	}*/
 
 	NavHelp.Hide();
 }
@@ -491,6 +659,32 @@ function RenameDialogCallback_Cancel(string userInput)
 	NavHelp.Show();
 }
 
+function VirtualKeyboard_OnRenameDialogAccepted(string text, bool bWasSuccessful)
+{
+	//<workshop> FAILED_KEYBOARD_BUG JAS 2016/05/19
+	//INS:
+	m_bKeyboardUp = false;
+	//</workshop>
+
+	if(bWasSuccessful && text != "") //ADDED_SUPPORT_FOR_BLANK_STRINGS - JTA 2016/6/9
+	{
+		RenameDialogCallback_Accept(text);
+	}
+	else
+	{
+		VirtualKeyboard_OnRenameDialogCancelled();
+	}
+}
+
+function VirtualKeyboard_OnRenameDialogCancelled()
+{
+	//<workshop> FAILED_KEYBOARD_BUG JAS 2016/05/19
+	//INS:
+	m_bKeyboardUp = false;
+	//</workshop>
+
+	RenameDialogCallback_Cancel("");
+}
 function SaveProfileSettingsComplete_RenameButton(bool bSuccess)
 {
 	`log(self $ "::" $ GetFuncName() @ `ShowVar(bSuccess),, 'uixcom_mp');
@@ -499,8 +693,12 @@ function SaveProfileSettingsComplete_RenameButton(bool bSuccess)
 	if(bSuccess)
 	{
 		m_bLoadoutDirty = false;
+		UpdateData();
 	}
-	UpdateData();
+	else
+	{
+		ShowWriteProfileFailedDialog();
+	}
 }
 
 
@@ -516,6 +714,11 @@ function SaveLoadout()
 		m_kMPShellManager.WriteSquadLoadouts();
 
 		m_kTempLobbyLoadout = m_kMPShellManager.CloneSquadLoadoutGameState(m_kSquadLoadout);
+		// The original squad loadout wasn't being used for anything except for it's ID, so I'm making it equal to a clone of the loadout
+		// so if we save as a new loadout, we can revert the original loadout to it's original state when we saved last. This was to fix
+		// the case where if you save, make changes, then save as a new loadout, both old and new loadout would be the same as the latest
+		// version of the layout. (kmartinez)
+		m_kOriginalSquadLoadout = m_kTempLobbyLoadout;
 		`XPROFILESETTINGS.X2MPWriteTempLobbyLoadout(m_kTempLobbyLoadout);
 		m_kMPShellManager.SaveProfileSettings();
 	}
@@ -531,6 +734,8 @@ function SaveAsNewLoadout(string strLoadoutName)
 	{
 		m_bSavingLoadout = true;
 		kNewLoadout = m_kMPShellManager.CloneSquadLoadoutGameState(m_kSquadLoadout, true);
+		// This restores the original loadout on the first loadout in case we modified it since saving it. (kmartinez)
+		m_kMPShellManager.ReplaceSquadLoadout(m_kSquadLoadout, m_kOriginalSquadLoadout);
 		XComGameStateContext_SquadSelect(kNewLoadout.GetContext()).strLoadoutName = strLoadoutName;
 		m_kMPShellManager.AddLoadoutToList(kNewLoadout);
 		
@@ -538,8 +743,10 @@ function SaveAsNewLoadout(string strLoadoutName)
 		m_kMPShellManager.SaveProfileSettings();
 
 		m_kSquadLoadout = kNewLoadout;
-		m_kOriginalSquadLoadout = m_kSquadLoadout;
-
+		// This used to just copy the reference, but now since we're getting better use out of the original squad loadout variable, we need
+		// to create a clone, so that we can restore this loadout if necessary.(kmartinez)
+		//m_kOriginalSquadLoadout = m_kSquadLoadout;
+		m_kOriginalSquadLoadout = m_kMPShellManager.CloneSquadLoadoutGameState(m_kSquadLoadout);
 		Squad.Length = 0;
 
 		foreach m_kSquadLoadout.IterateByClassType(class'XComGameState_Unit', Unit)
@@ -614,9 +821,13 @@ function SaveProfileSettingsComplete_ReadyButton(bool bSuccess)
 	{
 		m_bLoadoutDirty = false;
 		DirtiedUnit = none;
+		DoReady();
 	}
 
-	DoReady();
+	else
+	{
+		ShowWriteProfileFailedDialog();
+	}
 }
 
 
@@ -659,9 +870,12 @@ function SaveProfileSettingsComplete_Exit(bool bSuccess)
 	{
 		m_bLoadoutDirty = false;
 		DirtiedUnit = none;
+		CloseScreen();
 	}
-
-	CloseScreen();
+	else
+	{
+		ShowWriteProfileFailedDialog();
+	}
 }
 
 simulated function OnReceiveFocus()
@@ -697,15 +911,40 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
 
-	switch( cmd )
+	if ( m_kSlotList.OnUnrealCommand(cmd, arg) )
 	{
-		case class'UIUtilities_Input'.const.FXS_BUTTON_B:
-		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
-		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
+		return true;
+	}
+	switch (cmd)
+	{
+		case class'UIUtilities_Input'.const.FXS_BUTTON_B :
+		case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE :
+		case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN :
 			OnCancel();
 			return true;
-	}
 
+		case class'UIUtilities_Input'.const.FXS_BUTTON_START :
+			EditorReadyButtonCallback();
+			return true;
+
+		case class'UIUtilities_Input'.const.FXS_BUTTON_X :
+			EditorReadyButtonCallback();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_Y :
+			SaveAsNewLoadoutButtonCallback();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_L3 :
+			InfoButtonCallback();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_LTRIGGER :
+			SaveAndExitCallback();
+			return true;
+		case class'UIUtilities_Input'.const.FXS_BUTTON_R3 :
+			RenameLoadoutButtonCallback();
+			return true;
+		default:
+			break;
+	}
 	return super.OnUnrealCommand(cmd, arg);
 }
 
@@ -732,6 +971,7 @@ simulated function OnLoseFocus()
 {
 	super.OnLoseFocus();
 	m_kLocalPlayerInfo.Hide();
+	NavHelp.ClearButtonHelp();
 }
 
 
@@ -749,6 +989,7 @@ DefaultProperties
 	bHideOnLoseFocus = true;
 	bAutoSelectFirstNavigable = false;
 	m_bAllowEditing=true;
+	m_bKeyboardUp = false;
 	MaleSoldierOffset=(X=0, Y=0, Z=10);
 	FemaleSoldierOffset=(X=0, Y=0, Z=5);
 

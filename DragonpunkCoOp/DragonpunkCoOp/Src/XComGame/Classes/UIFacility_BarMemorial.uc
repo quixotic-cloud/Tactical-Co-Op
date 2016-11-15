@@ -22,34 +22,23 @@ simulated function CreateFacilityButtons()
 
 simulated function OnPersonnelSelected(StateObjectReference selectedUnitRef)
 {
-	`HQPRES.UIBarMemorial_Details(selectedUnitRef);
+	local StateObjectReference NoneRef; 
+	if (selectedUnitRef == NoneRef)
+	{
+		// This prevents the screen from closing up automatically on confirm, if you've tried to confirm on a no-soldier screen. 
+		// You can still back out though.
+		UIPersonnel(Movie.Stack.GetScreen(class'UIPersonnel')).m_bRemoveWhenUnitSelected = false; 
+		Movie.Pres.PlayUISound(eSUISound_MenuClickNegative);
+	}
+	else
+	{
+		`HQPRES.UIBarMemorial_Details(selectedUnitRef);
+	}
 }
 
 simulated function OnShowObituaries()
 {
 	`HQPRES.UIPersonnel_BarMemorial(OnPersonnelSelected);
-}
-
-simulated function RealizeNavHelp()
-{
-	NavHelp.AddBackButton(OnCancel);
-	NavHelp.AddGeoscapeButton();
-}
-
-simulated function bool OnUnrealCommand(int cmd, int arg)
-{
-	if ( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
-		return false;
-
-	if ( cmd == class'UIUtilities_Input'.const.FXS_BUTTON_A ||
-		cmd == class'UIUtilities_Input'.const.FXS_KEY_ENTER ||
-		cmd == class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR)
-	{
-		OnShowObituaries();
-		return true;
-	}
-
-	return super.OnUnrealCommand(cmd, arg);
 }
 
 //==============================================================================

@@ -6,7 +6,8 @@ var string ID;
 var EServerBrowserSortType SortType;
 var UIButton  m_kButton;
 
-simulated function InitHeaderButton(string initID, EServerBrowserSortType initSortType, string initLabel)
+
+simulated function UIServerBrowser_HeaderButton InitHeaderButton(string initID, EServerBrowserSortType initSortType, string initLabel)
 {
 	ID = initID;
 	SortType = initSortType;
@@ -22,6 +23,7 @@ simulated function InitHeaderButton(string initID, EServerBrowserSortType initSo
 		Select();
 	else
 		Deselect();
+	return Self;
 }
 
 simulated function OnMouseEvent(int cmd, array<string> args)

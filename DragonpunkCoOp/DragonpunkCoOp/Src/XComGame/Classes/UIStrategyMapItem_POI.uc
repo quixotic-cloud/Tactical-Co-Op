@@ -22,8 +22,13 @@ simulated function UIStrategyMapItem InitMapItem(out XComGameState_GeoscapeEntit
 	ScanButton.SetButtonIcon("");
 	ScanButton.SetDefaultDelegate(OnDefaultClicked);
 	ScanButton.SetButtonType(eUIScanButtonType_Default);
+	ScanButton.OnSizeRealized = OnButtonSizeRealized;
 
 	return self;
+}
+simulated function OnButtonSizeRealized()
+{
+	ScanButton.SetX(-ScanButton.Width / 2.0);
 }
 
 function UpdateFromGeoscapeEntity(const out XComGameState_GeoscapeEntity GeoscapeEntity)
@@ -52,7 +57,8 @@ function UpdateFromGeoscapeEntity(const out XComGameState_GeoscapeEntity Geoscap
 	ScanTimeLabel = class'UIUtilities_Text'.static.GetDaysString(DaysRemaining);
 	ScanInfo = POIState.GetRewardDescriptionString();
 
-	ScanButton.PulseScanner(class'XComGameState_HeadquartersXCom'.static.GetObjectiveStatus('T0_M10_L0_FirstTimeScan') == eObjectiveState_InProgress && IsAvengerLandedHere());
+	if( `ISCONTROLLERACTIVE == false )
+		ScanButton.PulseScanner(class'XComGameState_HeadquartersXCom'.static.GetObjectiveStatus('T0_M10_L0_FirstTimeScan') == eObjectiveState_InProgress && IsAvengerLandedHere());
 	ScanButton.SetText(ScanTitle, ScanInfo, ScanTimeValue, ScanTimeLabel);
 	ScanButton.AnimateIcon(`GAME.GetGeoscape().IsScanning() && IsAvengerLandedHere());
 	ScanButton.SetScanMeter(POIState.GetScanPercentComplete());
@@ -69,6 +75,51 @@ simulated function XComGameState_PointOfInterest GetPOI()
 	return XComGameState_PointOfInterest(`XCOMHISTORY.GetGameStateForObjectID(GeoscapeEntityRef.ObjectID));
 }
 
+simulated function OnReceiveFocus()
+{
+	ScanButton.OnReceiveFocus();
+}
+
+simulated function OnLoseFocus()
+{
+	ScanButton.OnLoseFocus();
+}
+
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return true;
+	}
+
+	switch(cmd)
+	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		if (IsAvengerLandedHere())
+		{
+			ScanButton.ClickButtonScan();
+		}
+		else
+		{
+			OnDefaultClicked();
+		}
+
+		return true;		
+	}
+
+	return super.OnUnrealCommand(cmd, arg);
+}
+
+simulated function bool IsSelectable()
+{
+	return true;
+}
+simulated function SetZoomLevel(float ZoomLevel)
+{
+	super.SetZoomLevel(ZoomLevel);
+
+	ScanButton.SetY(70.0 * (1.0 - FClamp(ZoomLevel, 0.0, 0.95)));
+}
 defaultproperties
 {
 	bProcessesMouseEvents = false;

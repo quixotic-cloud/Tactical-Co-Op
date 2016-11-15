@@ -71,12 +71,16 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	switch (cmd)
 	{
 		case class'UIUtilities_Input'.const.FXS_ARROW_LEFT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT:
 			OnDecrease();
 			if( onChangedDelegate != none)
 				onChangedDelegate(self);
 			return true;
 			break;
 		case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT:
 			OnIncrease();
 			if( onChangedDelegate != none)
 				onChangedDelegate(self);

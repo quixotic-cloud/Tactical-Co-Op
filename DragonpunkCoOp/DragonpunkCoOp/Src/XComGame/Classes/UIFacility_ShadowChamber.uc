@@ -53,7 +53,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 			TechState = XComGameState_Tech(History.GetGameStateForObjectID(TechRefs[idx].ObjectID));
 			TechState.DisplayTechCompletePopups();
 			bDelayingResearchReport = false;
-			`HQPRES.ResearchReportPopup(TechRefs[idx], bInstantInterp);
+			`HQPRES.ShadowChamberResearchReportPopup(TechRefs[idx]); //bsg-jneal 7.11.16: Use the shadow chamber research popups, calling ResearchReportPopup() was causing the prompt to load but never fully display
 		}
 	}
 
@@ -219,7 +219,8 @@ simulated function RealizeNavHelp()
 
 	if(XComHQ.HasActiveShadowProject())
 	{
-		NavHelp.AddRightHelp(m_strPauseResearch, class'UIUtilities_Input'.const.ICON_A_X, `HQPRES.PauseShadowProjectPopup);
+		if( `ISCONTROLLERACTIVE == false )
+			NavHelp.AddRightHelp(m_strPauseResearch, class'UIUtilities_Input'.static.GetAdvanceButtonIcon(), `HQPRES.PauseShadowProjectPopup);
 		
 		if( UpgradeButton != none ) 
 		{

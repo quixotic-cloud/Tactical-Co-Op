@@ -79,6 +79,13 @@ var localized string JPN_year_suffix;
 var localized string JPN_month_suffix;
 var localized string JPN_day_suffix;
 
+var localized string m_strGenericNavigate;
+var localized string m_strGenericSelect;
+var localized string m_strGenericToggle;
+var localized string m_strGenericDetails;
+var localized string m_strGenericView;
+var localized string m_strGenericNext;
+var localized string m_strGenericAdjust;
 // Null character is purposefully used here because it's an unsupported symbol in all of our fonts, so will show the null character square intentionally. 
 var localized string KNOWN_NULL_CHARACTER_DO_NOT_TRANSLATE;
 

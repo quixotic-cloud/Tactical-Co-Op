@@ -10,6 +10,7 @@
 class XComHeadquartersInput extends XComInputBase within XComHeadquartersController;
 
 const MOUSE_EDGE_SCROLL_PIXELS = 5;
+const DEAD_ZONE = 0.2f;
 
 var Vector2D m_fFreeMovementMouseScrollRate;
 
@@ -196,12 +197,17 @@ simulated function AbortCameraPan()
 	XComHeadquartersCamera(PlayerCamera).NewEarthView(0);
 }
 
-simulated function ProcessGeoscapeRotation()
+
+simulated function ProcessGeoscapeRotation(float DeltaTime)
 {
 	local XComBaseCamera kCamera;
 	local XComCamState_Earth kCameraState;
 	local Vector2D v2ViewDelta;
 	local XComEarth Geoscape;
+	local float fRStickMagnitude;
+	local float fRStickX;
+	local float fRStickY;
+	local UIStrategyMap StrategyMap;
 
 	kCamera = XComBaseCamera(PlayerCamera);
 	if(kCamera == none) return;
@@ -231,15 +237,86 @@ simulated function ProcessGeoscapeRotation()
 	}
 	else
 	{
-		v2ViewDelta.X = aTurn * (CONTROLLER_GLOBE_SPEED_MULTIPLIER * Geoscape.fCurrentZoom);
-		v2ViewDelta.Y = aLookUp * (-CONTROLLER_GLOBE_SPEED_MULTIPLIER * Geoscape.fCurrentZoom);
+		if( `ISCONTROLLERACTIVE )		
+		{
+			fRStickX = aStrafe / 3.3;   // Normalize to [-1.0, 1.0]
+			fRStickY = aBaseY / 2.7; // Normalize to [-1.0, 1.0]
+			fRStickMagnitude = Sqrt(fRStickX * fRStickX + fRStickY * fRStickY);
+		
+			// We'll multiply by fLStickMagnitude to quadratically scale the LAnalog stick according to the magnitude.
+			v2ViewDelta.X = fRStickX * (CONTROLLER_GLOBE_SPEED_MULTIPLIER * Geoscape.fCurrentZoom +
+				((((`XPROFILESETTINGS.Data.m_GeoscapeSpeed * 2.0) - 100.0) / 100.0) * 0.0035) * Geoscape.fCurrentZoom) * 
+				fRStickMagnitude;
+			v2ViewDelta.Y = fRStickY * -(CONTROLLER_GLOBE_SPEED_MULTIPLIER * Geoscape.fCurrentZoom +
+				((((`XPROFILESETTINGS.Data.m_GeoscapeSpeed * 2.0) - 100.0) / 100.0) * 0.0035) * Geoscape.fCurrentZoom) * 
+				fRStickMagnitude;
+
+			//if( v2ViewDelta.X != 0.0 && v2ViewDelta.Y != 0.0 )
+			//	`log("Stick activated!",,'uixcom');
+		}
+		else	
+		{
+			v2ViewDelta.X = aTurn * (CONTROLLER_GLOBE_SPEED_MULTIPLIER * Geoscape.fCurrentZoom);
+			v2ViewDelta.Y = aLookUp * (-CONTROLLER_GLOBE_SPEED_MULTIPLIER * Geoscape.fCurrentZoom);
+		}
 	}
-	Geoscape.MoveViewLocation(v2ViewDelta);
+	if ( `ISCONTROLLERACTIVE == false )
+	{
+		Geoscape.MoveViewLocation(v2ViewDelta);
+	
+	}
+	else 
+	{
+		StrategyMap = UIStrategyMap(GetScreenStack().GetScreen(class'UIStrategyMap'));
+		if (StrategyMap != none && GetScreenStack().IsTopScreen(StrategyMap))
+		{
+			StrategyMap.MoveViewLocation(v2ViewDelta, DeltaTime);
+		}
+	}
 }
 
+
+simulated function ProcessGeoscapeSelection(float DeltaTime)
+{
+	local UIStrategyMap StrategyMap;
+
+	StrategyMap = UIStrategyMap(GetScreenStack().GetScreen(class'UIStrategyMap'));
+	if (StrategyMap != none && GetScreenStack().IsTopScreen(StrategyMap))
+	{
+		StrategyMap.UpdateSelection(DeltaTime);
+	}
+}
+
+simulated function ProcessGeoscapeZoom(float DeltaTime)
+{
+	local UIStrategyMap StrategyMap;
+
+	StrategyMap = UIStrategyMap(GetScreenStack().GetScreen(class'UIStrategyMap'));
+	if (StrategyMap != none && GetScreenStack().IsTopScreen(StrategyMap))
+	{
+		StrategyMap.UpdateZoom(m_fLTrigger, m_fRTrigger, DeltaTime);
+	}
+}
+
+simulated function ProcessPawnRotation()
+{
+	local UIMouseGuard_RotatePawn RotatePawn;
+
+	RotatePawn = UIMouseGuard_RotatePawn(GetScreenStack().GetScreen(class'UIMouseGuard_RotatePawn'));
+	if (RotatePawn != none)
+	{
+		RotatePawn.UpdateStickVector(m_fRSXAxis, m_fRSYAxis);
+	}
+}
 simulated function bool PostProcessCheckGameLogic( float DeltaTime )
 {
-	ProcessGeoscapeRotation();
+	ProcessGeoscapeRotation(DeltaTime);
+	if( `ISCONTROLLERACTIVE )		
+	{
+		ProcessGeoscapeSelection(DeltaTime);
+		ProcessGeoscapeZoom(DeltaTime);
+		ProcessPawnRotation();
+	}
 
 	if (m_fSteamControllerGeoscapeZoomOffset != 0)
 	{
@@ -257,9 +334,17 @@ simulated function bool PauseKey( int ActionMask )
 function bool EscapeKey( int ActionMask )
 {
 	if ((ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) != 0)
-		return Start_Button( ActionMask );
-	else 
-		return false;
+	{
+		// DO NOT allow the pause menu during the dropship loading sequence. That would make one hell of a save game... -bsteiner
+		if( !XComHQPresentationLayer(Outer.Pres).IsInState('State_DropshipBriefing') && XComHQPresentationLayer(Outer.Pres).m_bCanPause ) //jmk
+		{
+			XComHQPresentationLayer(Outer.Pres).UIPauseMenu( );
+		}
+
+		return true;
+	}
+	
+	return false;
 }
 
 function bool Start_Button( int ActionMask )
@@ -267,12 +352,15 @@ function bool Start_Button( int ActionMask )
 	if ((ActionMask & class'UIUtilities_Input'.const.FXS_ACTION_RELEASE) == 0) return false; 		
 
 	// DO NOT allow the pause menu during the dropship loading sequence. That would make one hell of a save game... -bsteiner
-	if( !XComHQPresentationLayer(Outer.Pres).IsInState('State_DropshipBriefing') && XComHQPresentationLayer(Outer.Pres).m_bCanPause ) //jmk
+	if( !XComHQPresentationLayer(Outer.Pres).IsInState('State_DropshipBriefing') && XComHQPresentationLayer(Outer.Pres).m_bCanPause  && //jmk
+		( `GAME != none && !`GAME.IsInState('StartingFromTactical') ) ) // bsg-nlong (8.20.16) 5128: Disallows the pause menu to be brought up between loading an after mission report
 	{
 		XComHQPresentationLayer(Outer.Pres).UIPauseMenu( );
+		return true; // bsg-nlong (8.22.16) 5128: Making the input return true or false according whether the input succeeded or not so that it's properly handled by the rest of the game
+					 // Pressing start could cause a hang, or the pause menu to overlay over a matinee cinematic
 	}
 
-	return true;
+	return false;
 }
 
 function bool Key_F5(int ActionMask)
@@ -356,7 +444,7 @@ state HQ_FreeMovement
 		`log("Leaving Input State 'HQ_FreeMovement' ",,'uixcom'); 
 	}
 
-	function bool Stick_Right(float _x, float _y, int ActionMask)
+/*	function bool Stick_Right(float _x, float _y, int ActionMask)
 	{
 		local XComHQPresentationLayer pres;
 		local Vector vLoc; 
@@ -381,6 +469,47 @@ state HQ_FreeMovement
 		pres.GetCamera().LookRelative( vLoc, pres.GetCamera().CurrentZoom );
 
 		return true;
+	}*/
+
+	simulated function CheckAnalogSticks(float fDeltaTime)
+	{
+		local XComHQPresentationLayer pres;
+		local Vector vLoc; 
+		local float fStepSize; 
+		local float fCurrentViewDist;
+
+		local float _x;
+		local float _y;
+		local float fMagnitude;
+		local float fNewMagnitude;
+		
+		_x = m_fRSXAxis;
+		_y = m_fRSYAxis;
+
+		fMagnitude = sqrt(_x * _x + _y * _y);
+
+		if (fMagnitude >= DEAD_ZONE) // If greater than the dead zone...
+		{
+			// Renormalize to account for range excluded by the dead zone.
+			fNewMagnitude = (fMagnitude - DEAD_ZONE) / (1.0f - DEAD_ZONE);
+			_x *= (fNewMagnitude / fMagnitude);
+			_y *= (fNewMagnitude / fMagnitude);
+			
+			XComHeadquartersCamera(PlayerCamera).StartRoomView('FreeMovement', 2.0f);
+
+			pres = XComHQPresentationLayer(Outer.Pres);
+
+			pres.GetCamera().GetViewDistance( fCurrentViewDist );
+			// TODO(AMS): the first part of this equation seems a little kludgy.  Re-examine when implementing R3 for toggling camera distances.
+			fStepSize = 200.0f * fDeltaTime / XComHeadquartersCamera(PlayerCamera).GetViewDistanceScalar();
+
+			vLoc.x = -_x * fStepSize;
+			vLoc.y = 0.0;
+			vLoc.z = _y * fStepSize;
+
+		
+			pres.GetCamera().LookRelative( vLoc, pres.GetCamera().CurrentZoom );
+		}
 	}
 
 	simulated function CheckMouseScroll(XComHQPresentationLayer kPres, float fDeltaTime)
@@ -471,6 +600,8 @@ state HQ_FreeMovement
 			CheckKeyPan( kPres, DeltaTime );
 		}
 
+		if( `ISCONTROLLERACTIVE )
+			CheckAnalogSticks(DeltaTime);
 		return super.PostProcessCheckGameLogic( DeltaTime );
 	}
 
@@ -515,32 +646,80 @@ state HQ_FreeMovement
 
 	function bool Trigger_Left(float fTrigger, int ActionMask)
 	{
-		local XComHQPresentationLayer pres;
+		local XComHeadquartersCamera kCamera;
+		local float fDefaultViewDistance;
+		local float fCurrentViewDistance;
+		local float fNewViewDistance;
 		local float yPercent; 
-		local float fDiff; 		
-		local float fCurrentViewDist;
 
-		XComHeadquartersCamera(PlayerCamera).StartRoomView('FreeMovement', 2.0f);
+		kCamera = XComHeadquartersCamera(PlayerCamera);
+		
+		if ( `ISCONTROLLERACTIVE && !(kCamera.IsInState('FreeMovementView') || kCamera.IsInState('BaseRoomView')))
+		{
+			return false;
+		}
+		kCamera.StartRoomView('FreeMovement', 2.0f);
 
-		//Find percentage of movement requested, relative to step size. 
 		yPercent = fTrigger; 
-		if( yPercent > 1 ) yPercent = 1; 
-		if( yPercent < 0 ) yPercent = 0; 
+		if (yPercent > 1.0) 
+		{
+			yPercent = 1.0;
+		}
 
-		pres = XComHQPresentationLayer(Outer.Pres);
-		pres.GetCamera().GetViewDistance( fCurrentViewDist );
-		fDiff = class'XComCamState_HQ_BaseView'.static.GetPlatformViewDistance() - (yPercent * class'XComCamState_HQ_BaseView'.static.GetPlatformViewDistance());
+		if (yPercent < 0.0)
+		{
+			yPercent = 0.0;
+		}
 
-		`log("Trigger zoom: fTrigger:" @fTrigger @ "     yPercent: " @yPercent @"      fCurrentViewDist: " @ fCurrentViewDist @"      fDiff: " @ fDiff ,,'uixcom'); 
-
-		pres.GetCamera().SetViewDistance( fDiff );
+		fDefaultViewDistance = class'XComCamState_HQ_BaseView'.static.GetPlatformViewDistance();
+		kCamera.GetViewDistance(fCurrentViewDistance);
+		fNewViewDistance = fCurrentViewDistance + ((fDefaultViewDistance - class'XComCamState_HQ_BaseView'.default.m_fPCDefaultMinViewDistance) * yPercent * 0.21);		
+		fNewViewDistance = fClamp(fNewViewDistance, -1000.0, fDefaultViewDistance);
+		kCamera.SetViewDistance(fNewViewDistance);
 
 		return true;
 	}
+
+	function bool Trigger_Right(float fTrigger, int ActionMask)
+	{
+		local XComHeadquartersCamera kCamera;
+		local float fDefaultViewDistance;
+		local float fCurrentViewDistance;
+		local float fNewViewDistance;
+		local float yPercent; 
+
+		kCamera = XComHeadquartersCamera(PlayerCamera);
+		if (`ISCONTROLLERACTIVE && !(kCamera.IsInState('FreeMovementView') || kCamera.IsInState('BaseRoomView')))
+		{
+			return false;
+		}
+		
+		kCamera.StartRoomView('FreeMovement', 2.0f);
+
+		yPercent = fTrigger; 
+		if (yPercent > 1.0) 
+		{
+			yPercent = 1.0;
+		}
+
+		if (yPercent < 0.0)
+		{
+			yPercent = 0.0;
+		}
+
+		fDefaultViewDistance = class'XComCamState_HQ_BaseView'.static.GetPlatformViewDistance();
+		kCamera.GetViewDistance(fCurrentViewDistance);
+		fNewViewDistance = fCurrentViewDistance + ((fDefaultViewDistance - class'XComCamState_HQ_BaseView'.default.m_fPCDefaultMinViewDistance) * -yPercent * 0.21);
+		fNewViewDistance = fClamp(fNewViewDistance, -1000.0, fDefaultViewDistance);
+		kCamera.SetViewDistance(fNewViewDistance);
+
+		return true;
+	}
+	//</workshop>
 }
 
 defaultproperties
 {
 	MOUSE_GLOBE_SPEED_MULTIPLIER = 0.0006f
-	CONTROLLER_GLOBE_SPEED_MULTIPLIER = 0.006f
+	CONTROLLER_GLOBE_SPEED_MULTIPLIER = 0.009f
 }

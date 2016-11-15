@@ -35,6 +35,21 @@ var localized string m_strNeedsMediumArmor;
 var localized string m_strNoUtilitySlots;
 var localized string m_strIncreaseSquadSize;
 
+enum ESquadSelectButton
+{
+	eSSB_Promote,
+	eSSB_Edit,
+	eSSB_Dismiss,
+	eSSB_WeaponPrime,
+	eSSB_WeaponHeavy,
+	eSSB_Utility
+};
+var ESquadSelectButton m_eActiveButton;
+
+var Bool bEditDisabled;
+var Bool bDismissDisabled;
+var Bool bDirty;
+var Bool bReverseInitialUtilityFocus; //set externally to indicate that focus is coming from a higher index (moving left horizontally)
 simulated function UIPanel InitPanel(optional name InitName, optional name InitLibID)
 {
 	super.InitPanel(InitName, InitLibID);
@@ -43,6 +58,7 @@ simulated function UIPanel InitPanel(optional name InitName, optional name InitL
 	
 	PsiMarkup = Spawn(class'UIImage', DynamicContainer).InitImage(, class'UIUtilities_Image'.const.PsiMarkupIcon);
 	PsiMarkup.SetScale(0.7).SetPosition(220, 258).Hide(); // starts off hidden until needed
+	SetDirty(true, false);
 	
 	return self;
 }
@@ -96,6 +112,8 @@ simulated function UpdateData(optional int Index = -1, optional bool bDisableEdi
 		AbilityIcons = none;
 
 		DynamicContainer.Hide();
+		if( !Movie.IsMouseActive() )
+			HandleEmptyListItemFocus();
 	}
 	else
 	{
@@ -105,6 +123,9 @@ simulated function UpdateData(optional int Index = -1, optional bool bDisableEdi
 		UtilitySlots.Show();
 		DynamicContainer.Show();
 		//Backpack controlled separately by the heavy weapon info. 
+
+	//	if( Navigator.SelectedIndex == -1 )
+//			Navigator.SelectFirstAvailable();
 
 		NumUtilitySlots = 2;
 		if(Unit.HasGrenadePocket()) NumUtilitySlots++;
@@ -206,6 +227,8 @@ simulated function UpdateData(optional int Index = -1, optional bool bDisableEdi
 			MC.FunctionVoid("disableEdit");
 		if(bDisableDismiss)
 			MC.FunctionVoid("disableDismiss");
+		bEditDisabled = bDisableEdit; //Used in controller nav
+		bDismissDisabled = bDisableDismiss; //used in controller nav
 
 		AS_SetFilled( class'UIUtilities_Text'.static.GetColoredText(Caps(class'X2ExperienceConfig'.static.GetRankName(Unit.GetRank(), Unit.GetSoldierClassTemplateName())), eUIState_Normal, 18),
 					  class'UIUtilities_Text'.static.GetColoredText(Caps(NameStr), eUIState_Normal, 22),
@@ -246,6 +269,8 @@ simulated function UpdateData(optional int Index = -1, optional bool bDisableEdi
 			AS_HasHeavyWeapon(false);
 		}
 	}
+	RefreshFocus();
+	//bsg-cballinger (7.8.16): disable update optimization on SquadSelect for now (dirty is now always set). Causes items to not update properly on the SquadSelect screen when changes are made to the squad loadout
 }
 
 simulated function DisableSlot()
@@ -304,7 +329,8 @@ simulated function OnClickedPromote()
 	UISquadSelect(Screen).m_iSelectedSlot = SlotIndex;
 	if( GetUnitRef().ObjectID > 0 )
 	{
-		UISquadSelect(Screen).bDirty = true;
+		//UISquadSelect(Screen).bDirty = true;
+		SetDirty(true);
 		UISquadSelect(Screen).SnapCamera();
 		SetTimer(0.1f, false, nameof(GoPromote));
 	}
@@ -326,7 +352,8 @@ simulated function OnClickedPrimaryWeapon()
 	UISquadSelect(Screen).m_iSelectedSlot = SlotIndex;
 	if(GetUnitRef().ObjectID > 0)
 	{
-		UISquadSelect(Screen).bDirty = true;
+		//UISquadSelect(Screen).bDirty = true;
+		SetDirty(true);
 		UISquadSelect(Screen).SnapCamera();
 		SetTimer(0.1f, false, nameof(GoToPrimaryWeapon));
 	}
@@ -353,7 +380,8 @@ simulated function OnClickedHeavyWeapon()
 	UISquadSelect(Screen).m_iSelectedSlot = SlotIndex;
 	if(GetUnitRef().ObjectID > 0)
 	{
-		UISquadSelect(Screen).bDirty = true;
+		//UISquadSelect(Screen).bDirty = true;
+		SetDirty(true);
 		UISquadSelect(Screen).SnapCamera();
 		SetTimer(0.1f, false, nameof(GoToHeavyWeapon));
 	}
@@ -382,6 +410,7 @@ simulated function OnClickedDismissButton()
 		return;
 	}
 
+	HandleButtonFocus(m_eActiveButton, false);
 	SquadScreen = UISquadSelect(screen);
 	SquadScreen.m_iSelectedSlot = SlotIndex;
 	SquadScreen.ChangeSlot();
@@ -406,7 +435,8 @@ simulated function OnClickedEditUnitButton()
 	
 	if( XComHQ.Squad[SquadScreen.m_iSelectedSlot].ObjectID > 0 )
 	{
-		SquadScreen.bDirty = true;
+		//UISquadSelect(Screen).bDirty = true;
+		SetDirty(true);
 		SquadScreen.SnapCamera();
 		`HQPRES.UIArmory_MainMenu(XComHQ.Squad[SquadScreen.m_iSelectedSlot], 'PreM_CustomizeUI', 'PreM_SwitchToSoldier', 'PreM_GoToLineup', 'PreM_CustomizeUI_Off', 'PreM_SwitchToLineup');
 		`XCOMGRI.DoRemoteEvent('PreM_GoToSoldier');
@@ -418,7 +448,8 @@ simulated function OnClickedSelectUnitButton()
 	local UISquadSelect SquadScreen;
 	SquadScreen = UISquadSelect(Screen);
 	SquadScreen.m_iSelectedSlot = SlotIndex;
-	SquadScreen.bDirty = true;
+	//UISquadSelect(Screen).bDirty = true;
+	SetDirty(true);
 	SquadScreen.SnapCamera();
 	`HQPRES.UIPersonnel_SquadSelect(SquadScreen.ChangeSlot, SquadScreen.UpdateState, SquadScreen.XComHQ);
 }
@@ -447,6 +478,247 @@ simulated function OnMouseEvent(int Cmd, array<string> Args)
 	}
 }
 
+simulated function SetDirty(bool bIsDirty, optional bool bMarkSquadSelectScreen = true)
+{
+	bDirty = bIsDirty;
+	if(bMarkSquadSelectScreen)
+		UISquadSelect(Screen).bDirty = bIsDirty;
+}
+simulated function Bool ListItemIsEmpty()
+{
+	return MC.GetBool("isEmpty");
+}
+
+simulated function bool HasUnit()
+{
+	return `XCOMHQ.Squad.Length > SlotIndex && `XCOMHQ.Squad[SlotIndex].ObjectID > 0;
+}
+
+//Returns the variable name that is set in actionscript (useful for 'invoke' functions)
+simulated function String GetActionscriptButtonString(ESquadSelectButton Button)
+{
+	switch(Button)
+	{
+		case eSSB_Dismiss:		return "dismissButton";
+		case eSSB_Promote:		return "promoteButton";
+		case eSSB_WeaponPrime:	return "primaryWeaponButton";
+		case eSSB_WeaponHeavy:	return "heavyWeaponButton";
+		case eSSB_Edit:			return "editButton";
+		default:				return "Error-ReturnCaseNotHandled";
+	}
+}
+
+//simulates a mouse click
+simulated function HandleButtonSelect()
+{
+	if(ListItemIsEmpty())
+	{
+		OnClickedSelectUnitButton();
+		return;
+	}
+
+	switch(m_eActiveButton)
+	{
+		case eSSB_Dismiss:		OnClickedDismissButton(); break;
+		case eSSB_Promote:		OnClickedPromote(); break;
+		case eSSB_WeaponPrime:	OnClickedPrimaryWeapon(); break;
+		case eSSB_WeaponHeavy:	OnClickedHeavyWeapon(); break;
+		case eSSB_Edit:			OnClickedEditUnitButton(); break;
+		case eSSB_Utility:
+			UISquadSelect_UtilityItem(UtilitySlots.GetSelectedItem()).Button.Click();
+			break;
+		default:				break;
+	}			
+}
+
+//Finds the next available index (looping if it moves out of bounds)
+simulated function INT LoopButtonIndex(INT Index, Bool bDownward, INT MaxCount)
+{
+	Index = bDownward ? Index + 1 : Index - 1;
+	if(Index < 0)
+		Index = MaxCount - 1;
+	Index = Index % MaxCount;
+
+	return Index;
+}
+
+//Moves the focus of the button down the list of buttons with an enum in ESquadSelectButton
+//checks for disabled states and skips them
+simulated function ShiftButtonFocus(Bool bDownward)
+{
+	//removes focus from previous button/list
+	HandleButtonFocus(m_eActiveButton, false);
+
+	do
+	{
+		//Find index of next ListItem in sequence
+		m_eActiveButton = ESquadSelectButton(LoopButtonIndex(INT(m_eActiveButton), bDownward, ESquadSelectButton.EnumCount));
+	}
+	//check for disabled buttons
+	until( !IsActiveButtonDisabled() );
+
+	//gives focus to the newly active button/list
+	HandleButtonFocus(m_eActiveButton, true);	
+}
+
+//for cycling through the utility items while those are in focus
+//iForceUtilityIndex attempts to set the focus directly (instead of shifting it). If that index is unavailable, it will continue through the loop
+simulated function bool ShiftHorizontalFocus(Bool bIncreasing, optional int iForceUtilityIndex = -1)
+{
+	local int Index;
+	local UISquadSelect_UtilityItem Item;
+
+	if(m_eActiveButton == eSSB_Utility && UtilitySlots.ItemCount > 1)
+	{
+		//grabs Index locally to check for a change later
+		Index = UtilitySlots.SelectedIndex;
+		
+		if(iForceUtilityIndex != -1)
+		{
+			if(bIncreasing)	Index = iForceUtilityIndex - 1;
+			else			Index = iForceUtilityIndex + 1;
+		}
+
+		do
+		{
+			//grabs the next index
+			if(bIncreasing)	Index++;
+			else			Index--;
+
+			if(Index < 0 || Index >= UtilitySlots.ItemCount)
+				return false;
+
+			Item = UISquadSelect_UtilityItem(UtilitySlots.GetItem(Index));
+			if(Item == None) `log("ERROR: List Item found is not a UISquadSelect_ListItem. Breaking loop...");
+		}
+		//checks to make sure the next slot isn't disabled
+		until(Item == None || !Item.Button.IsDisabled);
+
+	//	//checks to make sure it didn't loop back to the original index
+	//	//if(Index != UtilitySlots.SelectedIndex)
+	//	{
+			//remove current focus
+			UtilitySlots.GetSelectedItem().OnLoseFocus();
+
+			//Assign new current focus
+			UtilitySlots.SetSelectedIndex(Index);
+
+			//Give focus to new utility item
+			Item.OnReceiveFocus();
+
+			return true;
+	//	}				
+	}
+
+	return false;
+}
+
+//checks for disabled states (used before giving buttons focus in vertical nav)
+simulated function bool IsActiveButtonDisabled()
+{
+	local XComGameState_Unit Unit;
+
+	//check for disabled buttons
+	if(m_eActiveButton == eSSB_Promote)
+	{
+		Unit = XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(GetUnitRef().ObjectID));
+		if(!Unit.ShowPromoteIcon())
+			return true;
+	}		
+	if(bEditDisabled && m_eActiveButton == eSSB_Edit)
+		return true;
+	if(bDismissDisabled && m_eActiveButton == eSSB_Dismiss)
+		return true;
+	if(!HasHeavyWeapon() && m_eActiveButton == eSSB_WeaponHeavy)
+		return true;
+	
+	return false;
+}
+
+//Handles the visuals to simulate mouse-hover focus
+simulated function HandleButtonFocus(ESquadSelectButton ButtonControl, bool bFocusGiven)
+{
+	//all of the button assets are not visible if List Item is empty
+	if(HandleEmptyListItemFocus())
+		return;
+
+	//GIVING focus to the button
+	if(bFocusGiven)
+	{
+		if(m_eActiveButton == eSSB_Utility)
+		{
+			HandleUtilityItemFocus();
+		}
+		else
+		{
+			Invoke(GetActionscriptButtonString(m_eActiveButton) $ ".onReceiveFocus");
+			if(m_eActiveButton == eSSB_Promote)
+				MC.FunctionVoid("onReceiveFocus"); //needs to call manually because the actionscript turns the visual focus off when the other buttons lose focus
+		}
+	}
+	//REMOVING focus to from button
+	else
+	{
+		if(m_eActiveButton == eSSB_Utility)
+			UtilitySlots.GetSelectedItem().OnLoseFocus();
+		else
+			Invoke(GetActionscriptButtonString(m_eActiveButton) $ ".onLoseFocus");
+	}
+}
+
+simulated function HandleUtilityItemFocus()
+{
+	local int NewIndex;
+
+	if(bReverseInitialUtilityFocus)
+	{
+		//should should only trigger on the 'initial' focus given when the list item is given focus
+		//so that the utility item on the RIGHT if given focus when it's parent list's focus comes from the RIGHT		
+		bReverseInitialUtilityFocus = false;
+		//sets focus to the first available index from the top/right
+		ShiftHorizontalFocus(false, UtilitySlots.ItemCount - 1);
+		MC.FunctionVoid("onReceiveFocus"); //needs to call manually because the actionscript turns the visual focus off when the other buttons lose focus
+		return;
+	}
+	//if the user has been navigating vertically within this list item, it will grab the most recent utility slot that was selected
+	else if(UtilitySlots.SelectedIndex > 0)
+		NewIndex = UtilitySlots.SelectedIndex;
+	else
+		NewIndex = 0;
+
+	UtilitySlots.GetItem(NewIndex).OnReceiveFocus();
+	UtilitySlots.SetSelectedIndex(NewIndex);
+	MC.FunctionVoid("onReceiveFocus"); //needs to call manually because the actionscript turns the visual focus off when the other buttons lose focus
+}
+
+//Resets the focus in actionscript, ensuring proper visual highlights
+simulated function RefreshFocus()
+{
+	local UISquadSelect SquadScreen;
+
+	SquadScreen = UISquadSelect(Screen);
+	if(SquadScreen != None && SquadScreen.m_iSelectedSlot == SlotIndex)
+	{	
+		//Tells actionscript that it lost focus so it can properly gain it again cleanly
+		OnLoseFocus();
+
+		//Delay needed to wait for Flash to clear the previous focus
+		SetTimer(0.05f, false, 'DelayedRefreshFocus');
+	}
+}
+
+//Called from a Timer in RefreshFocus()
+simulated function DelayedRefreshFocus()
+{	
+	local UISquadSelect SquadScreen;
+
+	SquadScreen = UISquadSelect(Screen);
+	if(SquadScreen != None && SquadScreen.m_iSelectedSlot == SlotIndex)
+	{	
+		OnReceiveFocus();
+		SetSquadSelectButtonFocus();
+	}
+}
 //------------------------------------------------------
 
 simulated function AS_SetFilled( string firstName, string lastName, string nickName,
@@ -501,17 +773,44 @@ simulated function AS_SetUnitHealth(int CurrentHP, int MaxHP)
 	mc.EndOp();
 }
 
+//Attempts to set focus to the button, will grab the next button in line if that's not possible
+simulated function SetSquadSelectButtonFocus(optional int ButtonEnumAsInt = 0, optional bool bReverseFocusIfUtility = false) //ESquadSelectButton
+{
+	local ESquadSelectButton ButtonEnum;
+
+	ButtonEnum = ESquadSelectButton(ButtonEnumAsInt);
+	
+	//allows the player to move fluidly Right->Left while selecting a Utility item and there are more than 1
+	if(bReverseFocusIfUtility && ButtonEnum == eSSB_Utility)
+		bReverseInitialUtilityFocus = true;
+
+	//If the previous listItem had a heavy weapon selected and this does not have that enabled, move to a lower index
+	if(ButtonEnum == eSSB_WeaponHeavy && !HasHeavyWeapon())
+		ButtonEnum = ESquadSelectButton(ButtonEnum - 1);
+
+	//sets the active button to a lower increment b/c ShiftButtonFocus() always increases by at least 1
+	if(ButtonEnum <= 0 || ButtonEnum >= ESquadSelectButton.EnumCount) //Desired index is 0
+		m_eActiveButton = ESquadSelectButton(ESquadSelectButton.EnumCount - 1);
+	else //Desired index is not 0
+		m_eActiveButton = ESquadSelectButton(ButtonEnum - 1);
+
+	//loops through buttons until it finds one that can be given focus (always increases m_eActiveButton by 1)
+	ShiftButtonFocus(true);
+}
 // Don't propagate focus changes to children
 simulated function OnReceiveFocus()
 {
 	local UISquadSelect SquadScreen;
 	SquadScreen = UISquadSelect(Screen);
-	if(SquadScreen != none)
+	//if(SquadScreen != none)
+	if(SquadScreen != none && SquadScreen.m_iSelectedSlot != SlotIndex)
 	{
 		SquadScreen.m_iSelectedSlot = SlotIndex;
 		SquadScreen.m_kSlotList.SetSelectedItem(self);
 	}
 	Invoke("onReceiveFocus");
+	if(!bIsFocused)
+		bIsFocused = true;
 }
 
 simulated function OnLoseFocus()
@@ -524,6 +823,39 @@ simulated function OnLoseFocus()
 		SquadScreen.m_kSlotList.SetSelectedItem(none);
 	}
 	Invoke("onLoseFocus");
+	if(bIsFocused)
+	{
+		bIsFocused = false;
+		HandleButtonFocus(m_eActiveButton,false);
+		if(UtilitySlots != None)
+		{
+			UtilitySlots.SelectedIndex = 0;
+			bReverseInitialUtilityFocus = false;
+		}		
+	}	
+}
+
+//Called when there is a focus change in 'HandleButtonFocus', returns TRUE if handled and no other focus changes are needed
+simulated function bool HandleEmptyListItemFocus()
+{
+	if(GetUnitRef().ObjectID <= 0) //Will return true if the ListItem is empty
+	{
+		if(bIsFocused)
+		{
+			Invoke("selectUnitButton.onReceiveFocus");
+		}
+		else
+		{
+			Invoke("selectUnitButton.onLoseFocus");
+		}
+
+		//In actionscript, this function detects whether or not the button is in focus and changes the visuals accordingly
+		MC.FunctionVoid("realizeUnitFocus");
+
+		return true;
+	}
+
+	return false;
 }
 
 defaultproperties

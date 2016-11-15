@@ -121,6 +121,46 @@ function GetView( float DeltaTime, out vector out_Focus, out rotator out_Rotatio
 
 }
 
+function GetViewFromCameraName( CameraActor CamActor_, name CamName_, out vector out_Focus, out rotator out_Rotation, out float out_ViewDistance, out float out_FOV, out PostProcessSettings out_PPSettings, out float out_PPOverrideAlpha )
+{
+	local vector AdjustedCamActorLoc;
+	local CameraActor Cam;
+
+	Cam = CamActor_;
+
+	if (Cam == none)
+	{
+		foreach WorldInfo.AllActors(class'CameraActor', Cam)
+		{
+			if (Cam.Tag == CamName_)
+			{
+				`log("XComCamState_HQ_BaseRoomView::GetViewFromCameraName CamName="$CamName_$" Cam.Location="$Cam.Location$" => out_Focus",,'DebugHQCamera');
+				break;
+			}
+		}
+	}
+
+	if (Cam == none)
+		return;
+
+	// A camera actor is used to determine where the camera should go.. since we are
+	//  determining the y coordinate procedurally, we need to override the cam actor location.
+	//  Basically 'Base' view needs to match the FreeMovement view as it is just the initial view
+	//  of the base.
+
+	AdjustedCamActorLoc = Cam.Location;
+
+	out_ViewDistance = ViewDistance;
+	out_Focus = AdjustedCamActorLoc;
+	out_Rotation = Cam.Rotation;
+	out_FOV = Cam.FOVAngle;
+	PCOwner.SetRotation( out_Rotation );
+
+	out_PPSettings = Cam.CamOverridePostProcess;
+	out_PPOverrideAlpha = Cam.CamOverridePostProcessAlpha;
+
+}
+
 function EndCameraState()
 {
 //	local vector NewPawnLoc;

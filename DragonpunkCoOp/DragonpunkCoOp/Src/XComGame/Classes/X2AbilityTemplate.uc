@@ -167,6 +167,7 @@ var name                        TargetMissedSpeech;                 //  X2Action
 
 //  Targeting stuff
 var class<X2TargetingMethod>    TargetingMethod;                    // UI interaction class. Specifies how the target is actually selected by the user
+var class<X2TargetingMethod>	SecondaryTargetingMethod;			// Same as Targeting Method, but this gets used if we want a separate target method after we select/confirm an ability.
 var bool						SkipRenderOfAOETargetingTiles;		// Modifier to UI interaction class
 var bool						SkipRenderOfTargetingTemplate;		// Modifier to UI interaction class
 var bool						bOverrideMeleeDeath;				// If true it will play a normal death instead of melee death (only effects melee weapons)

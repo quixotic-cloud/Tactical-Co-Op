@@ -102,7 +102,7 @@ simulated state DebugView
 
 			GetAxes(CameraCache.POV.Rotation,X,Y,Z);
 
-			fRotationUnitsPerSecond = 250;
+			fRotationUnitsPerSecond = `ISCONTROLLERACTIVE ? 200 : 250;
 
 			// NOTE: anything from PlayerInput is a relative delta from the last frame
 
@@ -118,7 +118,10 @@ simulated state DebugView
 			CameraCache.POV.Rotation.Yaw += (PCOwner.PlayerInput.aTurn * fRotationUnitsPerSecond);
 			CameraCache.POV.Rotation.Pitch += (PCOwner.PlayerInput.aLookUp * fRotationUnitsPerSecond);
 
-			CameraCache.POV.Location += (PCOwner.PlayerInput.aBaseY*X + PCOwner.PlayerInput.aStrafe*Y + PCOwner.PlayerInput.aUp*vect(0,0,0.1) ) * (fMoveSpeedMultipier * 0.005);
+			if( `ISCONTROLLERACTIVE )
+				CameraCache.POV.Location += (PCOwner.PlayerInput.aBaseY*X + PCOwner.PlayerInput.aStrafe*Y + PCOwner.PlayerInput.aUp*vect(0,0,0.1) ) * (fMoveSpeedMultipier * 5.0f);
+			else
+				CameraCache.POV.Location += (PCOwner.PlayerInput.aBaseY*X + PCOwner.PlayerInput.aStrafe*Y + PCOwner.PlayerInput.aUp*vect(0,0,0.1) ) * (fMoveSpeedMultipier * 0.005);
 		}
 		else {
 			CameraCache.POV = XCTC.vDebugStaticPOV;

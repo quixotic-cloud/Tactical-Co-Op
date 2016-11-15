@@ -65,6 +65,8 @@ var localized string m_strNoChangeInGame;
 
 var localized string m_strWaitingForSaveTitle;
 var localized string m_strWaitingForSaveBody;
+var UITextTooltip ActiveTooltip;
+//</workshop>
 
 var UIList           m_List;
 var UIButton         m_FirstTimeVOButton;
@@ -101,6 +103,7 @@ var int m_iOptFirstTimeNarrative;
 var array<name> EnabledOptionalNarrativeDLC;
 
 var UIShellStrategy DevStrategyShell;
+var UINavigationHelp NavHelp;
 
 //----------------------------------------------------------------------------
 
@@ -110,16 +113,20 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	super.InitScreen(InitController, InitMovie, InitName);
 
-	InitChecboxValues();
+	InitCheckboxValues();
 
+	NavHelp = GetNavHelp();
 	m_List = Spawn(class'UIList', self);
 	m_List.InitList('difficultyListMC');
 	m_List.Navigator.LoopSelection = false;
 	m_List.Navigator.LoopOnReceiveFocus = true;
 	m_List.OnItemClicked = OnDifficultyDoubleClick;
+	m_List.Navigator.LoopSelection = false;
+	m_List.bPermitNavigatorToDefocus = true; //Another case of the SAFEGUARD_TO_PREVENT_FOCUS_LOSS hack causing problems 
 
 	m_TutorialMechaItem = Spawn(class'UIMechaListItem', self);
 	m_TutorialMechaItem.InitListItem();
+	Navigator.AddControl(m_TutorialMechaItem);
 	m_TutorialMechaItem.SetPosition(-425, 290);
 
 	// Need this here to disable the flash element on the stage. 
@@ -127,6 +134,7 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_TutorialButton.bIsNavigable = false;
 	m_TutorialButton.InitButton('difficultyTutorialButton');
 	m_TutorialButton.Hide();
+	m_TutorialButton.DisableNavigation();
 
 	m_FirstTimeVOButton = Spawn(class'UIButton', self);
 	m_FirstTimeVOButton.InitButton('difficultySecondWaveButton');
@@ -136,19 +144,36 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_FirstTimeVOMechaItem = Spawn(class'UIMechaListItem', self);
 	m_FirstTimeVOMechaItem.InitListItem();
 	m_FirstTimeVOMechaItem.SetPosition(-425, 330);
+	Navigator.AddControl(m_FirstTimeVOMechaItem);
 
 	m_SubtitlesMechaItem = Spawn(class'UIMechaListItem', self);
 	m_SubtitlesMechaItem.InitListItem();
 	m_SubtitlesMechaItem.SetPosition(-425, 370);
+	Navigator.AddControl(m_SubtitlesMechaItem);
 
 	m_CancelButton = Spawn(class'UIButton', self);
 	m_CancelButton.InitButton('difficultyCancelButton', m_strDifficulty_Back, OnButtonCancel);
+	if( `ISCONTROLLERACTIVE )
+		m_CancelButton.Hide();
 	m_Cancelbutton.DisableNavigation();
 
 	m_StartButton = Spawn(class'UILargeButton', self);
 	strDifficultyAccept = (m_bIsPlayingGame) ? m_strChangeDifficulty : m_strDifficulty_Accept;
-	m_StartButton.InitLargeButton('difficultyLaunchButton', strDifficultyAccept, "", UIIronMan);
-	//m_StartButton.SetY(405);
+	
+	if( `ISCONTROLLERACTIVE )
+	{
+		m_StartButton.InitLargeButton('difficultyLaunchButton', "", "", UIIronMan);
+		m_StartButton.SetY(400);
+		m_StartButton.DisableNavigation();
+	}
+	else
+	{
+		m_StartButton.InitLargeButton('difficultyLaunchButton', strDifficultyAccept, "", UIIronMan);
+		m_StartButton.SetY(400);
+	}
+
+	m_StartButton.OnSizeRealized = RefreshStartButtonLocation;
+	UpdateStartButtonText();
 
 	// These player profile flags will change what options are defaulted when this menu comes up
 	// SCOTT RAMSAY/RYAN BAKER: Has the player ever completed the strategy tutorial?
@@ -158,6 +183,12 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	`XPROFILESETTINGS.Data.ClearGameplayOptions();
 
+	if (m_bIsPlayingGame)
+	{
+		m_TutorialMechaItem.DisableNavigation();
+		m_FirstTimeVOMechaItem.DisableNavigation();
+		m_SubtitlesMechaItem.DisableNavigation();
+	}
 	//If we came from the dev strategy shell and opted for the cheat start, then just launch into the game after setting our settings
 	DevStrategyShell = UIShellStrategy(Movie.Pres.ScreenStack.GetScreen(class'UIShellStrategy'));
 	if(DevStrategyShell != none && DevStrategyShell.m_bCheatStart)
@@ -170,14 +201,13 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	m_List.Navigator.SetSelected(m_List.GetItem(m_List.SelectedIndex));
 }
 
-simulated function InitChecboxValues()
+simulated function InitCheckboxValues()
 {
 	local XComGameStateHistory History;
 	local XComGameState_CampaignSettings CampaignSettingsStateObject;
 
 	History = `XCOMHISTORY;
-
-		CampaignSettingsStateObject = XComGameState_CampaignSettings(History.GetSingleGameStateObjectForClass(class'XComGameState_CampaignSettings', true));
+	CampaignSettingsStateObject = XComGameState_CampaignSettings(History.GetSingleGameStateObjectForClass(class'XComGameState_CampaignSettings', true));
 
 	m_bShowedFirstTimeTutorialNotice = `XPROFILESETTINGS.Data.m_bPlayerHasUncheckedBoxTutorialSetting;
 
@@ -209,7 +239,7 @@ simulated function OnInit()
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local bool bHandled;
-	local UIPanel CurrentSelection;
+	//local UIPanel CurrentSelection;
 
 	if(!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
 		return true;
@@ -222,14 +252,17 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 	switch(cmd)
 	{
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X:
 	case class'UIUtilities_Input'.const.FXS_KEY_ENTER:
 	case class'UIUtilities_Input'.const.FXS_BUTTON_START:
 
-		CurrentSelection = Navigator.GetSelected();
-		if(CurrentSelection != None)
-		{
-			bHandled = CurrentSelection.OnUnrealCommand(cmd, arg);
-		}
+		//CurrentSelection = Navigator.GetSelected();
+		//if( CurrentSelection != None )
+		//{
+		//	bHandled = CurrentSelection.OnUnrealCommand(cmd, arg);
+		//}
+		UIIronMan(m_StartButton);
+		return true;
 		break;
 
 	case class'UIUtilities_Input'.const.FXS_BUTTON_B:
@@ -292,21 +325,28 @@ simulated function BuildMenu()
 	// DIFFICULTY CHECKBOXES
 	for(i = 0; i < m_arrDifficultyTypeStrings.Length; ++i)
 	{
-		UIMechaListItem(m_List.GetItem(i)).UpdateDataCheckbox(m_arrDifficultyTypeStrings[i], "", m_iSelectedDifficulty == i);
+		UIMechaListItem(m_List.GetItem(i)).UpdateDataCheckbox(m_arrDifficultyTypeStrings[i], "", m_iSelectedDifficulty == i, OnCheckboxChanged);
 		UIMechaListItem(m_List.GetItem(i)).Checkbox.SetReadOnly(i >= eDifficulty_Classic && `REPLAY.bInTutorial);
 		UIMechaListItem(m_List.GetItem(i)).SetDisabled(i >= eDifficulty_Classic && `REPLAY.bInTutorial);
 	}
 
+	Navigator.SetSelected(m_List);
+	m_List.SetSelectedIndex(0);
+	m_List.GetItem(0).Navigator.SelectFirstAvailable();
+	Navigator.OnSelectedIndexChanged = OnSelectedIndexChanged;
 	m_FirstTimeVOMechaItem.UpdateDataCheckbox(m_strDifficultySuppressFirstTimeNarrativeVO, "", m_bFirstTimeNarrative, UpdateFirstTimeNarrative, OnClickFirstTimeVO);
+	//m_FirstTimeVOMechaItem.UpdateDataCheckbox(m_strDifficultySuppressFirstTimeNarrativeVO, "", m_bFirstTimeNarrative, UpdateFirstTimeNarrative);
 	m_FirstTimeVOMechaItem.Checkbox.SetReadOnly(m_bIsPlayingGame);
 	m_FirstTimeVOMechaItem.BG.SetTooltipText(m_strDifficultySuppressFirstTimeNarrativeVODesc, , , 10, , , , 0.0f);
 	UpdateFirstTimeNarrative(m_FirstTimeVOMechaItem.Checkbox);
 
 	m_TutorialMechaItem.UpdateDataCheckbox(m_strDifficultyEnableTutorial, "", m_bControlledStart, ConfirmControlDialogue, OnClickedTutorial);
+	//m_TutorialMechaItem.UpdateDataCheckbox(m_strDifficultyEnableTutorial, "", m_bControlledStart, ConfirmControlDialogue);
 	m_TutorialMechaItem.Checkbox.SetReadOnly(m_bIsPlayingGame);
 	m_TutorialMechaItem.BG.SetTooltipText(m_strDifficultyTutorialDesc, , , 10, , , , 0.0f);
 
-	m_SubtitlesMechaItem.UpdateDataCheckbox(class'UIOptionsPCScreen'.default.m_strInterfaceLabel_ShowSubtitles, "", `XPROFILESETTINGS.Data.m_bSubtitles, UpdateSubtitles, OnClickSubtitles);
+	m_SubtitlesMechaItem.UpdateDataCheckbox(class'UIOptionsPCScreen'.default.m_strInterfaceLabel_ShowSubtitles,"", `XPROFILESETTINGS.Data.m_bSubtitles, UpdateSubtitles, OnClickSubtitles);
+	//m_SubtitlesMechaItem.UpdateDataCheckbox(class'UIOptionsPCScreen'.default.m_strInterfaceLabel_ShowSubtitles,"", `XPROFILESETTINGS.Data.m_bSubtitles, UpdateSubtitles);
 	m_SubtitlesMechaItem.BG.SetTooltipText(class'UIOptionsPCScreen'.default.m_strInterfaceLabel_ShowSubtitles_Desc, , , 10, , , , 0.0f);
 
 	if(m_bIsPlayingGame)
@@ -316,11 +356,92 @@ simulated function BuildMenu()
 		m_FirstTimeVOMechaItem.Hide();
 		m_TutorialMechaItem.Hide();
 		m_SubtitlesMechaItem.Hide();
+		m_FirstTimeVOMechaItem.DisableNavigation();
+		m_TutorialMechaItem.DisableNavigation();
 	}
 
 	//m_List.SetSelectedIndex(1);
 
 	RefreshDescInfo();
+	UpdateNavHelp();
+}
+
+simulated function OnSelectedIndexChanged(int Index)
+{
+	local UIMechaListItem ListItem;
+
+	if (ActiveTooltip != none)
+	{
+		XComPresentationLayerBase(Owner).m_kTooltipMgr.DeactivateTooltip(ActiveTooltip, true);
+		ActiveTooltip = none;
+	}
+
+	ListItem = UIMechaListItem(Navigator.GetSelected());
+	if (ListItem != none)
+	{
+		if (ListItem.BG.bHasTooltip)
+		{
+			ActiveTooltip = UITextTooltip(XComPresentationLayerBase(Owner).m_kTooltipMgr.GetTooltipByID(ListItem.BG.CachedTooltipId));
+			if (ActiveTooltip != none)
+			{
+				ActiveTooltip.SetFollowMouse(false);
+				ActiveTooltip.SetDelay(0.6);
+				ActiveTooltip.SetTooltipPosition(150.0, 720.0);
+				XComPresentationLayerBase(Owner).m_kTooltipMgr.ActivateTooltip(ActiveTooltip);
+			}
+		}
+	}
+
+	PlaySound(SoundCue'SoundUI.MenuScrollCue', true);
+}
+simulated function UINavigationHelp GetNavHelp()
+{
+	local UINavigationHelp Result;
+	Result = PC.Pres.GetNavHelp();
+	if(Result == None)
+	{
+		if (`PRES != none) // Tactical
+			Result = Spawn(class'UINavigationHelp', Movie.Stack.GetScreen(class'UIMouseGuard')).InitNavHelp();
+		
+		else if (`HQPRES != none) // Strategy
+			Result = `HQPRES.m_kAvengerHUD.NavHelp;
+	}
+	return Result;
+}
+simulated function UpdateNavHelp()
+{
+	//it is possible to lose focus before the flash assets are initialized -JTA 2016/6/13
+	if(!bIsFocused)
+		return;
+
+	if(NavHelp == None)
+		NavHelp = Movie.Pres.GetNavHelp();
+	NavHelp.ClearButtonHelp();
+	//<bsg> TTP_4868_HELP_BUTTON_ALIGNMENT_INCONSISTENT_PAUSE_MENUS jneal 06/22/16
+	//INS:
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
+	//</bsg>
+	NavHelp.AddBackButton();
+	NavHelp.AddSelectNavHelp();
+}
+
+//This function modifies the start button to say "next" if the next screen will give you more options
+//Start button (displayed on consoles as a navhelp) doesn't always pull you directly into a game
+simulated function UpdateStartButtonText()
+{
+	local String strLabel;
+
+	if(m_bIsPlayingGame)
+		strLabel = m_strChangeDifficulty;
+	else if(!m_TutorialMechaItem.Checkbox.bChecked)
+		strLabel = class'UIUtilities_Text'.default.m_strGenericNext;
+	else
+		strLabel = m_strDifficulty_Accept;
+
+	if( `ISCONTROLLERACTIVE )
+		strLabel = class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.const.ICON_X_SQUARE, 26, 26, -2) @ strLabel;
+
+	m_StartButton.SetText(strLabel);
 }
 
 simulated function OnClickedTutorial()
@@ -344,6 +465,11 @@ simulated function OnClickSubtitles()
 // Lower pause screen
 simulated public function OnUCancel()
 {
+	if (ActiveTooltip != none)
+	{
+		XComPresentationLayerBase(Owner).m_kTooltipMgr.DeactivateTooltip(ActiveTooltip, true);
+		ActiveTooltip = none;
+	}
 	if(bIsInited && !IsTimerActive(nameof(StartIntroMovie)))
 	{
 		Movie.Pres.PlayUISound(eSUISound_MenuClose);
@@ -354,6 +480,11 @@ simulated public function OnUCancel()
 
 simulated public function OnButtonCancel(UIButton ButtonControl)
 {
+	if (ActiveTooltip != none)
+	{
+		XComPresentationLayerBase(Owner).m_kTooltipMgr.DeactivateTooltip(ActiveTooltip, true);
+		ActiveTooltip = none;
+	}
 	if(bIsInited && !IsTimerActive(nameof(StartIntroMovie)))
 	{
 		Movie.Pres.PlayUISound(eSUISound_MenuClose);
@@ -404,10 +535,20 @@ simulated function ConfirmFirstTimeVODialogue(UIButton ButtonControl)
 XComPresentationLayerBase(Owner).UISecondWave();
 }*/
 
+simulated function OnCheckboxChanged(UICheckbox Checkbox)
+{
+	OnDifficultyDoubleClick(m_List, m_List.SelectedIndex);
+}
+
 simulated function OnDifficultyDoubleClick(UIList ContainerList, int ItemIndex)
 {
 	local UICheckbox checkedBox;
 	if(`ONLINEEVENTMGR.bTutorial && ItemIndex >= eDifficulty_Classic)
+	{
+		return;
+	}
+	if (UIMechaListItem(m_List.GetItem(ItemIndex)).bDisabled || 
+		UIMechaListItem(m_List.GetItem(ItemIndex)).Checkbox.bReadOnly)
 	{
 		return;
 	}
@@ -437,13 +578,17 @@ simulated public function OnDifficultySelect(UICheckbox CheckboxControl)
 			}
 			else
 			{
-				UIMechaListItem(m_List.GetItem(m_iSelectedDifficulty)).Checkbox.SetChecked(false);
+				UIMechaListItem(m_List.GetItem(m_iSelectedDifficulty)).Checkbox.SetChecked(false, false);
 
 				m_iSelectedDifficulty = i;
-				if(m_iSelectedDifficulty >= eDifficulty_Classic)
+				if (m_iSelectedDifficulty >= eDifficulty_Classic)
+				{
 					ForceTutorialOff();
+				}
 				else
+				{
 					GrantTutorialReadAccess();
+				}
 			}
 		}
 	}
@@ -539,6 +684,9 @@ simulated public function OnDifficultyConfirm(UIButton ButtonControl)
 	{
 		EnableTutorial = m_iSelectedDifficulty < eDifficulty_Classic && m_bControlledStart;
 
+		//bsg-mfawcett(08.21.16): fix for TTP 6733 - reset cached cards so that all our missions can be found/used again
+		`TACTICALMISSIONMGR.ResetCachedCards();
+
 		//If we are NOT going to do the tutorial, we setup our campaign starting state here. If the tutorial has been selected, we wait until it is done
 		//to create the strategy start state.
 		if(!EnableTutorial || (DevStrategyShell != none && DevStrategyShell.m_bSkipFirstTactical))
@@ -578,6 +726,9 @@ simulated public function OnDifficultyConfirm(UIButton ButtonControl)
 		}
 
 		X2ImageCaptureManager(`XENGINE.GetImageCaptureManager()).ClearStore();
+		//Hide the UI as the user confirms, so that it doesn't flash up as everything gets popped off the stack.
+		//INS:
+		Movie.Pres.HideUIForCinematics();
 
 		//Let the screen fade into the intro
 		SetTimer(0.6f, false, nameof(StartIntroMovie));
@@ -706,12 +857,12 @@ simulated public function ConfirmIronmanCallback(eUIAction eAction)
 function ConfirmControlDialogue(UICheckbox CheckboxControl)
 {
 	local TDialogueBoxData kDialogData;
+	UpdateStartButtonText();
 
 	// Can't enable any of the tutorial options with classic difficulty selected
 	if(m_iSelectedDifficulty >= eDifficulty_Classic)
 	{
 		ForceTutorialOff();
-		ShowSimpleDialog(m_strInvalidTutorialClassicDifficulty);
 		return;
 	}
 	else
@@ -895,12 +1046,15 @@ simulated function OnReceiveFocus()
 {
 	super.OnReceiveFocus();
 	Show();
+	UpdateNavHelp();
 }
 
 simulated function OnLoseFocus()
 {
 	super.OnLoseFocus();
 	Hide();
+	if(NavHelp != None)
+		NavHelp.ClearButtonHelp();
 }
 
 simulated public function SaveSettings()
@@ -974,6 +1128,19 @@ simulated function AS_ToggleAdvancedOptions()
 simulated function AS_SetDifficultyMenu(string title, string tutorialLabel, string secondWaveLabel, string launchLabel, string CancelLabel)
 {
 	Movie.ActionScriptVoid(MCPath$".UpdateDifficultyMenu");
+}
+
+simulated function RefreshStartButtonLocation()
+{
+	m_StartButton.SetX(320 - m_StartButton.Width);
+	m_StartButton.Show();
+}
+
+simulated function OnRemoved()
+{
+	super.OnRemoved();
+	if(NavHelp != none)
+		NavHelp.ClearButtonHelp();
 }
 
 //==============================================================================

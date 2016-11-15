@@ -44,6 +44,9 @@ function Init(AvailableAction InAction)
 	Cursor = `Cursor;
 	Cursor.m_fMaxChainedDistance = `METERSTOUNITS(TargetingRange);
 
+	// set the cursor location to itself to make sure the chain distance updates
+	Cursor.CursorSetLocation(Cursor.GetCursorFeetLocation(), false, true); 
+
 	CursorTarget = X2AbilityTarget_Cursor(Ability.GetMyTemplate().AbilityTargetStyle);
 	if (CursorTarget != none)
 		bRestrictToSquadsightRange = CursorTarget.bRestrictToSquadsightRange;
@@ -146,7 +149,11 @@ simulated protected function DrawSplashRadius()
 	local float Radius;
 	local LinearColor CylinderColor;
 
-	Center = GetSplashRadiusCenter();
+	if (UseGrenadePath( ))
+		Center = GrenadePath.GetEndPosition( );
+	else
+		Center = Cursor.GetCursorFeetLocation( );
+
 	Radius = Ability.GetAbilityRadius();
 	
 	/*
@@ -159,7 +166,7 @@ simulated protected function DrawSplashRadius()
 	}
 	*/
 
-	if(ExplosionEmitter != none)
+	if( (ExplosionEmitter != none) && (Center != ExplosionEmitter.Location))
 	{
 		ExplosionEmitter.SetLocation(Center); // Set initial location of emitter
 		ExplosionEmitter.SetDrawScale(Radius / 48.0f);
@@ -188,9 +195,9 @@ function Update(float DeltaTime)
 		GetTargetedActors(NewTargetLocation, CurrentlyMarkedTargets, Tiles);
 		CheckForFriendlyUnit(CurrentlyMarkedTargets);	
 		MarkTargetedActors(CurrentlyMarkedTargets, (!AbilityIsOffensive) ? FiringUnit.GetTeam() : eTeam_None );
-		DrawSplashRadius();
 		DrawAOETiles(Tiles);
 	}
+	DrawSplashRadius( );
 
 	super.Update(DeltaTime);
 }

@@ -52,13 +52,29 @@ simulated function ClearDelayTimer()
 	ClearTimer('CloseMenu');
 }
 
-simulated function TryToStartDelayTimer()
+simulated function TryToStartDelayTimer(optional array<string> args)
 {	
 	local string TargetPath; 
-	local int iFoundIndex; 
+	local int iFoundIndex, iPathBit; 
 
 	TargetPath = Movie.GetPathUnderMouse();
+
+	if (TargetPath == "undefined" && args.length > 0)
+	{
+		TargetPath = args[0];
+		for(iPathBit = 1; iPathBit < args.length; iPathBit++)
+		{
+			TargetPath $= ("." $ args[iPathBit]);
+		}
+	}
+
 	iFoundIndex = InStr(TargetPath, MCName);
+
+	if (iFoundIndex == -1)
+	{
+		//Try to see if something else in the screen has the mouse, like the background art.
+		iFoundIndex = InStr(TargetPath, Screen.MCName);
+	}
 
 	if( iFoundIndex == -1 ) //We're moused completely off this movie clip, which includes all children.
 	{
@@ -120,6 +136,28 @@ simulated function UpdateData()
 			m_staff.AddItem(UnitInfo);
 		}
 	}
+	m_staff.Sort(SortStaff);
+}
+
+simulated function int SortStaff(StaffUnitInfo UnitInfoA, StaffUnitInfo UnitInfoB)
+{
+	local EStaffStatus UnitAStatus;
+	local EStaffStatus UnitBStatus;
+
+	UnitAStatus = class'X2StrategyGameRulesetDataStructures'.static.GetStafferStatus(UnitInfoA);
+	UnitBStatus = class'X2StrategyGameRulesetDataStructures'.static.GetStafferStatus(UnitInfoB);
+
+	if (UnitAStatus > UnitBStatus)
+	{
+		return -1;
+	}
+
+	if (UnitAStatus < UnitBStatus)
+	{
+		return 1;
+	}		
+
+	return 0;
 }
 
 simulated function AddGhostUnits(XComGameState_StaffSlot SlotState)

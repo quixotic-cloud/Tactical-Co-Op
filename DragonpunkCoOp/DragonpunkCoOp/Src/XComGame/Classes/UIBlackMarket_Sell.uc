@@ -20,6 +20,10 @@ var localized string m_strSellLabel;
 var localized string m_strTotalLabel;
 var localized string m_strCostLabel;
 var localized string m_strInterestedLabel;
+var localized string m_strQuantityLabel;
+var localized String	m_strSellConfirmTitle;
+var localized String	m_strSellConfirmText;
+var localized string m_strAddRemoveItems;
 
 var UIList List;
 var UIPanel ListBG;
@@ -73,7 +77,8 @@ simulated function BuildScreen()
 
 	UpdateSellInfo();
 
-	ConfirmButton = Spawn(class'UIButton', self).InitButton('ConfirmButton', m_strConfirmButtonLabel, OnConfirmButtonClicked);
+	ConfirmButton = Spawn(class'UIButton', self).InitButton('ConfirmButton', m_strConfirmButtonLabel, OnConfirmButtonClicked, eUIButtonStyle_HOTLINK_BUTTON);
+	ConfirmButton.SetGamepadIcon(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
 
 	PopulateData();
 	UpdateTotalValue();
@@ -88,6 +93,11 @@ simulated function PopulateData()
 	local array<BlackMarketItemPrice> Items;
 	local XComGameState_BlackMarket BlackMarketState;
 	local UIBlackMarket_SellItem ListItem;
+	local BlackMarketItemPrice PrevItem;
+
+	ListItem = UIBlackMarket_SellItem(List.GetSelectedItem());
+	if(ListItem != None)
+		PrevItem = ListItem.ItemPrice;
 
 	// override behavior in child classes
 	List.ClearItems();
@@ -119,6 +129,8 @@ simulated function PopulateData()
 		if( InventoryItem.Quantity > 0 )
 		{
 			Spawn(class'UIBlackMarket_SellItem', List.itemContainer).InitListItem(Item);
+			if(Item == PrevItem)
+				List.SetSelectedIndex(List.GetItemCount() - 1);
 		}
 	}
 
@@ -126,6 +138,8 @@ simulated function PopulateData()
 	{
 		ListItem = UIBlackMarket_SellItem(List.GetItem(0));
 		PopulateItemCard(ListItem.ItemTemplate, ListItem.ItemRef, string(ListItem.Price));
+		if(List.SelectedIndex < 0)
+			List.SetSelectedIndex(0);
 	}
 	else
 	{
@@ -161,6 +175,7 @@ simulated function UpdateTotalValue(optional int Delta = 0)
 	MC.BeginFunctionOp("UpdateSellTotal");
 	MC.QueueString(class'UIUtilities_Strategy'.default.m_strCreditsPrefix  $ string(SaleAmount));
 	MC.EndOp();
+	UpdateNavHelp();
 }
 
 simulated function OnConfirmButtonClicked(UIButton Button)
@@ -229,6 +244,7 @@ simulated function UpdateSellInfo()
 	MC.QueueString(m_strSellLabel);
 	MC.QueueString(m_strTotalLabel);
 	MC.QueueString(m_strConfirmButtonLabel);
+	MC.QueueString(m_strQuantityLabel);
 	MC.EndOp();
 }
 
@@ -300,6 +316,22 @@ simulated function UpdateNavHelp()
 {
 	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
 	`HQPRES.m_kAvengerHUD.NavHelp.AddBackButton(CloseScreen);
+
+	if(`ISCONTROLLERACTIVE)
+	{
+		`HQPRES.m_kAvengerHUD.NavHelp.AddLeftHelp(m_strAddRemoveItems, class'UIUtilities_Input'.const.ICON_DPAD_HORIZONTAL);
+	}
+
+	/*if(List.ItemCount > 0)
+		`HQPRES.m_kAvengerHUD.NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericNavigate, class'UIUtilities_Input'.const.ICON_DPAD_HORIZONTAL);
+		//USE THIS IF WE SWITCH TO BUMPER NAVIGATION - JTA 2016/2/12
+		//`HQPRES.m_kAvengerHUD.NavHelp.AddLeftHelp(
+		//	class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.Icon_LB_L1,38,26,-10) $
+		//	class'UIUtilities_Text'.static.InjectImage(class'UIUtilities_Input'.static.GetGamepadIconPrefix() $class'UIUtilities_Input'.const.Icon_RB_R1,34,26,-10) @
+		//	class'UIUtilities_Text'.default.m_strGenericNavigate);
+	if(SaleAmount > 0)
+		`HQPRES.m_kAvengerHUD.NavHelp.AddLeftHelp(m_strSellLabel, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
+		*/
 }
 
 simulated function bool OnUnrealCommand(int cmd, int arg)
@@ -318,6 +350,9 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	case class'UIUtilities_Input'.const.FXS_KEY_SPACEBAR:
 		OnConfirmButtonClicked(ConfirmButton);
 		break;
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+		DisplayConfirmSellDialog();
+		break;
 	case class'UIUtilities_Input'.const.FXS_BUTTON_B:
 	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
 	case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
@@ -334,6 +369,28 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	return bHandled || super.OnUnrealCommand(cmd, arg);
 }
 
+function DisplayConfirmSellDialog()
+{
+	local TDialogueBoxData kConfirmData;
+
+	kConfirmData.eType = eDialog_Warning;
+	kConfirmData.strTitle = m_strSellConfirmTitle;
+	kConfirmData.strText = Repl(m_strSellConfirmText,"<amount>",class'UIUtilities_Strategy'.default.m_strCreditsPrefix  $ string(SaleAmount));
+	kConfirmData.strAccept = class'UIUtilities_Text'.default.m_strGenericConfirm;
+	kConfirmData.strCancel = class'UIUtilities_Text'.default.m_strGenericCancel;
+
+	kConfirmData.fnCallback = OnDisplayConfirmSellDialogAction;
+
+	Movie.Pres.UIRaiseDialog(kConfirmData);
+}
+
+function OnDisplayConfirmSellDialogAction(eUIAction eAction)
+{
+	if (eAction == eUIAction_Accept)
+	{
+		OnConfirmButtonClicked(ConfirmButton);
+	}
+}
 defaultproperties
 {
 	Package = "/ package/gfxBlackMarket/BlackMarket";

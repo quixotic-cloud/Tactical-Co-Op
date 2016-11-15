@@ -11,6 +11,9 @@ class UIBuildFacilities extends UIScreen;
 
 var bool bInstantInterp;
 var localized string BuildFacilitiesTitle;
+var localized string Upgrade;
+var localized string Remove;
+var localized string Excavate;
 
 //----------------------------------------------------------------------------
 // MEMBERS
@@ -51,8 +54,15 @@ simulated function Show()
 	HQPres.m_kFacilityGrid.ActivateGrid();
 	HQPres.m_kFacilityGrid.EnableNavigation();
 	HQPres.m_kFacilityGrid.SetBorderLabel(BuildFacilitiesTitle);
-	HQPres.m_kAvengerHUD.NavHelp.ClearButtonHelp();
-	HQPres.m_kAvengerHUD.NavHelp.AddBackButton(CloseScreen);
+	if( `ISCONTROLLERACTIVE )
+	{
+		UpdateNavHelp();
+	}
+	else
+	{
+		HQPres.m_kAvengerHUD.NavHelp.ClearButtonHelp();
+		HQPres.m_kAvengerHUD.NavHelp.AddBackButton(CloseScreen);
+	}
 
 	Storage = UIFacility_Storage(Movie.Stack.GetScreen(class'UIFacility_Storage'));
 	if( Storage != none )
@@ -79,9 +89,16 @@ simulated function Hide()
 simulated function OnReceiveFocus()
 {
 	super.OnReceiveFocus();
-	`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
-	`HQPRES.m_kAvengerHUD.NavHelp.AddBackButton(CloseScreen);
-	`HQPres.m_kFacilityGrid.EnableNavigation();
+	if( `ISCONTROLLERACTIVE )
+	{
+		UpdateNavHelp();
+	}
+	else
+	{
+		`HQPRES.m_kAvengerHUD.NavHelp.ClearButtonHelp();
+		`HQPRES.m_kAvengerHUD.NavHelp.AddBackButton(CloseScreen);
+		`HQPres.m_kFacilityGrid.EnableNavigation();
+	}
 }
 
 simulated function OnLoseFocus()
@@ -112,11 +129,80 @@ simulated function OnRemoved()
 	super.OnRemoved();
 }
 
+simulated function UpdateNavHelp()
+{
+	local UINavigationHelp NavHelp;
+	local UIFacilityGrid_FacilityOverlay FacilityOverlay;
+	local XComGameState_HeadquartersRoom CurrentHighlightedRoom;
+	local XComGameState_FacilityXCom CurrentHighlightedFacility;
 
+	NavHelp = `HQPRES.m_kAvengerHUD.NavHelp;
+	FacilityOverlay = UIFacilityGrid_FacilityOverlay(`HQPRES.m_kFacilityGrid.Navigator.GetSelected());
+
+	NavHelp.ClearButtonHelp();
+	NavHelp.bIsVerticalHelp = `ISCONTROLLERACTIVE;
+	NavHelp.AddBackButton(CloseScreen);
+	NavHelp.AddGeoscapeButton();
+
+	//Handle Facility-Specific NavHelp
+	if(FacilityOverlay != None)
+	{
+		if( `ISCONTROLLERACTIVE )
+		{
+			//REMOVING / CANCELING (using the same hint for both)
+			
+			CurrentHighlightedRoom = FacilityOverlay.GetRoom();
+			CurrentHighlightedFacility = FacilityOverlay.GetFacility();
+
+			if(CurrentHighlightedFacility == None)
+			{
+				//bsg-jneal (7.16.16): Do not allow excavation or selection if the overlay is locked, such as during the tutorial
+				if(!FacilityOverlay.bLocked)
+				{
+					//EXCAVATE
+					if(FacilityOverlay.IsAvailableForClearing(CurrentHighlightedRoom))
+						NavHelp.AddLeftHelp(Excavate,class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+					//SELECT
+					else if(!FacilityOverlay.GetRoom().ClearingRoom) //bsg-jneal (7.23.16): no selection nav help if the current room is excavating
+						NavHelp.AddSelectNavHelp();
+				}
+				//bsg-jneal (7.16.16): end
+			}
+			else
+			{
+				//UPGRADE
+				if(CurrentHighlightedFacility.CanUpgrade())
+					NavHelp.AddLeftHelp(Upgrade, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+			}
+		
+			//CANCEL
+			if(FacilityOverlay.IsCancelAvailable())
+				NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericCancel, class'UIUtilities_Input'.const.ICON_X_SQUARE);
+		
+			else if (CurrentHighlightedFacility.CanRemove())
+				NavHelp.AddLeftHelp(Remove, class'UIUtilities_Input'.const.ICON_X_SQUARE);
+			//</workshop>
+		}
+		else
+		{
+			//UPGRADE
+			if(FacilityOverlay.GetFacility().CanUpgrade())
+				NavHelp.AddLeftHelp(Upgrade, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+			//REMOVING / CANCELING (using the same hint for both)
+			if(FacilityOverlay.GetFacility().CanRemove())
+				NavHelp.AddLeftHelp(Remove, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
+			//CANCEL
+			if(FacilityOverlay.IsCancelAvailable())
+				NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericCancel, class'UIUtilities_Input'.static.GetGamepadIconPrefix() $ class'UIUtilities_Input'.const.ICON_X_SQUARE);
+		}
+	}
+}
 simulated function bool OnUnrealCommand(int cmd, int arg)
 {
 	local XComHQPresentationLayer HQPres;
+	local UIFacilityGrid_FacilityOverlay FacilityOverlay;
 	HQPres = `HQPRES;
+	FacilityOverlay = UIFacilityGrid_FacilityOverlay(HQPres.m_kFacilityGrid.Navigator.GetSelected());
 
 	if( !CheckInputIsReleaseOrDirectionRepeat(cmd, arg) )
 		return false;
@@ -126,6 +212,23 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	case class'UIUtilities_Input'.const.FXS_KEY_ESCAPE:
 	case class'UIUtilities_Input'.const.FXS_R_MOUSE_DOWN:
 		Movie.Stack.Pop(self);
+		return true;
+	case class'UIUtilities_Input'.const.FXS_BUTTON_A:
+		FacilityOverlay.OnConfirm();
+		return true;
+
+	case class'UIUtilities_Input'.const.FXS_BUTTON_X:
+		if(Self.bIsFocused)
+		{
+			if (FacilityOverlay.IsCancelAvailable())
+			{
+				FacilityOverlay.OnCancelConstruction(None);			
+			}
+			else if (FacilityOverlay.GetFacility().CanRemove())
+			{
+				FacilityOverlay.OnRemoveClicked(None);
+			}
+		}
 		return true;
 	}
 

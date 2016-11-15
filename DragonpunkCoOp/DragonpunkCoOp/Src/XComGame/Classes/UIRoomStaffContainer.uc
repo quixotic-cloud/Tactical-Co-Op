@@ -12,6 +12,7 @@ class UIRoomStaffContainer extends UIStaffContainer;
 simulated function UIStaffContainer InitStaffContainer(optional name InitName, optional string NewTitle = DefaultStaffTitle)
 {
 	return super.InitStaffContainer(InitName, NewTitle);
+	Navigator.HorizontalNavigation = true;
 }
 
 simulated function Refresh(StateObjectReference LocationRef, delegate<UIStaffSlot.OnStaffUpdated> onStaffUpdatedDelegate)
@@ -43,6 +44,34 @@ simulated function Refresh(StateObjectReference LocationRef, delegate<UIStaffSlo
 		Hide();
 }
 
+simulated function bool OnUnrealCommand(int cmd, int arg)
+{
+	local UIStaffSlot StaffSlot;
+
+	if (!CheckInputIsReleaseOrDirectionRepeat(cmd, arg))
+	{
+		return false;
+	}
+
+	if (super.OnUnrealCommand(cmd, arg))
+	{
+		return true;
+	}
+
+	if (cmd == class'UIUtilities_Input'.const.FXS_BUTTON_A)
+	{
+		StaffSlot = UIStaffSlot(Navigator.GetSelected());
+		if (StaffSlot != None)
+		{
+			StaffSlot.HandleClick();
+			return true;
+		}
+	}
+	
+	return super.OnUnrealCommand(cmd, arg);
+}
+
 defaultproperties
 {
+	bCascadeFocus = false;
 }

@@ -17,6 +17,10 @@ var public localized string m_strLaunch;
 var public localized string m_strLoadingText;
 var public localized string m_strSplashTitle;
 var public localized string m_strSplashLabel;
+//<workshop> UI_CONSOLE_LOAD_SCREEN_FIXES kmartinez 2015-10-20
+// INS:
+var public localized string m_strConsoleLaunch;
+//</workshop>
 
 var int TipCycle;
 var UIButton LaunchButton;
@@ -28,8 +32,9 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 {
 	super.InitScreen(InitController, InitMovie, InitName);
 
-	LaunchButton = Spawn(class'UIButton', self).InitButton('launchButton');
+	LaunchButton = Spawn(class'UIButton', self).InitButton('launchButtonMC');
 	LaunchButton.bIsVisible = false;
+	LaunchButton.DisableNavigation();
 
 	m_strCurrentTip = GetTip(eTip_Tactical);
 	UpdateBriefingScreen();
@@ -80,10 +85,36 @@ function SetMapImage(string ImagePath)
 
 simulated function OnCheckLoading()
 {
+	local string FinalLaunchStr;
+	local string CurrentLanguage;
+	local int VerticalTextOffset;
 	if (PC.bSeamlessTravelDestinationLoaded)
 	{
 		LaunchButton.bIsVisible = true;
-		MC.FunctionString("updateLaunch", m_strLaunch);
+
+		if( `ISCONTROLLERACTIVE )
+		{
+			CurrentLanguage = GetLanguage();
+
+			if(CurrentLanguage == "KOR")
+				VerticalTextOffset = -19;
+
+			else if(CurrentLanguage == "CHT")
+				VerticalTextOffset = -17;
+
+			else if(CurrentLanguage == "CHN")
+				VerticalTextOffset = -20;
+		
+			else
+				VerticalTextOffset = -14;
+			FinalLaunchStr = Repl(m_strConsoleLaunch, "%A", class 'UIUtilities_Input'.static.HTML(class 'UIUtilities_Input'.static.GetAdvanceButtonIcon(),24,VerticalTextOffset));
+			MC.FunctionString("updateLaunch", FinalLaunchStr);	
+		}
+		else
+		{
+			MC.FunctionString("updateLaunch", m_strLaunch);
+		}
+		
 		SetTimer(0.0f);
 	}
 	else

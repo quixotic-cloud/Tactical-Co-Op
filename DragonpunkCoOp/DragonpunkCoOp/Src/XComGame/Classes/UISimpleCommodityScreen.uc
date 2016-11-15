@@ -67,6 +67,8 @@ simulated function PopulateData()
 			PopulateSimpleCommodityCard(UIInventory_ListItem(List.GetItem(0)).ItemComodity, UIInventory_ListItem(List.GetItem(0)).ItemRef);
 		else
 			PopulateResearchCard(UIInventory_ListItem(List.GetItem(0)).ItemComodity, UIInventory_ListItem(List.GetItem(0)).ItemRef);
+
+		List.Navigator.SelectFirstAvailable();
 	}
 
 	if(List.ItemCount == 0 && m_strEmptyListTitle != "")

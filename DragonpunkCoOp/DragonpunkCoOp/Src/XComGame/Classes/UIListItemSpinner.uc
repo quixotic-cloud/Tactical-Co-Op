@@ -83,10 +83,14 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 	switch (cmd)
 	{
 		case class'UIUtilities_Input'.const.FXS_ARROW_LEFT:
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_LEFT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_LEFT:
 			onSpinnerChanged(self, -1);
 			return true;
 			break;
 		case class'UIUtilities_Input'.const.FXS_ARROW_RIGHT:
+		case class'UIUtilities_Input'.const.FXS_VIRTUAL_LSTICK_RIGHT:
+		case class'UIUtilities_Input'.const.FXS_DPAD_RIGHT:
 			onSpinnerChanged(self, 1);
 			return true;
 			break;

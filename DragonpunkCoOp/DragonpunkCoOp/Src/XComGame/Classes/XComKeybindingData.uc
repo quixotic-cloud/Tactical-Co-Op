@@ -139,6 +139,23 @@ enum LocalizedKeyNames
 	eLKN_Period,
 	eLKN_Decimal,
 	eLKN_Pause,
+	eLKN_XboxTypeS_LeftThumbstick,
+	eLKN_XboxTypeS_RightThumbstick,
+	eLKN_XboxTypeS_Back, 
+	eLKN_XboxTypeS_Start, 
+	eLKN_XboxTypeS_A, 
+	eLKN_XboxTypeS_B, 
+	eLKN_XboxTypeS_X, 
+	eLKN_XboxTypeS_Y, 
+	eLKN_XboxTypeS_LeftShoulder,
+	eLKN_XboxTypeS_RightShoulder,
+	eLKN_XboxTypeS_LeftTrigger,
+	eLKN_XboxTypeS_RightTrigger,
+	eLKN_XboxTypeS_DPad_Up, 
+	eLKN_XboxTypeS_DPad_Down, 
+	eLKN_XboxTypeS_DPad_Right, 
+	eLKN_XboxTypeS_DPad_Left, 
+	eLKN_XboxTypeS_BigButton,
 };
 
 // Collection of binding "Commands" to the enums declared above. For fast access of localized text.

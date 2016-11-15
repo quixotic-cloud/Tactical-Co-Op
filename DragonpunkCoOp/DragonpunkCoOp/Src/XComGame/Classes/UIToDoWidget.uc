@@ -35,6 +35,7 @@ struct UIToDoMessage
 	var StateObjectReference HotLinkRef;
 	var EUIToDoMsgUrgency Urgency;
 	var delegate<MsgCallback> OnItemClicked; 
+	var string NavHelpLabel; //Will use this string if it's assigned, will use a default value if it's not
 };
 
 struct UIToDoMessageCategory
@@ -45,6 +46,7 @@ struct UIToDoMessageCategory
 
 //----------------------------------------------------------------------------
 // MEMBERS
+var localized array<string> m_arrCategory_Labels;
 
 var localized string DescNoCurrentResearchText;
 var localized string DescLowScienceScoreText;
@@ -102,6 +104,10 @@ var UIList				List;
 var UIColorSelector	ColorSelector;
 var UIScreenListener		ScreenListener;
 
+var UIGamepadIcons HelpIcon;
+var int CategoryIconSize;
+var int MainWidgetIconSize;
+var int NavHelpPaddingSize;
 var array<UIToDoMessageCategory> Categories;
 var int							 CurrentCategory; 
 var int							 TotalCategoryWidth; 
@@ -157,6 +163,13 @@ simulated function UIToDoWidget InitToDoWidget(optional name InitName)
 	List.bStickyHighlight = false;
 	List.BG.ProcessMouseEvents(OnBGMouseEvent);
 	HideList();
+	
+	if( `ISCONTROLLERACTIVE )
+	{
+		HelpIcon = Spawn(class'UIGamepadIcons', self);
+		HelpIcon.InitGamepadIcon('HelpButtonLeftStick', class'UIUtilities_Input'.const.ICON_LSCLICK_L3, 20);
+		HelpIcon.SetPosition(-34, 10);
+	}
 
 	// ---------------------------------------------------------
 	
@@ -175,9 +188,9 @@ simulated function RequestCategoryUpdate()
 
 simulated function ShouldUpdateCategories()
 {
-	Movie.Pres.UnsubscribeToUIUpdate(ShouldUpdateCategories);
-	if(Movie.Pres.ScreenStack.GetCurrentClass() == class'UIFacilityGrid')
+	if(Movie.Pres.ScreenStack.GetCurrentClass() == class'UIFacilityGrid' && `HQPRES.m_kFacilityGrid.bIsVisible)
 	{
+		Movie.Pres.UnsubscribeToUIUpdate(ShouldUpdateCategories);
 		UpdateCategories();
 		Show();
 	}
@@ -189,6 +202,8 @@ simulated function UpdateCategories()
 	local XComGameState_HeadquartersXCom XComHQ;
 	local int i, CurrentImageX;
 
+	local bool HasMessagesToDisplay;
+	HasMessagesToDisplay = false;
 	History = `XCOMHISTORY;
 	XComHQ = XComGameState_HeadquartersXCom(History.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
 	
@@ -206,6 +221,7 @@ simulated function UpdateCategories()
 	{
 		if( Categories[i].Messages.length > 0 )
 		{
+			HasMessagesToDisplay = true;
 			//Icons stick together to the bottom left, so no blank spaces between icons. 
 			Categories[i].Icon.Show();
 			Categories[i].Icon.SetX(CurrentImageX);
@@ -228,7 +244,28 @@ simulated function UpdateCategories()
 			Categories[i].Icon.Hide();
 		}
 	}
+	if( HelpIcon != None )
+	{
+		if( HasMessagesToDisplay )
+			HelpIcon.Show();
+		else
+			HelpIcon.Hide();
+	}
 	TotalCategoryWidth = CurrentImageX;
+}
+simulated function OpenScreen()
+{
+	local UINotificationMenu NoticeMenu;
+	//WAS:
+	//NoticeMenu = Spawn(class'UINotificationMenu', self);
+	//NoticeMenu.InitNotificationMenu(Self, XComPlayerController(Movie.Pres.Owner), Movie);
+	//Movie.Pres.ScreenStack.Push(NoticeMenu);
+	if(HelpIcon != None && HelpIcon.bIsVisible)
+	{
+		NoticeMenu = Spawn(class'UINotificationMenu', self);
+		NoticeMenu.InitNotificationMenu(Self, XComPlayerController(Movie.Pres.Owner), Movie);
+		Movie.Pres.ScreenStack.Push(NoticeMenu);
+	}
 }
 
 simulated function ShowList( int eCat )
@@ -288,13 +325,21 @@ simulated function RefreshLocation()
 	AnchorBottomLeft();
 
 	//Stick to the left side of the shortcuts menu
-	if(!XComHQ.IsContactResearched())
+
+	if( `ISCONTROLLERACTIVE )
 	{
-		SetPosition(80, -60); //Lined up centered with the back button
+		SetPosition(45, -27 - (`HQPRES.m_kAvengerHUD.NavHelp.VerticalHelpCount * NavHelpPaddingSize));
 	}
 	else
 	{
-		SetPosition(150, -60);
+		if(!XComHQ.IsContactResearched())
+		{
+			SetPosition(80, -60); //Lined up centered with the back button
+		}
+		else
+		{
+			SetPosition(150, -60);
+		}
 	}
 }
 
@@ -609,8 +654,10 @@ function array<UIToDoMessage> GetStaffingMessages(XComGameStateHistory History, 
 				Msg.Urgency = eUIToDoMsgUrgency_High;
 				Msg.OnItemClicked = EngineerInfoPopup;
 				Msg.HotLinkRef = UnitInfo.UnitRef;
+				Msg.NavHelpLabel = class'UIUtilities_Text'.default.m_strGenericView;
 				Messages.AddItem(Msg);
 
+				Msg.NavHelpLabel = "";
 				break;
 			}
 		}		
@@ -729,7 +776,7 @@ function array<UIToDoMessage> GetSoldierStatusMessages(XComGameStateHistory Hist
 	{
 		UnitState = XComGameState_Unit(History.GetGameStateForObjectID(XComHQ.Crew[idx].ObjectID));
 
-		if (UnitState != none && UnitState.IsASoldier() && (UnitState.CanRankUpSoldier() || UnitState.HasAvailablePerksToAssign()))
+		if (UnitState != none && UnitState.IsSoldier() && (UnitState.CanRankUpSoldier() || UnitState.HasAvailablePerksToAssign()))
 		{
 			Msg.Label = LabelSoldierPromotionText @ UnitState.GetName(eNameType_RankFull);
 			Msg.Description = UnitState.GetName(eNameType_RankFull) @ DescSoldierPromotionText;
@@ -901,7 +948,10 @@ function EngineerInfoPopup(StateObjectReference UnitRef)
 
 function bool NeedsInstantInterp()
 {
-	if(`HQPRES.ScreenStack.IsInStack(class'UIStrategyMap'))
+	local UIStrategyMap StrategyMap;
+	StrategyMap = UIStrategyMap(`HQPRES.ScreenStack.GetScreen(class'UIStrategyMap'));
+	
+	if( StrategyMap != none )
 	{
 		return true;
 	}
@@ -972,4 +1022,7 @@ defaultproperties
 {
 	MCName          = "ToDoWidget";	
 	bIsNavigable		= false; 
+	CategoryIconSize = 30;
+	MainWidgetIconSize = 21.6825;
+	NavHelpPaddingSize= 38;
 }

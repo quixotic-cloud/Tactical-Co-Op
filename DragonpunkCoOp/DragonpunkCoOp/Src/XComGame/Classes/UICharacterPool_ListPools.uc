@@ -94,6 +94,8 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 	List = Spawn(class'UIList', Container);
 	List.bAnimateOnInit = false;
 	List.InitList('', 10, TitleHeader.height, TitleHeader.headerWidth - 20, Container.height - TitleHeader.height - 10);
+	List.Navigator.LoopSelection = true;
+	
 	BG.ProcessMouseEvents(List.OnChildMouseEvent);
 
 	// ---------------------------------------------------------
@@ -105,6 +107,43 @@ simulated function InitScreen(XComPlayerController InitController, UIMovie InitM
 
 	CharacterPoolMgr = CharacterPoolManager(`XENGINE.GetCharacterPoolManager());
 }
+simulated function OnInit()
+{	
+	super.OnInit();
+
+	UpdateGamepadFocus();
+}
+
+simulated function UpdateGamepadFocus()
+{
+	if( `ISCONTROLLERACTIVE == false ) return;
+
+	if(List.ItemCount > 0)
+	{
+		List.SetSelectedIndex(0);
+		Navigator.SetSelected(List);
+	}
+
+	UpdateNavHelp();
+}
+
+simulated function UpdateNavHelp()
+{
+	NavHelp.ClearButtonHelp();
+
+	NavHelp.AddBackButton(OnCancel);
+
+	//Toggle selection is constant
+	if(List.ItemCount > 0)
+		NavHelp.AddLeftHelp(class'UIUtilities_Text'.default.m_strGenericSelect, class'UIUtilities_Input'.static.GetAdvanceButtonIcon());
+}
+
+simulated function OnReceiveFocus()
+{
+	super.OnReceiveFocus();
+	UpdateGamepadFocus();
+}
+
 
 simulated function UpdateData( bool _bIsExporting )
 {
@@ -228,6 +267,9 @@ simulated function bool OnUnrealCommand(int cmd, int arg)
 
 simulated function OnAccept()
 {
+
+	if( `ISCONTROLLERACTIVE )
+		OnClickLocal(List, List.SelectedIndex);
 	//OnButtonCallback(AcceptButton);
 }
 
@@ -239,6 +281,8 @@ simulated function OnCancel()
 		bHasSelectedImportLocation = false; 
 		// Then, refresh this screen:
 		UpdateData( false );
+		if( `ISCONTROLLERACTIVE )
+			UpdateGamepadFocus();
 	}
 	else
 	{
@@ -405,12 +449,25 @@ simulated function OpenNewExportPoolInputBox()
 {
 	local TInputDialogData kData;
 
-	kData.strTitle = m_strCreateNewPool $":";
-	kData.iMaxChars = 32; //TODO: @nway: what is the actual max on these names? 
-	kData.strInputBoxText = "";
-	kData.fnCallback = OnNewExportPoolInputBoxClosed;
+//	if( !`GAMECORE.WorldInfo.IsConsoleBuild() || `ISCONTROLLERACTIVE )
+//	{
+		kData.strTitle = m_strCreateNewPool $":";
+		kData.iMaxChars = 32; //TODO: @nway: what is the actual max on these names? 
+		kData.strInputBoxText = "";
+		kData.fnCallback = OnNewExportPoolInputBoxClosed;
 
-	Movie.Pres.UIInputDialog(kData);
+		Movie.Pres.UIInputDialog(kData);
+/*	}
+	else
+	{
+		XComPresentationLayerBase(Outer).UIKeyboard(m_strCreateNewPool $":",
+													"",
+													VirtualKeyboard_OnNewExportPoolInputBoxAccepted,
+													VirtualKeyboard_OnNewExportPoolInputBoxCancelled,
+													false,
+													32
+		);
+	}*/
 }
 
 // TEXT INPUT BOX (PC)
@@ -456,6 +513,16 @@ function OnNewExportPoolInputBoxClosed(string text)
 		//Now that import pool list should be updated, we can call refresh to grab that new lit and repopulate the list.
 		UpdateData(true);
 	}
+}
+
+function VirtualKeyboard_OnNewExportPoolInputBoxAccepted(string text, bool bWasSuccessful)
+{
+	OnNewExportPoolInputBoxClosed(bWasSuccessful ? text : "");
+}
+
+function VirtualKeyboard_OnNewExportPoolInputBoxCancelled()
+{
+	OnNewExportPoolInputBoxClosed("");
 }
 
 

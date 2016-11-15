@@ -115,6 +115,12 @@ var private transient bool BuildingChallengeMission;
 
 var config array<Name> CharactersExcludedFromEvacZoneCounts;
 
+//bsg-mfawcett(08.22.16): resets our cached card variable allowing us to re-add all necessary cards. Used when starting a new campaign (fixes issues when first going to MP then back to SP).
+function ResetCachedCards()
+{
+	HasCachedCards = false;
+}
+
 private function CacheMissionManagerCards()
 {
 	local X2CardManager CardManager;
