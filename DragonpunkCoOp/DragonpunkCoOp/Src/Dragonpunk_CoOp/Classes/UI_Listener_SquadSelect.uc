@@ -17,6 +17,7 @@ var bool PlayingCoop;
 var array<StateObjectReference> SavedSquad;
 var array<StateObjectReference> ServerSquad,ClientSquad;
 var bool Launched;
+var UIButton MySyncButton;
 event OnInit(UIScreen Screen)
 {
 	if(Screen.isA('UISquadSelect'))
@@ -36,7 +37,12 @@ event OnInit(UIScreen Screen)
 	{
 		SetTimersStart();
 	}
+
 }
+
+
+
+
 
 function DisconnectGame()
 {
@@ -84,7 +90,12 @@ event OnReceiveFocus(UIScreen Screen)
 	local UISquadSelect UISS;
 	if(Screen.isA('UISquadSelect'))
 	{
-		
+		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
+		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
+		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation();
 		if(ConnectionSetupActor==none)
 			Once=false;
 

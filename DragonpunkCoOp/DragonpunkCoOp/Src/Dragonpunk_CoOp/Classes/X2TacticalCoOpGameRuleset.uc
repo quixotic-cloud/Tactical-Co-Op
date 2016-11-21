@@ -59,6 +59,8 @@ var TDialogueBoxData DialogData;
 
 var UIScreen DialogScreen;
 
+var UIButton SyncCoopButton;
+
 var bool bSkipRemainingTurnActivty_B;
 
 var OnlineSubsystem OnlineSub;
@@ -299,12 +301,7 @@ function bool AllEnemiesEliminated()
 
 	ToRet=true;
 	
-	foreach `XCOMHISTORY.IterateByClassType(class'XComGameState_Unit', UnitState)
-	{
-		
-		if(UnitState.GetTeam()==eTeam_Alien && UnitState.IsAlive() && UnitState.IsInCombat())
-			ToRet=false;
-	}
+	
 	foreach `XCOMHISTORY.IterateByClassType(class'XComGameState_AIReinforcementSpawner', ReinfState)
 	{
 		if(ReinforcementIDs.Find(ReinfState.ObjectID)==-1)
@@ -318,6 +315,16 @@ function bool AllEnemiesEliminated()
 			ToRet=false;
 		}
 	}
+	if(!UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD')).m_kCountdown.bIsVisible)
+		ToRet=true;
+
+	foreach `XCOMHISTORY.IterateByClassType(class'XComGameState_Unit', UnitState)
+	{
+		
+		if(UnitState.GetTeam()==eTeam_Alien && UnitState.IsAlive() && UnitState.IsInCombat())
+			ToRet=false;
+	}
+
 	return ToRet;
 }
 
@@ -477,7 +484,11 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		bSkipRemainingTurnActivty_B=true;
 		`PRES.m_kTurnOverlay.HideOtherTurn();
 	}
-	
+	else if( Command ~= "ForceSync")
+	{
+		HasEndedLocalTurn=true;
+		GotoState('TurnPhase_ForceSync');
+	}
 	`log("Command Recieved:"@Command,,'Dragonpunk Tactical');
 }
 
@@ -585,6 +596,8 @@ simulated function name GetNextTurnPhase(name CurrentState, optional name Defaul
 		return 'TurnPhase_StartTimer';
 	case 'TurnPhase_StartTimer':
 		return 'TurnPhase_Begin_Coop';
+	case 'TurnPhase_ForceSync':
+		return 'TurnPhase_UnitActions';
 	}
 	`assert(false);
 	return DefaultPhaseName;
@@ -708,6 +721,7 @@ simulated function UIShowAlienTurnOverlay()
 			`PRES.m_kTurnOverlay.ShowAlienTurn();
 		}
 	}
+	SyncCoopButton.Hide();
 }
 simulated function StartStateCreateXpManager(XComGameState StartState)
 {
@@ -2153,6 +2167,10 @@ simulated state TurnPhase_UnitActions
 		{
 			if (!UnitState.GetMyTemplate().bIsCosmetic &&
 				!UnitState.IsPanicked() &&
+				UnitState.IsAlive() &&
+				!UnitState.IsBleedingOut() &&
+				!UnitState.IsUnconscious() &&
+				UnitState.NumActionPoints()>0 &&
 				!UnitState.IsStunned() &&
 				!(UnitState.IsMindControlled()&& UnitState.GetPreviousTeam()!=UnitState.GetTeam()) &&
 				(UnitState.AffectedByEffectNames.Find(class'X2Ability_Viper'.default.BindSustainedEffectName) == INDEX_NONE))
@@ -2265,7 +2283,7 @@ simulated state TurnPhase_UnitActions
 		}
 		`log("HasActionsLeft- HAL:"@HAL @",TEMP:"@TEMP);
 		if(bServerEndedTurn)
-			return TEMP;
+			return TEMP&&HasEndedLocalTurn;
 
 		if(HAL || TEMP)
 			return true;
@@ -2475,8 +2493,10 @@ Begin:
 			`log("Actions Available Start",,'Dragonpunk Tactical TurnState');
 			SendHistoryThisTurn=false;
 			WaitingForNewStatesTime = 0.0f;
+			SyncCoopButton.Hide();
 			if(IsCurrentPlayerOfTeam(eTeam_XCom))
 			{
+				SyncCoopButton.Show();
 				`log("WE ARE XCOM. WE ARE MANY");
 				SetCurrentTime(TurnCounterFixed);
 				if(`XCOMNETMANAGER.HasServerConnection())
@@ -2489,6 +2509,7 @@ Begin:
 					}
 					if(!ServerHasActionsLeft()&& !HasEndedLocalTurn)
 					{
+						HasEndedLocalTurn=true;
 						`log("!ServerHasActionsLeft()",,'Dragonpunk Tactical TurnState');
 						while (bSendingPartialHistory)
 						{
@@ -2831,6 +2852,8 @@ Begin:
 	`log("WE ARE IN BEGIN COOP!");
 	if(!Launched)	
 	{
+		SyncCoopButton=UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD')).Spawn(class'UIButton',UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD'))).InitButton('MySyncButton',"Sync Co-Op",OnClickedSync ,eUIButtonStyle_SELECTED_SHOWS_HOTLINK);
+		SyncCoopButton.SetPosition(SyncCoopButton.Movie.GetUIResolution().x-192,16-SyncCoopButton.Height);
 		//SendToConsole("show gi");
 		if(`XCOMNETMANAGER.HasClientConnection())
 		{
@@ -2869,6 +2892,42 @@ Begin:
 		bReadyForTurnHistory=false;
 		`SETLOC("Waiting for History Sync.");
 		XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).SetInputState('BlockingInput');
+		
+		if(`XCOMNETMANAGER.HasServerConnection())
+		{
+
+			while(!bClientPreparedForHistory)
+			{
+				sleep(0.0);
+			}
+			SendRemoteCommand("ReadyForFinalHistory");
+			while(!bReadyForHistory)
+			{
+				sleep(0.0);
+			}
+			SendHistory();
+			while (bSendingPartialHistory)
+			{
+				sleep(0.0);
+			}
+		}
+		else
+		{
+			bRecievedPartialHistory=false;
+			SendRemoteCommand("ClientReadyForHistory");
+			while(!bReadyForHistory)
+			{
+				Sleep(0.0);
+			}
+			SendRemoteCommand("SendFinalHistory");
+			while(!bRecievedPartialHistory)
+			{
+				Sleep(0.0);
+			}
+			bSendingPartialHistory=false;
+			`log("We are past end turn history sync");
+		}
+/*
 		if(`XCOMNETMANAGER.HasServerConnection())
 		{
 			while(bSendingPartialHistory||bSendingTurnHistory)
@@ -2894,7 +2953,7 @@ Begin:
 				Sleep(0.0);
 			}
 		}	
-			
+			*/
 		LatentWaitingForPlayerSync();
 
 		TurnCounterFixed--;
@@ -2930,6 +2989,57 @@ Begin:
 	CachedHistory.CheckNoPendingGameStates();
 	
 	`SETLOC("End of Begin Block");
+	GotoState(GetNextTurnPhase(GetStateName()));
+}
+
+function OnClickedSync(UIButton Button)
+{
+	
+	SendRemoteCommand("ForceSync");
+	GotoState('TurnPhase_ForceSync');
+}
+
+simulated state TurnPhase_ForceSync
+{
+Begin:
+	bReadyForHistory=false;
+	bRecievedPartialHistory=false;
+	bServerEndedTurn=false;
+	bSendingPartialHistory=false;
+	if(`XCOMNETMANAGER.HasServerConnection())
+		{
+
+			while(!bClientPreparedForHistory)
+			{
+				sleep(0.0);
+			}
+			SendRemoteCommand("ReadyForFinalHistory");
+			while(!bReadyForHistory)
+			{
+				sleep(0.0);
+			}
+			SendHistory();
+			while (bSendingPartialHistory)
+			{
+				sleep(0.0);
+			}
+		}
+		else
+		{
+			bRecievedPartialHistory=false;
+			SendRemoteCommand("ClientReadyForHistory");
+			while(!bReadyForHistory)
+			{
+				Sleep(0.0);
+			}
+			SendRemoteCommand("SendFinalHistory");
+			while(!bRecievedPartialHistory)
+			{
+				Sleep(0.0);
+			}
+			bSendingPartialHistory=false;
+			`log("We are past end turn history sync");
+		}
 	GotoState(GetNextTurnPhase(GetStateName()));
 }
 

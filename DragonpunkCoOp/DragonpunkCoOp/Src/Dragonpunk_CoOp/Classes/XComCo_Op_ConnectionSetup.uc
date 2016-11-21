@@ -401,14 +401,14 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 				}
 				else
 				{
-					`ONLINEEVENTMGR.InviteFailed(SystemMessage_LostConnection);
+					`ONLINEEVENTMGR.InviteFailed(SystemMessage_LostConnection,false);
 					`log("InviteFailed(SystemMessage_LostConnection)",true,'Team Dragonpunk Co Op');
 
 				}
 			}
 			else
 			{
-				`ONLINEEVENTMGR.InviteFailed(SystemMessage_BootInviteFailed);
+				`ONLINEEVENTMGR.InviteFailed(SystemMessage_BootInviteFailed,false);
 				`log("InviteFailed(SystemMessage_BootInviteFailed)",true,'Team Dragonpunk Co Op');
 			}
 			return;
@@ -422,7 +422,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 
 		if (CheckInviteGameVersionMismatch(XComOnlineGameSettings(InviteResult.GameSettings)))
 		{
-			`ONLINEEVENTMGR.InviteFailed(SystemMessage_VersionMismatch, true);
+			`ONLINEEVENTMGR.InviteFailed(SystemMessage_VersionMismatch, false);
 			`log("InviteFailed(SystemMessage_VersionMismatch)",true,'Team Dragonpunk Co Op');
 			return;
 		}
@@ -446,9 +446,10 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 			}
 			if(!`SCREENSTACK.IsCurrentScreen('UISquadSelect'))
 			{
-				SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
-				`SCREENSTACK.Push(SquadSelectScreen);
-				`log("Pushing SquadSelectUI to screen stack",true,'Team Dragonpunk Co Op');
+				`ONLINEEVENTMGR.InviteFailed(SystemMessage_VersionMismatch, false);
+				//SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
+				//`SCREENSTACK.Push(SquadSelectScreen);
+				//`log("Pushing SquadSelectUI to screen stack",true,'Team Dragonpunk Co Op');
 			}
 			else
 			{
@@ -572,9 +573,9 @@ function bool CheckInviteGameVersionMismatch(XComOnlineGameSettings InviteGameSe
 	`log(`location @ "InviteGameSettings=" $ InviteGameSettings.ToString(),, 'Team Dragonpunk Co Op');
 	`log(`location @ `ShowVar(ByteCodeHash) @ `ShowVar(InstalledDLCHash) @ `ShowVar(InstalledModsHash) @ `ShowVar(INIHash),, 'Team Dragonpunk Co Op');
 	//Remember to re-enable the checks on the beta and the release. THIS IS NOT HOW IT SHOULD BE OUTSIDE OF ALPHA
-	return false; //ByteCodeHash != InviteGameSettings.GetByteCodeHash() ||
-			//InstalledDLCHash != InviteGameSettings.GetInstalledDLCHash() ||
-			//InstalledModsHash != InviteGameSettings.GetInstalledModsHash();
+	//return false; //ByteCodeHash != InviteGameSettings.GetByteCodeHash() ||
+	return	InstalledDLCHash != InviteGameSettings.GetInstalledDLCHash() ||
+			InstalledModsHash != InviteGameSettings.GetInstalledModsHash();
 }
 
 function SendRemoteCommand(string Command) //Copied from UIMPShell_Lobby
