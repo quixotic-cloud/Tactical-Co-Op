@@ -1,9 +1,17 @@
-// This is an Unreal Script
-                           
+//  *********   DRAGONPUNK SOURCE CODE   ******************
+//  FILE:    XComCoOpTacticalController
+//  AUTHOR:  Elad Dvash
+//  PURPOSE: Manages control over characters and actions in tactical Co-op gameplay.
+//---------------------------------------------------------------------------------------  
+                                                                                                                      
 Class XComCoOpTacticalController extends XComTacticalController;
 
 var bool IsCurrentlyWaiting;
 
+/*
+* Changes the contolled unit to one that's under the control of the player, checks to see if server or client 
+* So no one is controlling a character they dont "own"                                                                                                                
+*/
 simulated function bool Visualizer_SelectNextUnit()
 {	
 	local int CurrentSelectedIndex;
@@ -69,9 +77,10 @@ simulated function bool Visualizer_SelectNextUnit()
 	return false;
 }
 
-/// <summary>
-/// Out of a list of units eligible for selection, selects the one that is immediately previous to the currently selected unit
-/// </summary>
+/*
+* Changes the contolled unit to one that's under the control of the player, checks to see if server or client 
+* So no one is controlling a character they dont "own"                                                                                                                
+*/
 simulated function bool Visualizer_SelectPreviousUnit()
 {
 	local int CurrentSelectedIndex;
@@ -96,7 +105,7 @@ simulated function bool Visualizer_SelectPreviousUnit()
 		AllUnits=EligibleUnits;
 		foreach AllUnits(TempUnit)
 		{
-			if(`XCOMNETMANAGER.HasServerConnection()!=(TempUnit.GetMaxStat(eStat_FlightFuel)!=10))
+			if(`XCOMNETMANAGER.HasServerConnection()!=(TempUnit.GetMaxStat(eStat_FlightFuel)!=10)) //if this is true then the unit is not available for control.
 				EligibleUnits.RemoveItem(TempUnit);
 		}
 	}
@@ -135,6 +144,10 @@ simulated function bool Visualizer_SelectPreviousUnit()
 	return false;
 }
 
+/*
+* Changes the contolled unit to one that's under the control of the player, checks to see if server or client 
+* So no one is controlling a character they dont "own"                                                                                                                
+*/
 simulated function bool Visualizer_SelectUnit(XComGameState_Unit SelectedUnit)
 {
 	//local GameRulesCache_Unit OutCacheData;
@@ -254,7 +267,9 @@ function SendRemoteCommand(string Command)
 	`log("Command Sent:"@Command,,'Dragonpunk Tactical');
 }
 
-
+/*
+* Overrides the default end turn function and only ends the specifics' player turn and not the whole turn for all the sides                                                                                                                                                                                                                                      
+*/
 simulated function bool PerformEndTurn(EPlayerEndTurnType eEndTurnType)
 {
 	if(`XCOMNETMANAGER.HasServerConnection())
@@ -266,6 +281,9 @@ simulated function bool PerformEndTurn(EPlayerEndTurnType eEndTurnType)
 	return super.PerformEndTurn(eEndTurnType);
 }
 
+/*
+* Puts the players into the right input state on request and logs it.                                                                                                                                                                                                                                      
+*/
 simulated function SetInputState( name nStateName , optional bool bForce)
 {
 	local string CurrentState;

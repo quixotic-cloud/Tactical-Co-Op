@@ -2,10 +2,12 @@
 //  FILE:    X2TacticalCoOpGameRuleset
 //  AUTHOR:  Elad Dvash
 //  PURPOSE: New Ruleset for the Co-Op game
-//                                           
-// Still very experimental. everything here is pretty much copy paste since i didnt add
-// anything of substence here yet,I dont think we'll need anything custom here though
-// since we are going to be using events to manage turns 
+//  Handels all the tactical logic for co-op that including:
+//  1. Initializes the game and map for the server
+//  2. Loads the map for the client
+//  3. Handels transfering the gamestates and recieving them
+//  4. Implements the logic for how the control transfers between players
+//  5. Everything else that the regular X2TacticalRuleset does like control turns                                                                                                                                                                                                                          
 // (turns here are game turns which are an entire cycle: Start->XCom->aliens->Civis->End)                                                                                                                                                                           
 //---------------------------------------------------------------------------------------
 

@@ -73,6 +73,9 @@ function RevertInviteAcceptedDelegates()
 	`XCOMNETMANAGER.ClearReceiveRemoteCommandDelegate(OnRemoteCommand);
 }
 
+/*
+* Creates the game for the players to connect to.
+*/
 function CreateOnlineGame()
 {
 	local OnlineSubsystem OnlineSub;
@@ -90,12 +93,19 @@ function CreateOnlineGame()
 	}
 	PopupServerNotification();
 }	
+
+/*
+* Opens the Steam UI so the server can invite players
+*/
 function OnCreateLobbyComplete(bool bWasSuccessful, UniqueNetId LobbyId, string Error)
 {
 	XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).pres.UICloseProgressDialog();
 	OpenSteamUI();
 }
 
+/*
+* Prevents crashing due to a lack of talkers, registers talkers. (taken from cheat manager)
+*/
 function RegisterLocalTalker()
 {
 	local OnlineSubsystem	OnlineSubsystem;
@@ -127,23 +137,28 @@ function OnRecognitionComplete()
 	}
 }
 
-
+/*
+* Makes the correct popup for the situation
+*/
 function PopupServerNotification()
 {
 	DialogData.eType = eDialog_Normal;
 	DialogData.strTitle = "Creating Co-Op Server";
 	DialogData.strText = "Please Wait. This message will disappear automatically.";
-	DialogData.strAccept=" ";
+	DialogData.strAccept=" "; // If you want this to be empty dont make this a null string, it will go to default
 	DialogData.strCancel=" ";
 	`HQPRES.UIRaiseDialog(DialogData);
 }
 
+/*
+* Makes the correct popup for the situation
+*/
 function PopupClientNotification()
 {
 	DialogData.eType = eDialog_Normal;
 	DialogData.strTitle = "Waiting For Server To Generate Map";
 	DialogData.strText = "Please wait. This message will disappear automatically.";
-	DialogData.strAccept=" ";
+	DialogData.strAccept=" "; // If you want this to be empty dont make this a null string, it will go to default
 	DialogData.strCancel=" ";
 	`HQPRES.UIRaiseDialog(DialogData);
 }
@@ -169,6 +184,10 @@ function OpenSteamUI()
 	EndDialogBox();
 }
 
+
+/*
+* Connects to the network game via the session name we have.
+*/
 function OnCreateOnlineGameComplete(name SessionName,bool bWasSuccessful)
 {
 	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.ClearCreateOnlineGameCompleteDelegate(OnCreateOnlineGameComplete);
@@ -206,6 +225,9 @@ function OnLobbyJoinGame(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo
 	`log(`location @ `ShowVar(LobbyIndex) @ `ShowVar(ServerIdString) @ `ShowVar(ServerIP),,'XCom_Online');
 }
 
+/*
+* Changes the Launch button click delegate to one that allows us to load the co-op rather than load normal games
+*/
 function OnLobbyMemberStatusUpdate(const out array<OnlineGameInterfaceXCom_ActiveLobbyInfo> LobbyList, int LobbyIndex, int MemberIndex, int InstigatorIndex, string Status)
 {
 	`log(`location @ `ShowVar(LobbyIndex) @ `ShowVar(MemberIndex) @ `ShowVar(InstigatorIndex) @ `ShowVar(Status),,'XCom_Online');
@@ -232,6 +254,10 @@ function OnLobbyInvite(UniqueNetId LobbyId, UniqueNetId FriendId, bool bAccepted
 	`log("bAccepted:"@bAccepted ,true,'Team Dragonpunk Co Op');
 }
 
+
+/*
+* Initializes the game settings,pretty much useless for the most part mainly important for the Hashes that track DLCs and Mods
+*/
 function OSSCreateGameSettings(bool bAutomatch)
 {
 	local XComOnlineGameSettings kGameSettings;
@@ -261,6 +287,9 @@ function OSSCreateGameSettings(bool bAutomatch)
 	
 }
 
+/*
+* Main Function in this class. starts the game correctly for the server and connects to a specific game for a client
+*/
 function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 {
 	local URL OnlineURL;
@@ -290,10 +319,10 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 	if (ResolvedURL == "" && !`XCOMNETMANAGER.HasServerConnection())
 	{
 		`log(`location @ "Creating Network Server to host the Online Game.",,'Team Dragonpunk Co Op');
-		NetManager.CreateServer(OnlineURL, sError);
+		NetManager.CreateServer(OnlineURL, sError); // Creates the server that will send the data over the wire
 		`log("Starting Network Game Ended Created Server", true, 'Team Dragonpunk Co Op');
 	}
-	else if(ResolvedURL != "")
+	else if(ResolvedURL != "") // A lot of this here is just copied from other MP classes.
 	{
 		FindIndex = InStr(ResolvedURL, ":");
 		if (FindIndex != -1)
@@ -316,7 +345,7 @@ function bool StartNetworkGame(name SessionName, optional string ResolvedURL="")
 
 		`log(`location @ "Creating Network Client to join the Online Game at '"$ServerURL$"' on port '"$ServerPort$"'.",,'Team Dragonpunk Co Op');
 		NetManager.AddPlayerJoinedDelegate(OnPlayerJoined); // Wait until connected fully to the server before loading the map.
-		NetManager.CreateClient(OnlineURL, sError);
+		NetManager.CreateClient(OnlineURL, sError); 
 		if (sError != "")
 		{
 			NetManager.ClearPlayerJoinedDelegate(OnPlayerJoined);
@@ -375,6 +404,10 @@ function OnPlayerJoined(string RequestURL, string Address, const UniqueNetId Uni
 	}
 }
 
+/*
+* Overrides the OnlineEventManager's OnGameInviteAccepted delegate and let's us to filter out stuff and connect to the server correctly
+* Mostly copied from the OEM class and the function ite overrides.
+*/
 function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, bool bWasSuccessful)
 {
 	local bool bIsMoviePlaying;
@@ -382,6 +415,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 
 	`log("Dragonpunk test test test NOT IN XComOnlineEventMgr",true,'Team Dragonpunk Co Op');
 
+	//Checks if we're actually in a Co-op game
 	if(XComOnlineGameSettings(InviteResult.GameSettings).GetTurnTimeSeconds()<=1000 || XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()<=100000 )
 	{
 		`log("Entering OnlineEventMgr, TurnTime:"@XComOnlineGameSettings(InviteResult.GameSettings).GetTurnTimeSeconds() @",Max Cost:"@XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost(),,'Team Dragonpunk Co Op');
@@ -420,7 +454,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 			return;
 		}
 
-		if (CheckInviteGameVersionMismatch(XComOnlineGameSettings(InviteResult.GameSettings)))
+		if (CheckInviteGameVersionMismatch(XComOnlineGameSettings(InviteResult.GameSettings))) // Checks mismatch of mods and DLCs on either side
 		{
 			`ONLINEEVENTMGR.InviteFailed(SystemMessage_VersionMismatch, false);
 			`log("InviteFailed(SystemMessage_VersionMismatch)",true,'Team Dragonpunk Co Op');
@@ -444,7 +478,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 			{
 				`XENGINE.StopCurrentMovie();
 			}
-			if(!`SCREENSTACK.IsCurrentScreen('UISquadSelect'))
+			if(!`SCREENSTACK.IsCurrentScreen('UISquadSelect')) // Kicks the players into the main menu if the client isnt on the squad select screen.
 			{
 				`ONLINEEVENTMGR.InviteFailed(SystemMessage_VersionMismatch, false);
 				//SquadSelectScreen=(`SCREENSTACK.Screens[0].Spawn(Class'UISquadSelect',none));
@@ -455,6 +489,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 			{
 				`log("Already in Squad Select UI",true,'Team Dragonpunk Co Op');
 			}
+			// Fire up the delegates for the client to connect the game properly.
 			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).AcceptGameInvite( LocalPlayer( class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().Player).ControllerId,'Game');
 			OnlineGameInterfaceXCom(class'GameEngine'.static.GetOnlineSubsystem().GameInterface).JoinOnlineGame( LocalPlayer(  class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().Player).ControllerId, 'Game',InviteResult );
 		}
@@ -464,6 +499,10 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 		}
 	}
 }
+
+/*
+* Mostly copied from other classes used in MP from here to the "Send Remote Command" function
+*/
 function OnInviteJoinOnlineGameComplete(name SessionName, bool bWasSuccessful)
 {
 	local OnlineSubsystem OnlineSub;
@@ -573,6 +612,7 @@ function bool CheckInviteGameVersionMismatch(XComOnlineGameSettings InviteGameSe
 	`log(`location @ "InviteGameSettings=" $ InviteGameSettings.ToString(),, 'Team Dragonpunk Co Op');
 	`log(`location @ `ShowVar(ByteCodeHash) @ `ShowVar(InstalledDLCHash) @ `ShowVar(InstalledModsHash) @ `ShowVar(INIHash),, 'Team Dragonpunk Co Op');
 	//Remember to re-enable the checks on the beta and the release. THIS IS NOT HOW IT SHOULD BE OUTSIDE OF ALPHA
+	// DONE! We now have the stuff enabled for release! (25/11/16)
 	//return false; //ByteCodeHash != InviteGameSettings.GetByteCodeHash() ||
 	return	InstalledDLCHash != InviteGameSettings.GetInstalledDLCHash() ||
 			InstalledModsHash != InviteGameSettings.GetInstalledModsHash();
@@ -591,6 +631,9 @@ function SendRemoteCommand(string Command) //Copied from UIMPShell_Lobby
 	`log(`location @ "Sent Remote Command '"$Command$"'",,'Team Dragonpunk Co Op');
 }
 
+/*
+* Used for sending a string with the remote command so the other side will be synced with your saved Squads (all around,server controlled and client controlled)  
+*/
 function SentRemoteSquadCommand()
 {
 	local array<byte> Params;
@@ -598,28 +641,31 @@ function SentRemoteSquadCommand()
 	local XComGameStateNetworkManager NetManager;
 	local String FinalOut;
 	NetManager=`XCOMNETMANAGER;
-	Params.Length = 0; // Removes script warning
-	foreach TotalSquad(Temp)
+	Params.Length = 0; 
+	foreach TotalSquad(Temp) // Adds the Ids of everone on the squad
 	{
 		FinalOut$=Temp.ObjectID $"|";
 	}
-	FinalOut$="-1|";
-	foreach ServerSquad(Temp)
+	FinalOut$="-1|"; // for easy indentification have a marker so we know where we split to the other array.
+	foreach ServerSquad(Temp) // Adds the Ids of everone on the squad
 	{
 		FinalOut$=Temp.ObjectID $"|";
 	}
-	FinalOut$="-1|";
-	foreach ClientSquad(Temp)
+	FinalOut$="-1|"; // for easy indentification have a marker so we know where we split to the other array.
+	foreach ClientSquad(Temp) // Adds the Ids of everone on the squad
 	{
 		FinalOut$=Temp.ObjectID $"|";
 	}
-	FinalOut$="-1";
+	FinalOut$="-1"; // for easy indentification have a marker so we know where we split to the other array.
 	
-	NetManager.AddCommandParam_String(FinalOut,Params);
+	NetManager.AddCommandParam_String(FinalOut,Params); // makes the string into a byte array and sends it with the command
 	NetManager.SendRemoteCommand("UpdateSquad", Params);	
 }
 
-function DecipherSquads(array<byte> Params)
+/*
+* Deciphers the squad lists sent in string form from the other player.
+*/
+function DecipherSquads(array<byte> Params) 
 {
 	local string InString,TString;
 	local array<string> SplitSTR;
@@ -634,12 +680,12 @@ function DecipherSquads(array<byte> Params)
 	{
 		TempInt=int(Tstring);
 
-		if(TString~="-1" || TempInt==-1)
+		if(TString~="-1" || TempInt==-1) // Makes it easy to know who goes where
 		{
 			count++;
 			continue;
 		}
-		switch (Count)
+		switch (Count) // By counting the "-1"s you can know which squad we're adding to.
 		{
 			case 0:
 				TotalSquad.AddItem(XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(TempInt)).GetReference());
@@ -654,28 +700,9 @@ function DecipherSquads(array<byte> Params)
 	}
 }
 
-simulated function RefreshDisplay()
-{
-	local int SlotIndex, SquadIndex;
-	local UISquadSelect_ListItem ListItem; 
-	local UISquadSelect SS; 
-	
-	SS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
-
-	for( SlotIndex = 0; SlotIndex < SS.SlotListOrder.Length; ++SlotIndex )
-	{
-		SquadIndex = SS.SlotListOrder[SlotIndex];
-
-		// The slot list may contain more information/slots than available soldiers, so skip if we're reading outside the current soldier availability. 
-		if( SquadIndex >= SS.SoldierSlotCount )
-			continue;
-
-		//We want the slots to match the visual order of the pawns in the slot list. 
-		ListItem = UISquadSelect_ListItem(SS.m_kSlotList.GetItem(SlotIndex));
-		ListItem.UpdateData(SquadIndex);
-	}
-}
-
+/*
+* Handels a lot of the back and forth logic between the server and client
+*/
 function OnRemoteCommand(string Command, array<byte> RawParams)
 {
 	local XComGameState_HeadquartersXCom XComHQ;
@@ -704,14 +731,15 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 			//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
 			//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
 			//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-			//RefreshDisplay();
+			
 		}
 		else if(!Launched)
 		{
 			SendRemoteCommand("HistoryConfirmedPopUp");		
 			`log(Command);
 			Launched=true;
-			LoadTacticalMap();
+			LoadTacticalMap();	//When the other side recieved the history and we're not yet launched and we already loaded the game 
+								//(so the second time we get the history) load the tactical game
 		}	
 	}
 	else if(Command~="HistoryConfirmedPopUp")
@@ -726,7 +754,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 			if(UIDialogueBox(UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).ShowingDialog())
 				UIDialogueBox(UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).RemoveDialog();
 			SendRemoteCommand("ImComingBaby");
-			LoadTacticalMap();
+			LoadTacticalMap(); //when the tactical game was loaded on the server that makes the client load the tactical game
 		}
 	}
 	else if(Command~= "HistoryConfirmed")
@@ -736,8 +764,8 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		{
 			`log("Unit in squad HistoryConfirmed:"@XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitRef.ObjectID)).GetFullName(),,'Team Dragonpunk Co Op');
 		}
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(); // Updates the list of soldier and the slots, also updates the pawns
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo(); // Updates the mission in case something changed
 		SavedSquad=XComHQ.Squad;
 		`log("Updating Squad Select HistoryConfirmed",,'Team Dragonpunk Co Op');
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
@@ -746,7 +774,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-		//RefreshDisplay();
+		
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 		SearchState=`ONLINEEVENTMGR.LatestSaveState(TempH);
 		foreach SearchState.IterateByClassType(class'XComGameState_Unit', UnitState)
@@ -757,7 +785,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 			}
 		}	
 	
-		`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
+		`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher); // Register for a Gamestate delegate so we can send new states over the net when they are submitted
 	}
 	else if (Command~= "HistoryRegisteredConfirmed")
 	{
@@ -776,7 +804,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-		//RefreshDisplay();
+		
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 		`log("Updating Squad Select RegisteredConfirmed",,'Team Dragonpunk Co Op');
 	}
@@ -811,6 +839,7 @@ function UpdateSS()
 	local UISquadSelect UISS;
 	local XComGameState_HeadquartersXCom XComHQ;
 	local StateObjectReference UnitRef;	
+	//Updates the squad select screen
 	XComHQ = XComGameState_HeadquartersXCom(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
 	foreach XComHQ.Squad(UnitRef)
 	{
@@ -827,11 +856,14 @@ function UpdateSS()
 	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
 	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
 	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-	//RefreshDisplay();
+	
 	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 	`log("Updating Squad Select RegisteredConfirmed",,'Team Dragonpunk Co Op');	
 }
 
+/*
+* A Game State watcher that send the submitted gamestates over the network when it sees one. 
+*/
 static function OnNewGameState_SquadWatcher(XComGameState GameState) //Thank you Amineri and LWS! 
 {
 	local int StateObjectIndex;
@@ -855,6 +887,9 @@ static function OnNewGameState_SquadWatcher(XComGameState GameState) //Thank you
 	}	
 }
 
+/*
+* Copied from the UISquadSelect listener 
+*/
 static function bool PerSoldierSquadCheck(XComGameState InGS)
 {
 	local int i;
@@ -881,6 +916,9 @@ function ReceiveMergeGameState(XComGameState InGameState)
 	`log(`location @"Recieved Merge GameState Connection Setup",,'Team Dragonpunk Co Op');
 }
 
+/*
+* Copied from the UISquadSelect listener 
+*/
 static function bool SquadCheck(array<StateObjectReference> arrOne, array<StateObjectReference> arrTwo)
 {
 	local int i,j;
@@ -902,6 +940,7 @@ static function bool SquadCheck(array<StateObjectReference> arrOne, array<StateO
 
 	return false;
 }
+
 function SendHistory()
 {
 	`log(`location,,'XCom_Online');
@@ -949,6 +988,7 @@ function ReceiveGameState(XComGameState InGameState)
 {
 	`log(`location,,'XCom_Online');
 }
+
 
 function GetAllPlayersLaunched()
 {
@@ -1003,12 +1043,13 @@ function LoadTacticalMap()
 	{
 		Launched=true;
 		RevertInviteAcceptedDelegates();
-		ConsoleCommand(BattleDataState.m_strMapCommand);
+		ConsoleCommand(BattleDataState.m_strMapCommand); // The command loads the new game and ruleset
 	}
 }
 
-
-
+/*
+* Copied from Other classes, these few functions are used to make the new game initialized and launched.
+*/
 function SetupMission()
 {
 	local XComGameState                     TacticalStartState;
@@ -1096,6 +1137,9 @@ function SetupStartState()
 	`XCOMHISTORY.AddGameStateToHistory(TacticalStartState);	
 }
 
+/*
+* Creates the Battle Data gamestate for the new mission in co-op
+*/
 simulated function CreateBD(XComGameState NewGameState,optional out XComGameState_BattleData BD )
 {
 	local XComGameStateHistory				History;
@@ -1184,9 +1228,12 @@ simulated function CreateBD(XComGameState NewGameState,optional out XComGameStat
 	BattleData.m_strLocation = MissionState.GetLocationDescription();
 	TacticalMissionManager.ForceMission = MissionData.Mission;
 	TacticalMissionManager.MissionQuestItemTemplate = MissionData.MissionQuestItemTemplate;
-	BattleData.m_strMapCommand = "open"@BattleData.MapData.PlotMapName$"?game=Dragonpunk_CoOp.XComCoOpTacticalGame";	
+	BattleData.m_strMapCommand = "open"@BattleData.MapData.PlotMapName$"?game=Dragonpunk_CoOp.XComCoOpTacticalGame";	//Have the game be the XCom Coop tactical game
 }
 
+/*
+* Figures out who controls who and puts a little marker on client controlled soldiers.
+*/
 function bool GetSoldierController(StateObjectReference UnitRef)
 {
 	local bool FoundAtServer,FoundAtClient,Found;

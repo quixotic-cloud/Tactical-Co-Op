@@ -1,6 +1,7 @@
 // This is an Unreal Script
 //                           
-// NOT USING THIS CLASS YET! have a lot of infrastructure for tactical turn management
+// NOT USING THIS CLASS. Will delete when making sure it dosnt do anything bad to the game
+
                
 class XCom_Co_Op_TacticalGameManager extends Actor;
 

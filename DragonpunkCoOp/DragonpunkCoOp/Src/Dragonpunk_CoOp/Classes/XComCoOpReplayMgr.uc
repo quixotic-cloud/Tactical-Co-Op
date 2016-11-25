@@ -1,5 +1,10 @@
-// This is an Unreal Script
-                           
+//  *********   DRAGONPUNK SOURCE CODE   ******************
+//  FILE:    XComCoOpReplayMgr
+//  AUTHOR:  Elad Dvash
+//  PURPOSE: Manages replays of gamestates recieved while in co-op
+//           Mostly copied from the parent class.                                                       
+//---------------------------------------------------------------------------------------  
+                                                                                                                      
 class XComCoOpReplayMgr extends XComMPReplayMgr;
 
 var bool finishedReplay;

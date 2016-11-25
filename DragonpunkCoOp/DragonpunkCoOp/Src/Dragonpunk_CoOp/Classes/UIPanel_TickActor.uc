@@ -8,31 +8,14 @@ class UIPanel_TickActor extends Actor;
 
 var UIScreen_TriggerScreen MyScreen;
 
+
+/*
+* Sets up the timers for the client to force connection to the server
+*/
 function SetupTick(float TickTime)
 {
 	`log(`location @"Trying to connect to server IN FUNCTION TickTime:" @TickTime,,'Team Dragonpunk Co Op');
 	SetTimer(TickTime,true,'Connect');
-}
-
-function MyScreenSpawn(float TickTime)
-{
-	`log(`location @"Trying to connect to server IN FUNCTION TickTime:" @TickTime,,'Team Dragonpunk Co Op');
-	SetTimer(TickTime,false,'SpawnNewScreen');
-}
-
-function SpawnNewScreen()
-{
-	if(MyScreen!=none)
-	{
-		MyScreen=Spawn(class'UIScreen_TriggerScreen',UISquadSelect(`Screenstack.GetScreen(class'UISquadSelect')));
-		`Screenstack.Push(MyScreen);
-		SetTimer(0.05,false,'SpawnNewScreen');
-	}
-	else
-	{
-		`Screenstack.Pop(MyScreen);
-		MyScreen=none;
-	}
 }
 
 
