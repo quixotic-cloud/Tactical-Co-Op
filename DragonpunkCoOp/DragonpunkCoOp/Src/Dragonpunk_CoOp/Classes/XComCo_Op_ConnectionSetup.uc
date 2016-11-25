@@ -699,12 +699,12 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		{
 			SendRemoteCommand("HistoryConfirmed");
 			UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
-			listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
+			listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
 			listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-			UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
-			UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
-			UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-			RefreshDisplay();
+			//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+			//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
+			//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
+			//RefreshDisplay();
 		}
 		else if(!Launched)
 		{
@@ -741,13 +741,13 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		SavedSquad=XComHQ.Squad;
 		`log("Updating Squad Select HistoryConfirmed",,'Team Dragonpunk Co Op');
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
-		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
+		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
 		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-		RefreshDisplay();
-		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
+		//RefreshDisplay();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 		SearchState=`ONLINEEVENTMGR.LatestSaveState(TempH);
 		foreach SearchState.IterateByClassType(class'XComGameState_Unit', UnitState)
 		{
@@ -771,13 +771,13 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
-		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
+		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
 		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-		RefreshDisplay();
-		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
+		//RefreshDisplay();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 		`log("Updating Squad Select RegisteredConfirmed",,'Team Dragonpunk Co Op');
 	}
 	else if (Command~="LoadGame")
@@ -822,13 +822,13 @@ function UpdateSS()
 	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 	UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
-	listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
+	listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
 	listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
-	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
-	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-	RefreshDisplay();
-	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay();
+	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
+	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
+	//RefreshDisplay();
+	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 	`log("Updating Squad Select RegisteredConfirmed",,'Team Dragonpunk Co Op');	
 }
 

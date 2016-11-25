@@ -378,6 +378,10 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		bClientPreparedForHistory=true;
 	else if(Command~= "EndOfReplay")
 	{
+		bSendingPartialHistory = false;
+		bSendingPartialHistory_True = false;
+		bSendingTurnHistory= false;
+		ConfirmClientHistory=true;
 		OtherSideEndedReplay=true;
 	}
 	else if( Command ~= "ReadyForTurnHistory")
@@ -404,7 +408,6 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		GetReplayMgr().RequestPauseReplay();
 		bPauseReplay=true;
 		HasEndedLocalTurn=false;
-		SyncPlayerVis();
 		SendRemoteCommand("DisableControls");
 		XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).SetInputState('ActiveUnit_Moving');	
 		XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).IsCurrentlyWaiting=false;
@@ -468,8 +471,8 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 	{
 		GetReplayMgr().LastKnownHistoryIndex=GetReplayMgr().CurrentHistoryFrame;
 		GetReplayMgr().CachedHistory=`XCOMHISTORY;
-		if(!(string(GetStateName())~="PerformingReplay"))
-			PushState('PerformingReplay');
+//		if(!(string(GetStateName())~="PerformingReplay"))
+//			PushState('PerformingReplay');
 
 		GetReplayMgr().ResumeReplay();
 		`log("Got Partial Ready!");
@@ -483,6 +486,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 	{
 		bSkipRemainingTurnActivty_B=true;
 		`PRES.m_kTurnOverlay.HideOtherTurn();
+		SyncPlayerVis();
 	}
 	else if( Command ~= "ForceSync")
 	{
@@ -569,7 +573,7 @@ simulated function name GetNextTurnPhase(name CurrentState, optional name Defaul
 		}
 		if( XComTacticalGRI(class'WorldInfo'.static.GetWorldInfo().GRI).ReplayMgr.bInReplay )
 		{
-			return 'PerformingReplay';
+//			return 'PerformingReplay';
 		}
 		LastState = GetLastStateNameFromHistory();
 		return (LastState == '' || LastState == 'LoadTacticalGame') ? 'TurnPhase_Begin_Coop' : GetNextTurnPhase(LastState, 'TurnPhase_Begin_Coop');
@@ -590,7 +594,7 @@ simulated function name GetNextTurnPhase(name CurrentState, optional name Defaul
 		if (!XComTacticalGRI(class'WorldInfo'.static.GetWorldInfo().GRI).ReplayMgr.bInReplay || XComTacticalGRI(class'WorldInfo'.static.GetWorldInfo().GRI).ReplayMgr.bInTutorial)
 		{
 			//Used when resuming from a replay, or in the tutorial and control has "returned" to the player
-			return 'TurnPhase_Begin_Coop';
+			return 'TurnPhase_UnitActions';
 		}
 	case 'CreateChallengeGame':
 		return 'TurnPhase_StartTimer';
@@ -2158,7 +2162,7 @@ simulated state TurnPhase_UnitActions
 		local GameRulesCache_Unit UnitCache;
 		local AvailableAction Action;
 
-		if (UnitState == none)
+		if (UnitState == none )
 			return false;
 
 		//Check whether this unit is controlled by the UnitActionPlayer
@@ -2170,7 +2174,6 @@ simulated state TurnPhase_UnitActions
 				UnitState.IsAlive() &&
 				!UnitState.IsBleedingOut() &&
 				!UnitState.IsUnconscious() &&
-				UnitState.NumActionPoints()>0 &&
 				!UnitState.IsStunned() &&
 				!(UnitState.IsMindControlled()&& UnitState.GetPreviousTeam()!=UnitState.GetTeam()) &&
 				(UnitState.AffectedByEffectNames.Find(class'X2Ability_Viper'.default.BindSustainedEffectName) == INDEX_NONE))
@@ -2283,7 +2286,7 @@ simulated state TurnPhase_UnitActions
 		}
 		`log("HasActionsLeft- HAL:"@HAL @",TEMP:"@TEMP);
 		if(bServerEndedTurn)
-			return TEMP&&HasEndedLocalTurn;
+			return TEMP&&!HasEndedLocalTurn;
 
 		if(HAL || TEMP)
 			return true;
@@ -2496,7 +2499,8 @@ Begin:
 			SyncCoopButton.Hide();
 			if(IsCurrentPlayerOfTeam(eTeam_XCom))
 			{
-				SyncCoopButton.Show();
+				StartTimerSync();
+				//SyncCoopButton.Show();
 				`log("WE ARE XCOM. WE ARE MANY");
 				SetCurrentTime(TurnCounterFixed);
 				if(`XCOMNETMANAGER.HasServerConnection())
@@ -2509,7 +2513,6 @@ Begin:
 					}
 					if(!ServerHasActionsLeft()&& !HasEndedLocalTurn)
 					{
-						HasEndedLocalTurn=true;
 						`log("!ServerHasActionsLeft()",,'Dragonpunk Tactical TurnState');
 						while (bSendingPartialHistory)
 						{
@@ -2531,7 +2534,6 @@ Begin:
 						`PRES.m_kTurnOverlay.ShowOtherTurn();	
 						SetCurrentTime(TurnCounterFixed);					
 						SendRemoteCommand("SwitchTurn");
-						SyncPlayerVis();
 						`log("Switching To Client, Server has no actions");
 						
 					}
@@ -2591,6 +2593,7 @@ Begin:
 							sleep(0.0);
 						}
 						OtherSideEndedReplay=false;
+						HasEndedLocalTurn=false;
 						SendPartialHistory();
 						while (bSendingPartialHistory)
 						{
@@ -2603,7 +2606,6 @@ Begin:
 						}
 						OtherSideEndedReplay=false;
 						SendRemoteCommand("SwitchTurn");
-						SyncPlayerVis();
 						`log("Switching To Server, no actions left");
 						SendRemoteCommand("XComTurnEnded");
 						bSkipRemainingTurnActivty_B=true;
@@ -2683,7 +2685,6 @@ Begin:
 			}
 			OtherSideEndedReplay=false;
 			SendRemoteCommand("SwitchTurn");
-			SyncPlayerVis();
 			`log("Switching To Server, no actions left Out of moves");
 			SendRemoteCommand("XComTurnEnded");
 			bSkipRemainingTurnActivty_B=true;
@@ -2709,7 +2710,6 @@ Begin:
 					sleep(0.0);
 				}
 				SendRemoteCommand("Switch_Turn_NonXCom");
-				SyncPlayerVis();
 			}
 			else
 			{
@@ -2722,7 +2722,7 @@ Begin:
 				`log("Wait for Pausing state AI turn");
 				bPauseReplay=true;		
 				SendRemoteCommand("ClientReadyForAITurn");
-				PushState('PerformingReplay');			
+//				PushState('PerformingReplay');			
 				while(string(GetReplayMgr().GetStateName())!="PausedReplay"&& bPauseReplay)
 				{
 					sleep(0.0);
@@ -2761,6 +2761,7 @@ Begin:
 			{
 				sleep(0.0);
 			}
+			bClientPreparedForHistory=false;
 			SendRemoteCommand("ReadyForFinalHistory");
 			while(!bReadyForHistory)
 			{
@@ -2771,6 +2772,7 @@ Begin:
 			{
 				sleep(0.0);
 			}
+			bReadyForHistory=false;
 		}
 		else
 		{
@@ -2786,15 +2788,15 @@ Begin:
 				Sleep(0.0);
 			}
 			bSendingPartialHistory=false;
+			bReadyForHistory=false;
 			`log("We are past end turn history sync");
 		}
-		bClientPreparedForHistory=false;
 		if(!IsCurrentPlayerOfTeam(eTeam_XCom) && !IsServer() )
 		{
 			`PRES.m_kTurnOverlay.HideAlienTurn();
 		}
 		//LatentWaitingForPlayerSync();
-		
+		SyncPlayerVis();
 	}until( !NextPlayer() ); //NextPlayer returns false when the UnitActionPlayerIndex has reached the end of PlayerTurnOrder in the BattleData state.
 	
 	
@@ -2817,6 +2819,11 @@ Begin:
 	FirstTurn=true;
 	EndPhase();
 	`SETLOC("End of Begin Block");
+}
+
+function StartTimerSync()
+{
+	SetTimer(60,false,'SyncButtonShow');
 }
 
 simulated state TurnPhase_Begin_Coop extends TurnPhase_Begin
@@ -2854,6 +2861,7 @@ Begin:
 	{
 		SyncCoopButton=UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD')).Spawn(class'UIButton',UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD'))).InitButton('MySyncButton',"Sync Co-Op",OnClickedSync ,eUIButtonStyle_SELECTED_SHOWS_HOTLINK);
 		SyncCoopButton.SetPosition(SyncCoopButton.Movie.GetUIResolution().x-192,16-SyncCoopButton.Height);
+		SyncCoopButton.Hide();	
 		//SendToConsole("show gi");
 		if(`XCOMNETMANAGER.HasClientConnection())
 		{
@@ -2884,7 +2892,7 @@ Begin:
 			XComCoOpInput(XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).PlayerInput).PopState();
 		}
 		launched=true;
-		FirstTurn=false;
+		FirstTurn=true;
 	}
 	if(FirstTurn)
 	{	
@@ -2900,6 +2908,7 @@ Begin:
 			{
 				sleep(0.0);
 			}
+			bClientPreparedForHistory=false;
 			SendRemoteCommand("ReadyForFinalHistory");
 			while(!bReadyForHistory)
 			{
@@ -2910,10 +2919,12 @@ Begin:
 			{
 				sleep(0.0);
 			}
+			bReadyForHistory=false;
 		}
 		else
 		{
 			bRecievedPartialHistory=false;
+			bReadyForHistory=false;
 			SendRemoteCommand("ClientReadyForHistory");
 			while(!bReadyForHistory)
 			{
@@ -2925,6 +2936,7 @@ Begin:
 				Sleep(0.0);
 			}
 			bSendingPartialHistory=false;
+			bReadyForHistory=false;
 			`log("We are past end turn history sync");
 		}
 /*
@@ -2994,9 +3006,14 @@ Begin:
 
 function OnClickedSync(UIButton Button)
 {
-	
+	SyncCoopButton.Hide();		
 	SendRemoteCommand("ForceSync");
 	GotoState('TurnPhase_ForceSync');
+}
+
+function SyncButtonShow()
+{
+	SyncCoopButton.Show();	
 }
 
 simulated state TurnPhase_ForceSync
@@ -3013,6 +3030,7 @@ Begin:
 			{
 				sleep(0.0);
 			}
+			bClientPreparedForHistory=false;
 			SendRemoteCommand("ReadyForFinalHistory");
 			while(!bReadyForHistory)
 			{
@@ -3023,6 +3041,7 @@ Begin:
 			{
 				sleep(0.0);
 			}
+			bReadyForHistory=false;
 		}
 		else
 		{
@@ -3039,6 +3058,7 @@ Begin:
 			}
 			bSendingPartialHistory=false;
 			`log("We are past end turn history sync");
+			bReadyForHistory=false;
 		}
 	GotoState(GetNextTurnPhase(GetStateName()));
 }

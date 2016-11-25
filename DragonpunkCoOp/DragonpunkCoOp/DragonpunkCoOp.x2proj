@@ -28,6 +28,9 @@
     <Content Include="Src\Dragonpunk_CoOp\Classes\UIPanel_TickActor.uc">
       <SubType>Content</SubType>
     </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\UIScreen_TriggerScreen.uc">
+      <SubType>Content</SubType>
+    </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\UISquadSelect_ListItem_Invite.uc">
       <SubType>Content</SubType>
     </Content>

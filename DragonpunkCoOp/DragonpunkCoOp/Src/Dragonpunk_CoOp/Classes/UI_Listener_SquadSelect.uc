@@ -17,11 +17,14 @@ var bool PlayingCoop;
 var array<StateObjectReference> SavedSquad;
 var array<StateObjectReference> ServerSquad,ClientSquad;
 var bool Launched;
-var UIButton MySyncButton;
+var UIPanel_TickActor MyTick;
 event OnInit(UIScreen Screen)
 {
+	
 	if(Screen.isA('UISquadSelect'))
+	{
 		OnReceiveFocus(Screen);
+	}
 	else if (Screen.isA('UIMissionSummary'))
 	{
 		`log("UI Mission Summary Initiated Cleanup!");
@@ -39,8 +42,6 @@ event OnInit(UIScreen Screen)
 	}
 
 }
-
-
 
 
 
@@ -91,11 +92,11 @@ event OnReceiveFocus(UIScreen Screen)
 	if(Screen.isA('UISquadSelect'))
 	{
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
-		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
-		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation();
+		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
+		listX =(UISS.Movie.GetUIResolution().X / 2) - (listWidth/2);
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation();
 		if(ConnectionSetupActor==none)
 			Once=false;
 
@@ -122,9 +123,9 @@ event OnReceiveFocus(UIScreen Screen)
 	
 		//`ONLINEEVENTMGR.AddGameInviteAcceptedDelegate(OnGameInviteAccepted);
 		//`ONLINEEVENTMGR.AddGameInviteCompleteDelegate(OnGameInviteComplete);
-		UISquadSelect(Screen).LaunchButton.AnchorTopCenter();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).LaunchButton.SetPosition((UISS.Movie.GetUIResolution().X / 2),-UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).LaunchButton.Height*0.5);
 		XComCheatManager(UISquadSelect(Screen).GetALocalPlayerController().CheatManager).UnsuppressMP(); //Unsuppress log types
-		SSS=UISquadSelect(Screen);
+		SSS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 		Count=SSS.m_kSlotList.ItemCount;
 		for(i=0;i<Count*2;i++)
 		{
@@ -155,15 +156,19 @@ event OnReceiveFocus(UIScreen Screen)
 			AllButtons[i].Show();
 		}
 		UISS=UISquadSelect(Screen);
-		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);	
-		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-		if(UIDialogueBox(UISquadSelect(Screen).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).ShowingDialog())
-			UIDialogueBox(UISquadSelect(Screen).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).RemoveDialog();
+		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);	
+		listX =(UISS.Movie.GetUIResolution().X / 2) - (listWidth/2);
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
+		if(UIDialogueBox(UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).ShowingDialog())
+			UIDialogueBox(UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).RemoveDialog();
 		if(`XCOMNETMANAGER.HasClientConnection())
-			UISquadSelect(Screen).LaunchButton.Hide();
+			UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).LaunchButton.Hide();
+		else 
+		{
+			//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).LaunchButton.AnchorTopCenter();
+		}
 		
 	}
 	else if(Screen.isA('UIDialogueBox'))
@@ -287,21 +292,20 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
-		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
-		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-		RefreshDisplay();
-		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay(); //That's what getting everything updated for the player		SavedSquad=XComHQ.Squad;
+		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
+		listX =(UISS.Movie.GetUIResolution().X / 2) - (listWidth/2);
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
+		//RefreshDisplay();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).//RefreshDisplay(); //That's what getting everything updated for the player		SavedSquad=XComHQ.Squad;
 		ServerSquad=XComHQ.Squad;
 		ConnectionSetupActor.SavedSquad=XComHQ.Squad;
 		ConnectionSetupActor.ServerSquad=XComHQ.Squad;		
-		FullGameState = `XCOMHISTORY.GetGameStateFromHistory(-1, eReturnType_Copy, false);
-		`XCOMVISUALIZATIONMGR.SetCurrentHistoryFrame(FullGameState.HistoryIndex);
-		`XCOMVISUALIZATIONMGR.EnableBuildVisualization();		
-		`XCOMVISUALIZATIONMGR.OnJumpForwardInHistory();
-		`XCOMVISUALIZATIONMGR.BuildVisualization(FullGameState.HistoryIndex, true);
+		XComGameInfo(`XWORLDINFO.Game).LoadGame();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeItems();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OnReceiveFocus();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
 		//SendRemoteCommand("ClientJoined");
 	}
 	else 
@@ -391,18 +395,19 @@ function ReceiveMergeGameState(XComGameState InGameState) //Used when getting th
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
-		listWidth = UISS.GetTotalSlots() * (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
-		listX =(UISS.Movie.UI_RES_X / 2) - (listWidth/2);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(0); //fixes the x position of the list on the screen
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
-		RefreshDisplay();
-		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).RefreshDisplay(); //That's what getting everything updated for the player
+		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
+		listX =(UISS.Movie.GetUIResolution().X / 2) - (listWidth/2);
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OriginTopCenter();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
+		//RefreshDisplay();
+		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).//RefreshDisplay(); //That's what getting everything updated for the player
 		GetNewSquadChanges(SavedSquad,XComHQ.Squad);
 		SavedSquad=XComHQ.Squad;
 		ConnectionSetupActor.ServerSquad=ServerSquad;
 		ConnectionSetupActor.ClientSquad=ClientSquad;
 		ConnectionSetupActor.TotalSquad=SavedSquad;
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
 		ConnectionSetupActor.SentRemoteSquadCommand();
 		//CalcAllPlayersReady();
 	}
@@ -418,9 +423,9 @@ simulated function RefreshDisplay()
 	
 	SS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 
-	for( SlotIndex = 0; SlotIndex < SS.SlotListOrder.Length; ++SlotIndex )
+	for( SlotIndex = 0; SlotIndex < `XComHQ.Squad.Length; ++SlotIndex )
 	{
-		SquadIndex = SS.SlotListOrder[SlotIndex];
+		SquadIndex =SS.SlotListOrder[SlotIndex];
 
 		// The slot list may contain more information/slots than available soldiers, so skip if we're reading outside the current soldier availability. 
 		if( SquadIndex >= SS.SoldierSlotCount )
