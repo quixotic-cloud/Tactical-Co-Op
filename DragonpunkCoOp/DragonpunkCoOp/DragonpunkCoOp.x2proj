@@ -28,13 +28,13 @@
     <Content Include="Src\Dragonpunk_CoOp\Classes\UIPanel_TickActor.uc">
       <SubType>Content</SubType>
     </Content>
-    <Content Include="Src\Dragonpunk_CoOp\Classes\UIScreen_TriggerScreen.uc">
-      <SubType>Content</SubType>
-    </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\UISquadSelect_ListItem_Invite.uc">
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\UI_Listener_SquadSelect.uc">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\X2Ability_DefaultAbilitySet_CoOpHackFix.uc">
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\X2DownloadableContentInfo_Dragonpunk_CoOp.uc" />
@@ -66,6 +66,9 @@
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\XComOnlineEventMgr_Co_Op_Override.uc">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\XComOnlineGameSearchDeathmatchCoop.uc">
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\XCom_Co_Op_TacticalGameManager.uc">

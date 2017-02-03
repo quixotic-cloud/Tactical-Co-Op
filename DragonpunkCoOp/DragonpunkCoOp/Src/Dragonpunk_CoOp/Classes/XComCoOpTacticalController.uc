@@ -157,7 +157,7 @@ simulated function bool Visualizer_SelectUnit(XComGameState_Unit SelectedUnit)
 
 	if(IsCurrentlyWaiting)
 	{
-		SetInputState('BlockingInput');
+		SetInputState('Multiplayer_Inactive');
 		return false;
 	}
 	if(SelectedUnit.GetTeam()==eTeam_XCom && SelectedUnit.GetMaxStat(eStat_FlightFuel)==10 && !`XCOMNETMANAGER.HasClientConnection()) //Check for client unit when you're not the client
@@ -281,6 +281,11 @@ simulated function bool PerformEndTurn(EPlayerEndTurnType eEndTurnType)
 	return super.PerformEndTurn(eEndTurnType);
 }
 
+simulated Function bool EndMyTurn()
+{
+	return m_XGPlayer.EndTurn(ePlayerEndTurnType_PlayerInput);
+}
+
 /*
 * Puts the players into the right input state on request and logs it.                                                                                                                                                                                                                                      
 */
@@ -293,11 +298,12 @@ simulated function SetInputState( name nStateName , optional bool bForce)
 		ScriptTrace();
 		XComCoOpInput( PlayerInput ).GotoState( name(CurrentState),, true );
 		CurrentState="ActiveUnit_Moving_Coop";
+		`log("Activating State:" @CurrentState @"Original Name:" @string(nStateName));
 	}
 
-	`log("Activating State:" @CurrentState @"Original Name:" @string(nStateName));
 	if (!`REPLAY.bInReplay || `REPLAY.bInTutorial)
 	{
+		`log("Activating State:" @CurrentState @"Original Name:" @string(nStateName));
 		XComCoOpInput( PlayerInput ).GotoState( name(CurrentState),, true );
 	}
 }

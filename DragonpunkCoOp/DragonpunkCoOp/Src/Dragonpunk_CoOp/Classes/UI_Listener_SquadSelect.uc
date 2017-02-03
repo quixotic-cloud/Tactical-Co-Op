@@ -17,7 +17,9 @@ var bool PlayingCoop;
 var array<StateObjectReference> SavedSquad;
 var array<StateObjectReference> ServerSquad,ClientSquad;
 var bool Launched;
+var bool ShouldIgnoreSS;
 var UIPanel_TickActor MyTick;
+//var UIButton RumbleB,RumbleBC;
 
 event OnInit(UIScreen Screen)
 {
@@ -30,7 +32,10 @@ event OnInit(UIScreen Screen)
 	{
 		`log("UI Mission Summary Initiated Cleanup!");
 		Cleanup();
-				
+		ClearUnitEvac();
+		class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.UnFixHackingAbilities();
+		class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.UnFixLootAbilities();
+
 		if (ConnectionSetupActor != none) // If we're at the end of the mission kill the connection actor so it wont crash the game
 		{
 			ConnectionSetupActor.Destroy();
@@ -40,6 +45,11 @@ event OnInit(UIScreen Screen)
 	else if(PlayingCoop && Screen.IsA('UITacticalHUD')) // Extends timers so the games dosnt end prematurely
 	{
 		SetTimersStart();
+	}
+	else if(Screen.IsA('UIInventoryTactical') && ( `XCOMNETMANAGER.HasClientConnection() || `XCOMNETMANAGER.HasServerConnection() )  )
+	{
+		if( (UIInventoryTactical(Screen).m_Looter.GetMaxStat(eStat_FlightFuel) != 10) == !`XCOMNETMANAGER.HasServerConnection() )
+			 UIInventoryTactical(Screen).OnButtonClicked(UIInventoryTactical(Screen).m_kButton_OK);
 	}
 
 }
@@ -91,8 +101,10 @@ event OnReceiveFocus(UIScreen Screen)
 	local int i,Count;
 	local float listWidth,listX;
 	local UISquadSelect UISS;
-	if(Screen.isA('UISquadSelect')) // This will catch overrides/child-classes of the UISquadSelect Screen as well as the base class.
+	if(Screen.isA('UISquadSelect') && !ShouldIgnoreSS) // This will catch overrides/child-classes of the UISquadSelect Screen as well as the base class.
 	{
+		`XCOMNETMANAGER.AddReceiveRemoteCommandDelegate(OnRemoteCommand);
+
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING); //No longer in use.
 		listX =(UISS.Movie.GetUIResolution().X / 2) - (listWidth/2); //No longer in use.
@@ -105,7 +117,7 @@ event OnReceiveFocus(UIScreen Screen)
 		if(!once)
 		{
 			`XCOMNETMANAGER.AddReceiveHistoryDelegate(ReceiveHistory); // Make sure we know where to go when getting history from server
-			`XCOMNETMANAGER.AddReceiveMergeGameStateDelegate(ReceiveMergeGameState); // Make sure we know where to go when getting game states from server
+			//`XCOMNETMANAGER.AddReceiveMergeGameStateDelegate(ReceiveMergeGameState); // Make sure we know where to go when getting game states from server
 			ConnectionSetupActor=Screen.Spawn(class'XComCo_Op_ConnectionSetup',none); // Spawn the connection actor that deals with everything about the connection to the other players
 			ConnectionSetupActor.ChangeInviteAcceptedDelegates(); // Apply the new delegates and change the online event manager delegates to the stuff we want to activate.
 			Once=true;
@@ -167,11 +179,14 @@ event OnReceiveFocus(UIScreen Screen)
 			UIDialogueBox(UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).Movie.Stack.GetFirstInstanceOf(class'UIDialogueBox')).RemoveDialog();
 		if(`XCOMNETMANAGER.HasClientConnection())
 			UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).LaunchButton.Hide();
-		/*else 
-		{
-			//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).LaunchButton.AnchorTopCenter();
-		}*/
-		
+
+	/*	RumbleB=SSS.Spawn(class'UIButton', SSS);//Adds the new "Select Player" button
+		RumbleB.InitButton('OpenRumbleServer',"Open Rumble Server",OnOpenRumble);
+		RumbleB.CenterOnScreen();
+		RumbleB.Hide();
+		RumbleBC=SSS.Spawn(class'UIButton', SSS);//Adds the new "Select Player" button
+		RumbleBC.InitButton('OpenRumbleClient',"Open Rumble Client",OnOpenRumbleClient);
+		RumbleBC.Hide();*/
 	}
 	else if(Screen.isA('UIDialogueBox')) // If we are on a dialog make sure to remove it, closes remaining dialog boxes.
 	{
@@ -216,6 +231,29 @@ function SetTimersStart()
 	}
 }
 
+function ClearUnitEvac()
+{
+	local XComGameStateHistory History;
+	local XComGameState_Unit Unit , NewUnit;
+	local XComGameState NewGameState;
+
+	History = `XCOMHISTORY;
+	NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("Remove Evac From all");
+
+	foreach History.IterateByClassType(class'XComGameState_Unit', Unit)
+	{
+		if(Unit.GetTeam() == eTeam_XCom)
+		{
+			NewUnit = XComGameState_Unit(NewGameState.CreateStateObject(class'XComGameState_Unit', Unit.ObjectID));
+			NewUnit.ClearUnitValue('AllowedAbility_Evac');
+			NewGameState.AddStateObject(NewUnit);
+		}
+	}
+	if(NewGameState.GetNumGameStateObjects() > 0)
+		`TACTICALRULES.SubmitGameState(NewGameState);
+	else
+		`XCOMHISTORY.CleanupPendingGameState(NewGameState);			
+}
 
 /*
 * This event is triggered when a screen is removed
@@ -235,12 +273,28 @@ event OnRemoved(UIScreen Screen)
 	}
 }
  
+simulated function OnOpenRumbleClient(UIButton button)  
+{
+	ConnectionSetupActor.CreateOnlineGameSearch();
+	/*RumbleBC.Remove();
+	RumbleBC=none;
+	RumbleB.Remove();
+	RumbleB=none;*/
+
+}
+
+simulated function OnOpenRumble(UIButton button)  
+{
+	ConnectionSetupActor.UseRumble=true;
+	OnInviteFriend(button);
+}
 
 /*
 * When the player clicks the "Invite Friend" button this delegate fires up
 * Makes sure all the delegates are correctly set up, destroys all other online games if it exists
 * Initializes all the squads for tracking who controls which soldier and notifies the connection actor to create the game                                                                                                                                                                         
 */
+
 simulated function OnInviteFriend(UIButton button)
 {
 	local XComGameState_HeadquartersXCom XComHQ;
@@ -263,6 +317,11 @@ simulated function OnInviteFriend(UIButton button)
 	ConnectionSetupActor.ServerSquad=XComHQ.Squad; // Save the squad you currently have to check for control
 	ConnectionSetupActor.CreateOnlineGame();
 	PlayingCoop=true;
+
+	/*RumbleBC.Remove();
+	RumbleBC=none;
+	RumbleB.Remove();
+	RumbleB=none;*/
 }
 
 function OnNotifyConnectionClosed(int ConnectionIdx)
@@ -288,6 +347,25 @@ function RevertInviteAcceptedDelegates()
 }
 
 /*
+* Handels a lot of the back and forth logic between the server and client
+*/
+function OnRemoteCommand(string Command, array<byte> RawParams)
+{
+
+	if (Command ~= "SwapMods" && `XCOMNETMANAGER.HasClientConnection())
+	{
+		ShouldIgnoreSS=true;		
+	}
+	else if(Command ~= "FixIgnoreSS_Fix")
+	{
+		ShouldIgnoreSS=false;
+		OnReceiveFocus(UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')));
+		SendRemoteCommand("RequestHistory");
+		`XCOMNETMANAGER.ClearReceiveRemoteCommandDelegate(OnRemoteCommand);
+
+	}
+}
+/*
 * When Receiving history this delegate fires, it has multiple uses-
 * On the first time the client recieves history it makes sure to init all the important things and update the data to make the new squad appear
 * From there onwards it just fills in the spot to make sure we are getting the history correctly when we are getting the history to transfer to tactical                                                                                                                                                                                                                  
@@ -306,8 +384,8 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 		`log(`location @"Dragonpunk Recieved History",,'Team Dragonpunk Co Op');
 		bHistoryLoaded = true;
 		PlayingCoop=true;
-		SendRemoteCommand("RecievedHistory");
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
+		SendRemoteCommand("HistoryReceived");
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
@@ -318,7 +396,13 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 		ServerSquad=XComHQ.Squad; // Save the squads we need to know that for the tactical game
 		ConnectionSetupActor.SavedSquad=XComHQ.Squad; //saving squads
 		ConnectionSetupActor.ServerSquad=XComHQ.Squad;//saving squads	
-		XComGameInfo(`XWORLDINFO.Game).LoadGame(); //Using this will load the visualizers and ensure we dont get weird crashes from visualizer init bugs
+		//XComGameInfo(`XWORLDINFO.Game).LoadGame(); //Using this will load the visualizers and ensure we dont get weird crashes from visualizer init bugs
+		FullGameState = `XCOMHISTORY.GetGameStateFromHistory(-1, eReturnType_Copy, false);	
+		`XCOMVISUALIZATIONMGR.SetCurrentHistoryFrame(FullGameState.HistoryIndex);
+		`XCOMVISUALIZATIONMGR.EnableBuildVisualization();		
+		`XCOMVISUALIZATIONMGR.OnJumpForwardInHistory();
+		`XCOMVISUALIZATIONMGR.BuildVisualization(FullGameState.HistoryIndex, true);
+		SyncPlayerVis();
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeItems();
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.OnReceiveFocus();
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false); // Reloads he soldiers, fixes the ghost soldier bug
@@ -327,7 +411,7 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 	else 
 	{
 		`log(`location @"Dragonpunk Recieved History",,'Team Dragonpunk Co Op');
-		SendRemoteCommand("RecievedHistory");
+		SendRemoteCommand("HistoryReceived");
 		if(Launched)
 			RevertInviteAcceptedDelegates();	
 		Launched=true;
@@ -339,6 +423,26 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 	//m_kLocalPlayerInfo.InitPlayer(eTeam_Two, m_kSquadLoadout);
 	//m_kRemotePlayerInfo.InitPlayer(eTeam_One);
 	
+}
+
+ 
+/*
+* Copied from X2TacticalCoOpGameRuleset
+*/
+function SyncPlayerVis()
+{
+	local XComGameState_Unit UnitState;
+	local StateObjectReference UnitRef;	
+	local XComGameState_Player PlayerState;
+	foreach `XCOMHQ.Squad(UnitRef)
+	{
+		If(UnitRef.ObjectID>0)
+		{
+			UnitState=XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitRef.ObjectID));
+			UnitState.SyncVisualizer(`XCOMHISTORY.GetGameStateFromHistory(`XCOMHISTORY.GetNumGameStates()-1));
+		}
+	}
+
 }
  
 /*
@@ -367,7 +471,7 @@ function bool SquadCheck(array<StateObjectReference> arrOne, array<StateObjectRe
 	{
 		for(j=0;j<arrTwo.Length;j++)
 		{
-			if(arrOne[i]==arrTwo[j])
+			if(arrOne[i]==arrTwo[j] && arrOne[i].ObjectID>0)
 				CheckArray.AddItem(true);
 		}
 	}
@@ -388,10 +492,10 @@ function bool PerSoldierSquadCheck(XComGameState InGS)
 	for(i=0;i<InGS.GetNumGameStateObjects();i++)
 	{
 		Unit=XComGameState_Unit(InGS.GetGameStateForObjectIndex(i));
-		if(Unit!=none)
+		if(Unit!=none &&Unit.ObjectID>0)
 		{
 			UnitPrev=XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(Unit.ObjectID,,InGS.HistoryIndex - 1));
-			if(UnitPrev !=none)
+			if(UnitPrev !=none && UnitPrev.ObjectID>0)
 			{
 				if(UnitPrev!=Unit)
 					return false;
@@ -415,13 +519,14 @@ function ReceiveMergeGameState(XComGameState InGameState)
 	XComHQ = XComGameState_HeadquartersXCom(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom')); //Update the HQ, will ensure the squads are updated.
 	foreach XComHQ.Squad(UnitRef)
 	{
-		`log("Unit in squad ReceiveMergeGameState:"@XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitRef.ObjectID)).GetFullName(),,'Team Dragonpunk Co Op');
+		if(UnitRef.ObjectID>0)
+			`log("Unit in squad ReceiveMergeGameState:"@XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitRef.ObjectID)).GetFullName(),,'Team Dragonpunk Co Op');
 	}
 	//`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
 	if(!SquadCheck(XComHQ.Squad,SavedSquad) ||!PerSoldierSquadCheck(InGameState)) //Check if we have any changes. Without checking you'll get a T-pose on the units and the UI becomes unresponsive.
 	{
 		`log("SquadCheck"@SquadCheck(XComHQ.Squad,SavedSquad) @"PerSoldierSquadCheck:"@PerSoldierSquadCheck(InGameState));
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);

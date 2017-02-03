@@ -6,8 +6,6 @@
                                                                                          
 class UIPanel_TickActor extends Actor;
 
-var UIScreen_TriggerScreen MyScreen;
-
 
 /*
 * Sets up the timers for the client to force connection to the server

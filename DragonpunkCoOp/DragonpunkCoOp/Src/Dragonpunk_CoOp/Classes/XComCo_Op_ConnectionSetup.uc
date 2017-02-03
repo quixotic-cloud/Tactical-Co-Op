@@ -19,7 +19,11 @@ var XCom_Co_Op_TacticalGameManager TGMCoOp;
 var bool Launched;
 var XComGameState_BattleData m_BattleData;
 var array<StateObjectReference> ServerSquad,ClientSquad,TotalSquad;
-
+var bool NewGSWasRecieved;
+var bool UseRumble;
+var bool FoundMismatchMods;
+var bool SentMods;
+var XComOnlineGameSearch SavedRumbleSearch;
 
 event Tick( float DeltaTime )
 {
@@ -100,7 +104,11 @@ function CreateOnlineGame()
 function OnCreateLobbyComplete(bool bWasSuccessful, UniqueNetId LobbyId, string Error)
 {
 	XComPlayerController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).pres.UICloseProgressDialog();
-	OpenSteamUI();
+	if(!UseRumble)
+	{
+		OpenSteamUI();
+	}
+	EndDialogBox();
 }
 
 /*
@@ -140,11 +148,11 @@ function OnRecognitionComplete()
 /*
 * Makes the correct popup for the situation
 */
-function PopupServerNotification()
+function PopupServerNotification(optional string Title="Creating Co-Op Server",optional string Text="Please Wait. This message will disappear automatically." )
 {
 	DialogData.eType = eDialog_Normal;
-	DialogData.strTitle = "Creating Co-Op Server";
-	DialogData.strText = "Please Wait. This message will disappear automatically.";
+	DialogData.strTitle = Title;
+	DialogData.strText = Text;
 	DialogData.strAccept=" "; // If you want this to be empty dont make this a null string, it will go to default
 	DialogData.strCancel=" ";
 	`HQPRES.UIRaiseDialog(DialogData);
@@ -153,13 +161,26 @@ function PopupServerNotification()
 /*
 * Makes the correct popup for the situation
 */
-function PopupClientNotification()
+function PopupClientNotification(optional string Title="Waiting For Server To Generate Map",optional string Text="Please wait. This message will disappear automatically." )
 {
 	DialogData.eType = eDialog_Normal;
-	DialogData.strTitle = "Waiting For Server To Generate Map";
-	DialogData.strText = "Please wait. This message will disappear automatically.";
+	DialogData.strTitle = Title;
+	DialogData.strText = Text;
 	DialogData.strAccept=" "; // If you want this to be empty dont make this a null string, it will go to default
 	DialogData.strCancel=" ";
+	`HQPRES.UIRaiseDialog(DialogData);
+}
+
+function PopupCustomNotification(optional string Title=" ",optional string Text=" ",optional string AcceptS=" ",optional string CancelS=" " )
+{
+	DialogData.eType = eDialog_Warning;
+	DialogData.strTitle = Title;
+	DialogData.strText = Text;
+	DialogData.fnPreCloseCallback=HandleMissingModsCallback;
+	DialogData.fnCallback=none;
+	DialogData.fnCallbackEx=none;
+	DialogData.strAccept=AcceptS;
+	DialogData.strCancel=CancelS;
 	`HQPRES.UIRaiseDialog(DialogData);
 }
 
@@ -245,8 +266,13 @@ function OnLobbyMemberStatusUpdate(const out array<OnlineGameInterfaceXCom_Activ
 }
 function DisconnectGame()
 {
-	`XCOMNETMANAGER.Disconnect();
-	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');
+	class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.UnFixHackingAbilities();
+	class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.UnFixAllMPAbilities();
+	//`XCOMNETMANAGER.Disconnect();
+	//if(!`XCOMNETMANAGER.HasClientConnection())
+	//	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.DestroyOnlineGame('Game');
+	`ONLINEEVENTMGR.ReturnToStartScreen(QuitReason_UserQuit);
+
 }
 
 function OnLobbyInvite(UniqueNetId LobbyId, UniqueNetId FriendId, bool bAccepted)
@@ -269,8 +295,8 @@ function OSSCreateGameSettings(bool bAutomatch)
 	kGameSettings.SetIsRanked(false);
 	kGameSettings.SetNetworkType(eMPNetworkType_Public);
 	kGameSettings.SetGameType(eMPGameType_Deathmatch);
-	kGameSettings.SetTurnTimeSeconds(3600); 
-	kGameSettings.SetMaxSquadCost(500000); 
+	kGameSettings.SetTurnTimeSeconds(1234567); 
+	kGameSettings.SetMaxSquadCost(1234567); 
 	kGameSettings.SetMapPlotTypeInt(m_kMPShellManager.OnlineGame_GetMapPlotInt());
 	kGameSettings.SetMapBiomeTypeInt(m_kMPShellManager.OnlineGame_GetMapBiomeInt());
 	kGameSettings.NumPublicConnections = 2;
@@ -285,6 +311,157 @@ function OSSCreateGameSettings(bool bAutomatch)
 	kGameSettings.bAllowInvites=true;
 	ServerGameSettings=kGameSettings;
 	
+}
+
+
+function bool CreateOnlineGameSearch(optional int SquadCostIdentifier=1234567,optional int TurnTimeIdentifier=1234567)
+{
+	local OnlineSubsystem kOSS;
+	local bool bSuccess;
+	local XComOnlineGameSearch kGameSearch;
+	local int iSquadCostMin, iSquadCostMax;
+	local int iTurnTimeMin, iTurnTimeMax;
+	local int iMapPlotMin, iMapPlotMax;
+	local int iMapBiomeMin, iMapBiomeMax;
+
+	PopupClientNotification("Creating New Game search","Please Remain Calm...");
+	kGameSearch = new class'XComOnlineGameSearchDeathmatchCoop';
+
+	kGameSearch.SetNetworkType(eMPNetworkType_Public);
+	kGameSearch.SetGameType(eMPGameType_Deathmatch);
+	kGameSearch.SetIsRanked(false);
+
+	iSquadCostMax=MaxInt;
+	iSquadCostMin=MinInt;
+	kGameSearch.SetSquadCostMin(SquadCostIdentifier);
+	kGameSearch.SetSquadCostMax(SquadCostIdentifier);
+
+	iTurnTimeMax=MaxInt;
+	iTurnTimeMin=MinInt;
+	kGameSearch.SetTurnTimeMin(TurnTimeIdentifier);
+	kGameSearch.SetTurnTimeMax(TurnTimeIdentifier);
+
+	//
+	// MAP PLOT TYPE
+	iMapPlotMin = MinInt;
+	iMapPlotMax = MaxInt;
+	kGameSearch.SetMapPlotTypeMinMax(iMapPlotMin, iMapPlotMax);
+
+	iMapBiomeMin = MinInt;
+	iMapBiomeMax = MaxInt;
+	kGameSearch.SetMapBiomeTypeMinMax(iMapBiomeMin, iMapBiomeMax);
+
+	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.FreeSearchResults(kGameSearch);
+	kGameSearch.SetMPDataINIVersion(0);
+	kGameSearch.SetByteCodeHash(class'Helpers'.static.NetGetVerifyPackageHashes());
+	kGameSearch.SetInstalledModsHash(class'Helpers'.static.NetGetInstalledModsHash());
+	kGameSearch.SetInstalledDLCHash(class'Helpers'.static.NetGetInstalledMPFriendlyDLCHash());
+	kGameSearch.SetINIHash(class'Helpers'.static.NetGetMPINIHash());
+	kGameSearch.SetNetworkType(eMPNetworkType_Public);
+	kGameSearch.SetIsDevConsoleEnabled(class'Helpers'.static.IsDevConsoleEnabled());
+
+	SavedRumbleSearch=kGameSearch;
+
+	kOSS = class'GameEngine'.static.GetOnlineSubsystem();
+    kOSS.GameInterface.AddFindOnlineGamesCompleteDelegate(OnFindOnlineGamesComplete);
+
+    if( kOSS.GameInterface.FindOnlineGames( LocalPlayer( class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().Player).ControllerId, SavedRumbleSearch ) )
+    {
+		bSuccess = true;
+        `log(`location @ "Searching for online games...", true, 'Dragonpunk Rumble App');
+    }
+    else
+    {
+		`log(`location @ "Failed to begin search", true, 'Dragonpunk Rumble App');
+		kOSS.GameInterface.ClearFindOnlineGamesCompleteDelegate(OnFindOnlineGamesComplete);
+		bSuccess = false;
+    }
+
+	return bSuccess;
+
+}
+
+
+
+function OnFindOnlineGamesComplete( bool bWasSuccessful )
+{
+	local OnlineGameSearchResult TempRes;
+	local int i;
+	// Clean up delegate reference
+	class'GameEngine'.static.GetOnlineSubsystem().GameInterface.ClearFindOnlineGamesCompleteDelegate(OnFindOnlineGamesComplete);
+	`log("Result Length:" @string(SavedRumbleSearch.Results.length),,'Dragonpunk Rumble App');
+
+	for(i=0;i< SavedRumbleSearch.Results.length;i++)
+	{
+		`log(`location @i @XComOnlineGameSettings(SavedRumbleSearch.Results[i].GameSettings).ToString(),,'Dragonpunk Rumble App');
+	}
+	if(bWasSuccessful &&SavedRumbleSearch.Results.length>0)
+		OSSJoin(GetCoOpGame(),OnInviteJoinOnlineGameComplete);
+}
+
+function OnlineGameSearchResult GetCoOpGame(optional int SquadCostIdentifier=1234567,optional int TurnTimeIdentifier=1234567)
+{
+	local int i;
+	for(i=0;i< SavedRumbleSearch.Results.length;i++)
+	{
+		//`log(`location @i @XComOnlineGameSettings(SavedRumbleSearch.Results[i].GameSettings).ToString(),,'Dragonpunk Rumble App');
+
+		if(	XComOnlineGameSettings(SavedRumbleSearch.Results[i].GameSettings).GetTurnTimeSeconds()==TurnTimeIdentifier &&
+			XComOnlineGameSettings(SavedRumbleSearch.Results[i].GameSettings).GetMaxSquadCost()==SquadCostIdentifier &&
+			XComOnlineGameSettings(SavedRumbleSearch.Results[i].GameSettings).GetInstalledDLCHash()==class'Helpers'.static.NetGetInstalledMPFriendlyDLCHash() &&
+			XComOnlineGameSettings(SavedRumbleSearch.Results[i].GameSettings).GetInstalledModsHash()==class'Helpers'.static.NetGetInstalledModsHash() )
+			return SavedRumbleSearch.Results[i];
+	}
+	return SavedRumbleSearch.Results[i];
+}
+
+function OSSJoin(OnlineGameSearchResult kSearchResult, 
+	delegate<OnlineGameInterface.OnJoinOnlineGameComplete> dOnJoinOnlineGameCompleteDelegate)
+{
+	local XGParamTag kTag;
+	local TProgressDialogData kProgressDialogData;
+	local OnlineGameInterface GameInterface;
+	local string DescS;
+	GameInterface = class'GameEngine'.static.GetOnlineSubsystem().GameInterface;
+	if(GameInterface.GetGameSettings('Game') == none)
+	{
+		GameInterface.AddJoinOnlineGameCompleteDelegate(dOnJoinOnlineGameCompleteDelegate);
+		if(GameInterface.JoinOnlineGame(LocalPlayer( class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController().Player).ControllerId, 'Game', kSearchResult))
+		{
+			`log(`location @ "Attempting to join " @ kSearchResult.GameSettings.OwningPlayerName, true, 'Dragonpunk Rumble App');
+			EndDialogBox();
+			DescS="DONT PANIC! Connecting to:"@kSearchResult.GameSettings.OwningPlayerName;
+			PopupClientNotification("Connecting to server",DescS);
+
+			/*kTag = XGParamTag(`XEXPANDCONTEXT.FindTag("XGParam"));
+
+			`log(`location @ "- Connection successful, opening progress dialog." , true, 'XCom_Online');
+			kProgressDialogData.strTitle = class'X2MPData_Shell'.default.m_strMPJoiningGameProgressDialogTitle;
+			kTag.StrValue0 = kSearchResult.GameSettings.OwningPlayerName;
+			kProgressDialogData.strDescription = `XEXPAND.ExpandString(class'X2MPData_Shell'.default.m_strMPJoiningGameProgressDialogText);
+			UIProgressDialog(kProgressDialogData);
+
+			// HAX: Make sure if we don't complete the connection that we close the Progress dialog and cleanup any dangling delegates.
+			SetTimer(UNCANCELLABLE_PROGRESS_DIALOGUE_TIMEOUT, false, nameof(CleanupOnFindAutomatchCompleteFailed));*/
+		}
+		else
+		{
+			`log(`location @ "FAILED to start async JoinOnlineGame task: Tried to join" @ kSearchResult.GameSettings.OwningPlayerName $ "'s game", true, 'Dragonpunk Rumble App');
+			EndDialogBox();
+			PopupClientNotification("Failed at Connecting to server","Fine... you can panic...");
+			GameInterface.ClearJoinOnlineGameCompleteDelegate(dOnJoinOnlineGameCompleteDelegate);
+		}
+	}
+	else
+	{
+		`log(`location $ ": Session 'Game' already exists, tearing down and then joining...", true, 'Dragonpunk Rumble App');
+		// need to clear our own game if we are going to join another game -tsmith 
+		if(!GameInterface.DestroyOnlineGame('Game'))
+		{
+			`log(`location $ ": Failed to start async task DestroyOnlineGame", true, 'Dragonpunk Rumble App');
+		}
+	}
+	EndDialogBox();
 }
 
 /*
@@ -391,8 +568,17 @@ function OnPlayerJoined(string RequestURL, string Address, const UniqueNetId Uni
 	`log("OnPlayerJoined",,'Team Dragonpunk Co Op');
 	if( `XCOMNETMANAGER.HasClientConnection() )
 	{
-		`log(`location @ "Sending 'Request History' command",,'Team Dragonpunk Co Op');
-		SendRemoteCommand("RequestHistory");
+		if(!FoundMismatchMods)
+		{
+			`log(`location @ "Sending 'Request History' command",,'Team Dragonpunk Co Op');
+			SendRemoteCommand("RequestHistory");
+		}
+		else
+		{
+			`log(`location @ "Found Mismatched Mods",,'Team Dragonpunk Co Op');
+			SendRemoteCommand_SwapMods();
+			
+		}
 	}
 	else if ( `XCOMNETMANAGER.HasServerConnection() )
 	{
@@ -416,13 +602,13 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 	`log("Dragonpunk test test test NOT IN XComOnlineEventMgr",true,'Team Dragonpunk Co Op');
 
 	//Checks if we're actually in a Co-op game
-	if(XComOnlineGameSettings(InviteResult.GameSettings).GetTurnTimeSeconds()<=1000 || XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()<=100000 )
+	/*if(false && XComOnlineGameSettings(InviteResult.GameSettings).GetTurnTimeSeconds()<=1000 || XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost()<=100000 )
 	{
 		`log("Entering OnlineEventMgr, TurnTime:"@XComOnlineGameSettings(InviteResult.GameSettings).GetTurnTimeSeconds() @",Max Cost:"@XComOnlineGameSettings(InviteResult.GameSettings).GetMaxSquadCost(),,'Team Dragonpunk Co Op');
 		`ONLINEEVENTMGR.OnGameInviteAccepted(InviteResult,bWasSuccessful);
 	}
 	else
-	{
+	{*/
 
 		if (!bWasSuccessful)
 		{
@@ -456,9 +642,8 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 
 		if (CheckInviteGameVersionMismatch(XComOnlineGameSettings(InviteResult.GameSettings))) // Checks mismatch of mods and DLCs on either side
 		{
-			`ONLINEEVENTMGR.InviteFailed(SystemMessage_VersionMismatch, false);
+			//`ONLINEEVENTMGR.InviteFailed(SystemMessage_VersionMismatch, false);
 			`log("InviteFailed(SystemMessage_VersionMismatch)",true,'Team Dragonpunk Co Op');
-			return;
 		}
 
 
@@ -497,7 +682,7 @@ function OnGameInviteAccepted(const out OnlineGameSearchResult InviteResult, boo
 		{
 			`log(`location @ "Waiting for whatever to finish and transition to the UISquadSelect screen.",true,'Team Dragonpunk Co Op');
 		}
-	}
+	//}
 }
 
 /*
@@ -614,6 +799,9 @@ function bool CheckInviteGameVersionMismatch(XComOnlineGameSettings InviteGameSe
 	//Remember to re-enable the checks on the beta and the release. THIS IS NOT HOW IT SHOULD BE OUTSIDE OF ALPHA
 	// DONE! We now have the stuff enabled for release! (25/11/16)
 	//return false; //ByteCodeHash != InviteGameSettings.GetByteCodeHash() ||
+	if(InstalledModsHash != InviteGameSettings.GetInstalledModsHash() || InstalledModsHash != InviteGameSettings.GetInstalledModsHash())
+		FoundMismatchMods=True;
+
 	return	InstalledDLCHash != InviteGameSettings.GetInstalledDLCHash() ||
 			InstalledModsHash != InviteGameSettings.GetInstalledModsHash();
 }
@@ -631,6 +819,29 @@ function SendRemoteCommand(string Command) //Copied from UIMPShell_Lobby
 	`log(`location @ "Sent Remote Command '"$Command$"'",,'Team Dragonpunk Co Op');
 }
 
+function SendRemoteCommand_SwapMods() //Copied from UIMPShell_Lobby
+{
+	local array<byte> Params;
+	local XComGameStateNetworkManager NetManager;
+	local String FinalOut,temp;
+	local array<string> TempLog;
+	NetManager=`XCOMNETMANAGER;
+	TempLog=class'Helpers'.static.GetInstalledDLCNames();
+	foreach TempLog(temp)
+	{
+		FinalOut=FinalOut $";"$temp;
+	}
+	TempLog=class'Helpers'.static.GetInstalledModNames();
+	foreach TempLog(temp)
+	{
+		FinalOut=FinalOut $";"$temp;
+	}
+	NetManager.AddCommandParam_String(FinalOut,Params); // makes the string into a byte array and sends it with the command
+	NetManager.SendRemoteCommand("SwapMods", Params);
+	SentMods=true;
+	`log(`location @ "Sent Remote Command Swap Mods",,'Team Dragonpunk Co Op');
+}
+
 /*
 * Used for sending a string with the remote command so the other side will be synced with your saved Squads (all around,server controlled and client controlled)  
 */
@@ -646,18 +857,6 @@ function SentRemoteSquadCommand()
 	{
 		FinalOut$=Temp.ObjectID $"|";
 	}
-	FinalOut$="-1|"; // for easy indentification have a marker so we know where we split to the other array.
-	foreach ServerSquad(Temp) // Adds the Ids of everone on the squad
-	{
-		FinalOut$=Temp.ObjectID $"|";
-	}
-	FinalOut$="-1|"; // for easy indentification have a marker so we know where we split to the other array.
-	foreach ClientSquad(Temp) // Adds the Ids of everone on the squad
-	{
-		FinalOut$=Temp.ObjectID $"|";
-	}
-	FinalOut$="-1"; // for easy indentification have a marker so we know where we split to the other array.
-	
 	NetManager.AddCommandParam_String(FinalOut,Params); // makes the string into a byte array and sends it with the command
 	NetManager.SendRemoteCommand("UpdateSquad", Params);	
 }
@@ -685,6 +884,9 @@ function DecipherSquads(array<byte> Params)
 			count++;
 			continue;
 		}
+		if(TempInt==0 ||TString~="0" )
+			continue;
+
 		switch (Count) // By counting the "-1"s you can know which squad we're adding to.
 		{
 			case 0:
@@ -698,6 +900,60 @@ function DecipherSquads(array<byte> Params)
 				break;
 		}
 	}
+}
+
+simulated function HandleMissingModsCallback(eUIAction eAction)
+{
+	if(eAction==eUIAction_Accept || eAction==eUIAction_Closed)
+	{
+		if(`XCOMNETMANAGER.HasClientConnection())
+		{
+			`log(`location @ "Sending 'Request History' command",,'Team Dragonpunk Co Op');
+			SendRemoteCommand("FixIgnoreSS");
+		}
+	}
+	else
+		DisconnectGame();
+}
+
+function string HandleMissingMods(string InMods)
+{
+	local string MString,temp,TString,outString;
+	local array<string> SplitSTR,AllMods,AllDLCs;
+	local XComGameStateNetworkManager NetManager;
+	local int i;
+	local bool Found;
+	AllDLCs=class'Helpers'.static.GetInstalledDLCNames();
+	AllMods=class'Helpers'.static.GetInstalledModNames();
+	foreach AllDLCs(temp)
+	{
+		AllMods.AddItem(temp);
+	}
+	NetManager=`XCOMNETMANAGER;
+	SplitSTR=SplitString(InMods,";",true);
+	`log(InMods,,'Dragonpunk Co Op');
+	outString="The Following Mods/DLCs are only present on the other player's game:";
+	foreach SplitSTR(Tstring)
+	{
+		`log("Current Mod Check" @Tstring,,'Dragonpunk Co Op');
+		Found=false;
+		for(i=0; i<AllMods.length;i++)
+		{
+			if(Tstring~=AllMods[i])
+			{
+				Found=true;
+				i=AllMods.length;
+				AllMods.RemoveItem(AllMods[i]);
+			}
+		}
+		if(!Found)
+		{
+			outString=outString @Tstring $",";
+		}
+	}
+	outString=outString @". Warning- this may cause bugs and crashes we recommend disconnecting and fixing the problem!";
+	`log("outString" @outString,,'Dragonpunk Co Op');
+	return outString;
 }
 
 /*
@@ -719,7 +975,12 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		`XCOMNETMANAGER.SendHistory(`XCOMHISTORY, `XEVENTMGR);
 		`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
 	}
-	else if(Command ~= "RecievedHistory")
+	
+	else if(Command ~= "FixIgnoreSS")
+	{
+		SendRemoteCommand("FixIgnoreSS_Fix");
+	}
+	else if(Command ~= "HistoryReceived")
 	{
 
 		if(LoadingGame==false)
@@ -742,6 +1003,14 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 								//(so the second time we get the history) load the tactical game
 		}	
 	}
+	else if(Command ~= "SwapMods")
+	{
+		if(!SentMods)
+			SendRemoteCommand_SwapMods();
+
+		PopupCustomNotification("Missing Mods Found",HandleMissingMods(`XCOMNETMANAGER.GetCommandParam_String(RawParams)),"Connect","Disconnect");
+	}
+	
 	else if(Command~="HistoryConfirmedPopUp")
 	{
 		PopupClientNotification();
@@ -764,7 +1033,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		{
 			`log("Unit in squad HistoryConfirmed:"@XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitRef.ObjectID)).GetFullName(),,'Team Dragonpunk Co Op');
 		}
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(); // Updates the list of soldier and the slots, also updates the pawns
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false); // Updates the list of soldier and the slots, also updates the pawns
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo(); // Updates the mission in case something changed
 		SavedSquad=XComHQ.Squad;
 		`log("Updating Squad Select HistoryConfirmed",,'Team Dragonpunk Co Op');
@@ -775,7 +1044,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
 		
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
 		SearchState=`ONLINEEVENTMGR.LatestSaveState(TempH);
 		foreach SearchState.IterateByClassType(class'XComGameState_Unit', UnitState)
 		{
@@ -796,7 +1065,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		}
 		SavedSquad=XComHQ.Squad;
 		`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 		UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 		listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
@@ -805,14 +1074,28 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
 		
-		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
 		`log("Updating Squad Select RegisteredConfirmed",,'Team Dragonpunk Co Op');
 	}
 	else if (Command~="LoadGame")
 	{
+		`XCOMHISTORY.UnRegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
 		`log("Client:"@`XCOMNETMANAGER.HasClientConnection() @", Server:"@`XCOMNETMANAGER.HasServerConnection() @"Launched:"@Launched ,,'Team Dragonpunk Co Op');		
 		`log(Command);
 		LoadingGame=true;
+	}
+	else if(Command~="MergeStateReceived")
+	{
+		`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);		
+		SendRemoteCommand("RegisterGameStateWatcher");
+	}
+	else if(Command~="RegisterGameStateWatcher")
+	{
+		`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);		
+	}
+	else if(Command~="UnRegisterONGSD")
+	{
+		`XCOMHISTORY.UnRegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
 	}
 	else if (Command~="UpdateSquad")
 	{
@@ -848,7 +1131,7 @@ function UpdateSS()
 
 	SavedSquad=XComHQ.Squad;
 	`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
-	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
+	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
 	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
 	UISS=UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect'));
 	listWidth =( UISS.GetTotalSlots()+(int(UISS.ShowExtraSlot1())*-2) )* (class'UISquadSelect_ListItem'.default.width + UISS.LIST_ITEM_PADDING);
@@ -857,7 +1140,7 @@ function UpdateSS()
 	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.SetX(UISS.Movie.UI_RES_X / 2); //fixes the x position of the list on the screen
 	//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
 	
-	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData();
+	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
 	`log("Updating Squad Select RegisteredConfirmed",,'Team Dragonpunk Co Op');	
 }
 
@@ -871,6 +1154,7 @@ static function OnNewGameState_SquadWatcher(XComGameState GameState) //Thank you
 	local XComGameState_BaseObject StateObjectCurrent;
 	local bool Send;
 	if(!`XCOMNETMANAGER.HasConnections())return;
+
     for( StateObjectIndex = 0; StateObjectIndex < GameState.GetNumGameStateObjects(); ++StateObjectIndex )
 	{
 		StateObjectCurrent = GameState.GetGameStateForObjectIndex(StateObjectIndex);		
@@ -883,25 +1167,57 @@ static function OnNewGameState_SquadWatcher(XComGameState GameState) //Thank you
 	}
 	if(Send)
 	{
+		SendRemoteUnregister();
 		`XCOMNETMANAGER.SendMergeGameState(GameState);
+		`XCOMHISTORY.UnRegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
 	}	
 }
 
+static function SendRemoteUnregister()
+{
+	local array<byte> Parms;
+	Parms.Length = 0; // Removes script warning.
+	`XCOMNETMANAGER.SendRemoteCommand("UnRegisterONGSD", Parms);	
+}
+
+function bool SquadCheck(array<StateObjectReference> arrOne, array<StateObjectReference> arrTwo) 
+{
+	local int i,j;
+	local array<bool> CheckArray;
+
+	if(arrOne.Length!=arrTwo.Length) 
+		return False;
+
+	for(i=0;i<arrOne.Length;i++) //Loop galore! n^2 is fine when squads are rarely over 12 people
+	{
+		for(j=0;j<arrTwo.Length;j++)
+		{
+			if(arrOne[i]==arrTwo[j] && arrOne[i].ObjectID>0)
+				CheckArray.AddItem(true);
+		}
+	}
+	if(CheckArray.Length==arrOne.Length)
+		return true;
+
+	return false;
+}
+ 
 /*
-* Copied from the UISquadSelect listener 
+* Checks if the units inside the input game state are different to the latest history state in the game.
 */
-static function bool PerSoldierSquadCheck(XComGameState InGS)
+function bool PerSoldierSquadCheck(XComGameState InGS) 
 {
 	local int i;
 	local XComGameState_Unit Unit,UnitPrev;
 
+
 	for(i=0;i<InGS.GetNumGameStateObjects();i++)
 	{
 		Unit=XComGameState_Unit(InGS.GetGameStateForObjectIndex(i));
-		if(Unit!=none)
+		if(Unit!=none &&Unit.ObjectID>0)
 		{
 			UnitPrev=XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(Unit.ObjectID,,InGS.HistoryIndex - 1));
-			if(UnitPrev !=none)
+			if(UnitPrev !=none && UnitPrev.ObjectID>0)
 			{
 				if(UnitPrev!=Unit)
 					return false;
@@ -911,39 +1227,115 @@ static function bool PerSoldierSquadCheck(XComGameState InGS)
 	return true;
 }
 
-function ReceiveMergeGameState(XComGameState InGameState)
+/*
+* Used when getting the unit changes in co-op, updates all the units and control lists.
+*/
+function ReceiveMergeGameState(XComGameState InGameState) 
 {
-	`log(`location @"Recieved Merge GameState Connection Setup",,'Team Dragonpunk Co Op');
+ 	local XComGameState_HeadquartersXCom XComHQ;
+	local StateObjectReference UnitRef; 
+	local float listWidth,listX;
+	local UISquadSelect UISS;
+	`log(`location @"Received Merge GameState",,'Team Dragonpunk Co Op');
+	NewGSWasRecieved=true;
+	//SendRemoteCommand("HistoryRegisteredConfirmed");
+	XComHQ = XComGameState_HeadquartersXCom(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom')); //Update the HQ, will ensure the squads are updated.
+	foreach XComHQ.Squad(UnitRef)
+	{
+		if(UnitRef.ObjectID>0)
+			`log("Unit in squad ReceiveMergeGameState:"@XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitRef.ObjectID)).GetFullName(),,'Team Dragonpunk Co Op');
+	}
+	//`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
+	if(!SquadCheck(XComHQ.Squad,SavedSquad) ||!PerSoldierSquadCheck(InGameState)) //Check if we have any changes. Without checking you'll get a T-pose on the units and the UI becomes unresponsive.
+	{
+		`log("SquadCheck"@SquadCheck(XComHQ.Squad,SavedSquad) @"PerSoldierSquadCheck:"@PerSoldierSquadCheck(InGameState));
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateMissionInfo();
+		GetNewSquadChanges(SavedSquad,XComHQ.Squad);
+		SavedSquad=XComHQ.Squad; // Save the squad again
+		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
+		SentRemoteSquadCommand();
+		//CalcAllPlayersReady();
+	}
+	SendRemoteCommand("MergeStateReceived");
+	UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).LaunchButton.OnClickedDelegate=LoadTacticalMapDelegate;
 }
+ 
 
 /*
-* Copied from the UISquadSelect listener 
+* syncs up changes in the new squad relative to the old one.
 */
-static function bool SquadCheck(array<StateObjectReference> arrOne, array<StateObjectReference> arrTwo)
+function GetNewSquadChanges(array<StateObjectReference> AOldSquad, array<StateObjectReference> ANewSquad)
 {
 	local int i,j;
-	local array<bool> CheckArray;
-
-	if(arrOne.Length!=arrTwo.Length) 
-		return False;
-
-	for(i=0;i<arrOne.Length;i++)
+	local bool Found;
+	local StateObjectReference TempRef;
+	local array<StateObjectReference> OldSquad,NewSquad;
+	
+	OldSquad=AOldSquad;
+	NewSquad=ANewSquad;
+	foreach OldSquad(TempRef)
 	{
-		for(j=0;j<arrTwo.Length;j++)
+		if(TempRef.ObjectID==0)
+			OldSquad.RemoveItem(TempRef);
+	}
+	foreach NewSquad(TempRef)
+	{
+		if(TempRef.ObjectID==0)
+			NewSquad.RemoveItem(TempRef);
+	}
+	if(OldSquad.length==NewSquad.Length)
+		return;
+	else if(OldSquad.Length>NewSquad.Length)
+	{
+		
+		for(i=0;i<OldSquad.Length;i++)
 		{
-			if(arrOne[i]==arrTwo[j])
-				CheckArray.AddItem(true);
+			Found=false;
+			for(j=0;j<NewSquad.Length;j++)
+			{
+				if(OldSquad[i]==NewSquad[j])
+					Found=true;
+			}
+			if(!Found)
+			{
+				if(`XCOMNETMANAGER.HasServerConnection())
+					ClientSquad.RemoveItem(OldSquad[i]);
+				else if(`XCOMNETMANAGER.HasClientConnection())
+					ServerSquad.RemoveItem(OldSquad[i]);
+			}
 		}
 	}
-	if(CheckArray.Length==arrOne.Length)
-		return true;
-
-	return false;
+	else
+	{
+		for(i=0;i<NewSquad.Length;i++)
+		{
+			Found=false;
+			for(j=0;j<OldSquad.Length;j++)
+			{
+				if(NewSquad[i].ObjectID==OldSquad[j].ObjectID)
+					Found=true;
+			}
+			if(!Found)
+			{
+				if(`XCOMNETMANAGER.HasServerConnection())
+					ClientSquad.AddItem(NewSquad[i]);
+				else if(`XCOMNETMANAGER.HasClientConnection())
+					ServerSquad.AddItem(NewSquad[i]);
+			}
+		}	
+	}
+			
 }
+
 
 function SendHistory()
 {
 	`log(`location,,'XCom_Online');
+
+	class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.FixHackingAbilities();
+	class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.FixAllMPAbilities();
+
 	`XCOMNETMANAGER.SendHistory(`XCOMHISTORY, `XEVENTMGR);
 }
 
@@ -970,6 +1362,10 @@ function bool SendOrMergeGamestate(XComGameState GameState)
 function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventManager)
 {
 	local XComGameStateNetworkManager NetworkMgr;
+	
+	class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.FixHackingAbilities();
+	class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.FixAllMPAbilities();
+
 	if(!bHistoryLoaded)
 	{
 		NetworkMgr = `XCOMNETMANAGER;
@@ -978,7 +1374,7 @@ function ReceiveHistory(XComGameStateHistory InHistory, X2EventManager EventMana
 		`log(`location @"Dragonpunk Recieved History",,'Team Dragonpunk Co Op');
 		bHistoryLoaded = true;
 		Global.ReceiveHistory(InHistory, EventManager);
-		SendRemoteCommand("RecievedHistory");
+		SendRemoteCommand("HistoryReceived");
 		SendRemoteCommand("ClientJoined");
 	}
 	
@@ -1031,6 +1427,9 @@ function LoadTacticalMap()
 	`log(`location,,'XCom_Online');
 //	ConsoleCommand("unsuppress XCom_GameStates");
 	`XCOMHISTORY.UnRegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
+
+	class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.FixHackingAbilities();
+	class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.FixAllMPAbilities();
 	
 	BattleDataState = XComGameState_BattleData(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_BattleData'));
 	if(BattleDataState==none)
@@ -1103,7 +1502,9 @@ function SetupStartState()
 	// Create the basic strategy objects
 	if((XComGameStateContext_StrategyGameRule(History.GetGameStateFromHistory(History.FindStartStateIndex()).GetContext()) == None))
 	{
-		StrategyStartState = class'XComGameStateContext_StrategyGameRule'.static.CreateStrategyGameStart(, , , , , , false, , class'X2DataTemplate'.const.BITFIELD_GAMEAREA_Multiplayer, false /*SetupDLCContent*/);
+		// Fix to BITFIELD_GAMEAREA_Tactical ?
+		//StrategyStartState = class'XComGameStateContext_StrategyGameRule'.static.CreateStrategyGameStart(, , , , , , false, , class'X2DataTemplate'.const.BITFIELD_GAMEAREA_Multiplayer, false /*SetupDLCContent*/);
+		StrategyStartState = class'XComGameStateContext_StrategyGameRule'.static.CreateStrategyGameStart(, , true, `ONLINEEVENTMGR.CampaignDifficultySetting, true);
 		`log("Creating New Stategy State",,'Dragonpunk Co Op');
 	}
 	else

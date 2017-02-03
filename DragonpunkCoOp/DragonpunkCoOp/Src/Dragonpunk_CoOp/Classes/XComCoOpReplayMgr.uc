@@ -11,25 +11,26 @@ var bool finishedReplay;
 var int LastKnownHistoryIndex;
 
 
-/*simulated event PostBeginPlay()
+simulated event PostBeginPlay()
 {
-	super.PostBeginPlay();
+	super(XComReplayMgr).PostBeginPlay();
 
-	CachedHistory = `XCOMHISTORY;
-
-	NetworkMgr = `XCOMNETMANAGER;
-	NetworkMgr.AddReceiveHistoryDelegate(ReceivePartialHistory);
+	`XCOMNETMANAGER.AddReceiveHistoryDelegate(ReceivePartialHistory);
+	`XCOMNETMANAGER.AddReceivePartialHistoryDelegate(ReceivePartialHistory);
 }
 
 simulated function Cleanup()
 {
-	NetworkMgr.ClearReceiveHistoryDelegate(ReceivePartialHistory);
+	`XCOMNETMANAGER.ClearReceiveHistoryDelegate(ReceivePartialHistory);
+	`XCOMNETMANAGER.ClearReceivePartialHistoryDelegate(ReceivePartialHistory);
 }
-*/
+
+
 simulated function ReceivePartialHistory(XComGameStateHistory InHistory, X2EventManager EventManager)
 {
-	`log("Recieved Partial History Replay Mgr."); 
-	`log("Max InHistory Frame:"@InHistory.GetNumGameStates()-1 @", Max XCOMHISTORY Frame:"@`XCOMHISTORY.GetNumGameStates()-1 @", Max Previous History Frame:" @CachedHistory.GetNumGameStates()-1 @", Last Known History Index:"@LastKnownHistoryIndex);
+	// Update the world data to be in alignment with the new history data.
+	`XWORLD.SyncVisualizers();
+	`XWORLD.UpdateTileDataCache();
 }
 
 
@@ -42,15 +43,15 @@ simulated event StepReplayForward(bool bStepAll = false)
 	local int SkipTicksIndex;
 	local bool bHasVisualizationBlock;
 	local XComGameStateContext_TacticalGameRule GameRuleContext;
-	local X2TacticalGameRuleset GameRuleset;
+	local X2TacticalCoOpGameRuleset GameRuleset;
 
-	History = `XCOMHISTORY;	
-	GameRuleset = `TACTICALRULES;
+	History = class'XComGameStateHistory'.static.GetGameStateHistory();	
+	GameRuleset = X2TacticalCoOpGameRuleset(XComGameInfo(class'Engine'.static.GetCurrentWorldInfo().Game).GameRuleset);
 	finishedReplay=false;
 
 	if( CurrentHistoryFrame < StepForwardStopFrame )
 	{
-		VisualizationMgr = `XCOMVISUALIZATIONMGR;
+		VisualizationMgr = XComGameReplicationInfo(class'Engine'.static.GetCurrentWorldInfo().GRI).VisualizationMgr;
 		NextGameState = History.GetGameStateFromHistory(CurrentHistoryFrame+1);
 		StartTickIndex = NextGameState.TickAddedToHistory;
 
@@ -71,6 +72,75 @@ simulated event StepReplayForward(bool bStepAll = false)
 
 			++CurrentHistoryFrame;
 			History.SetCurrentHistoryIndex(CurrentHistoryFrame);	
+			`log("Playing GameState On Replay",,'Dragonpunk Coop ReplayMgr');
+			HandleGameState(History, NextGameState);
+
+			// Update the VisiblityMgr with the gamestate
+			GameRuleset.VisibilityMgr.OnNewGameState(NextGameState);
+			class'XComWorldData'.static.GetWorldData().SyncReplay(NextGameState);
+			class'XComWorldData'.static.GetWorldData().UpdateTileDataCache( );
+
+			// Before handling control over the visualizer, reset all the collision that may have been changed by the state submission
+			class'XComWorldData'.static.GetWorldData().RestoreFrameDestructionCollision( );
+
+			VisualizationMgr.BuildVisualization(CurrentHistoryFrame, bVisualizationSkip);			
+
+			//'Instant' visualization tracks take 2 ticks to execute and remove
+			for( SkipTicksIndex = 0; SkipTicksIndex < 2; ++SkipTicksIndex )
+			{
+				VisualizationMgr.Tick(0.0f);
+			}
+
+			bHasVisualizationBlock = class'XComGameStateVisualizationMgr'.static.VisualizerBusy();
+		}
+		until( CurrentHistoryFrame == StepForwardStopFrame || bSingleStepMode );
+		if(CurrentHistoryFrame == StepForwardStopFrame)
+		{
+			finishedReplay=true;
+			SendRemoteCommand("EndOfReplay");
+		}
+	}
+//	`log("CurrentHistoryFrame" @CurrentHistoryFrame @",StepForwardStopFrame" @StepForwardStopFrame @",NumGameStates"@`XCOMHISTORY.GetNumGameStates());
+}
+
+/*
+simulated event StepReplayForward(bool bStepAll = false)
+{
+	local XComGameStateVisualizationMgr VisualizationMgr;
+	local XComGameState NextGameState;	
+	local XComGameStateHistory History;	
+	local int StartTickIndex;
+	local int SkipTicksIndex;
+	local bool bHasVisualizationBlock;
+	local XComGameStateContext_TacticalGameRule GameRuleContext;
+	local X2TacticalGameRuleset GameRuleset;
+
+
+	History = `XCOMHISTORY;	
+	GameRuleset = `TACTICALRULES;
+	finishedReplay=false;
+	if( CurrentHistoryFrame < StepForwardStopFrame )
+	{
+		VisualizationMgr = `XCOMVISUALIZATIONMGR;
+		NextGameState = History.GetGameStateFromHistory(CurrentHistoryFrame+1);
+		StartTickIndex = NextGameState.TickAddedToHistory;
+
+		do
+		{	
+			GameRuleContext = XComGameStateContext_TacticalGameRule(NextGameState.GetContext());
+			if( GameRuleContext != None && GameRuleContext.GameRuleType == eGameRule_PlayerTurnBegin )
+			{
+				GameRuleset.CachedUnitActionPlayerRef = GameRuleContext.PlayerRef; // Update the 'active player'
+			}
+				
+			if(!bStepAll && (StartTickIndex != NextGameState.TickAddedToHistory) && bHasVisualizationBlock)
+			{
+				break;
+			}
+			
+			++CurrentHistoryFrame;
+			History.SetCurrentHistoryIndex(CurrentHistoryFrame);	
+			//`XCOMHISTORY.SetCurrentHistoryIndex(CurrentHistoryFrame);	
 			`log("Playing GameState On Replay",,'Dragonpunk Coop ReplayMgr');
 			HandleGameState(History, NextGameState);
 
@@ -101,7 +171,7 @@ simulated event StepReplayForward(bool bStepAll = false)
 	}
 //	`log("CurrentHistoryFrame" @CurrentHistoryFrame @",StepForwardStopFrame" @StepForwardStopFrame @",NumGameStates"@`XCOMHISTORY.GetNumGameStates());
 }
-
+*/
 simulated event StopReplay()
 {
 	local XComCoOpTacticalController TacticalController;
@@ -136,7 +206,7 @@ state PlayingReplay
 		// have visualization, etc.
 		`log("Starting Replay",,'Dragonpunk Coop ReplayMgr');
 		XComCoOpTacticalController(class'WorldInfo'.static.GetWorldInfo().GetALocalPlayerController()).IsCurrentlyWaiting=true;
-		XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).SetInputState('BlockingInput');	
+//		XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).SetInputState('BlockingInput');	
 	}
 
 	event Tick(float DeltaTime)
@@ -150,14 +220,14 @@ state PlayingReplay
 			StepReplayForward();
 			UpdateUIWithFrame(CurrentHistoryFrame);
 		}
-		else if (PauseReplayRequested && !class'XComGameStateVisualizationMgr'.static.VisualizerBusy())
+		else if (PauseReplayRequested && (!class'XComGameStateVisualizationMgr'.static.VisualizerBusy()) )
 		{
 			PauseReplay();
 		}
-		else if(CurrentHistoryFrame == StepForwardStopFrame && finishedReplay!=true)
+		/*else if(CurrentHistoryFrame == StepForwardStopFrame && finishedReplay!=true)
 		{
 			`log("CurrentHistoryFrame" @CurrentHistoryFrame @",StepForwardStopFrame" @StepForwardStopFrame @",NumGameStates"@`XCOMHISTORY.GetNumGameStates());
-		}
+		}*/
 	}
 
 	simulated function PauseReplay()
@@ -166,6 +236,7 @@ state PlayingReplay
 		PauseReplayRequested = false;
 		GotoState('PausedReplay');
 		//LastSeenHistoryIndex = CachedHistory.GetCurrentHistoryIndex();
+		StopReplay();
 	}
 
 Begin:
@@ -175,7 +246,6 @@ state PausedReplay
 {
 	event BeginState(Name PreviousStateName)
 	{
-		StopReplay();
 //		XComCoOpTacticalController( class'WorldInfo'.static.GetWorldInfo( ).GetALocalPlayerController( ) ).SetInputState('BlockingInput');	
 	}
 
