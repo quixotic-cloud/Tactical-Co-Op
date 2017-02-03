@@ -5,7 +5,9 @@ var() ETeam DestinationTeam;
 
 event Activated()
 {
-	if( Unit != none )
+	local array<StateObjectReference> VisibleUnits;
+	class'X2TacticalVisibilityHelpers'.static.GetAllVisibleUnitsOnTeamForSource(Unit.ObjectID,eTeam_XCOM,VisibleUnits);
+	if( Unit.GetTeam() != eTeam_XCOM && Unit.GetMyTemplate().Abilities.Find('Evac') != -1 && VisibleUnits.Length > 0)
 	{
 		`BATTLE.SwapTeams(Unit, DestinationTeam);
 		OutputLinks[0].bHasImpulse = true;

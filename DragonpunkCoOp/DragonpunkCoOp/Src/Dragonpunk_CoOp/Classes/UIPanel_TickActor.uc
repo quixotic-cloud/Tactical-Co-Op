@@ -7,11 +7,16 @@
 class UIPanel_TickActor extends Actor;
 
 
+/*
+* Sets up the timers for the client to force connection to the server
+*/
 function SetupTick(float TickTime)
 {
 	`log(`location @"Trying to connect to server IN FUNCTION TickTime:" @TickTime,,'Team Dragonpunk Co Op');
 	SetTimer(TickTime,true,'Connect');
 }
+
+
 function SetupCoOpTimer(float TickTime)
 {
 	`log(`location @"Trying to Create server IN FUNCTION TickTime:" @TickTime,,'Team Dragonpunk Co Op');

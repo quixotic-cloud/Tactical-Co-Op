@@ -22,10 +22,7 @@ simulated event PostBeginPlay()
 {
 	super.PostBeginPlay();
 
-	CachedHistory = `XCOMHISTORY;
-
-	NetworkMgr = `XCOMNETMANAGER;
-	NetworkMgr.AddReceiveHistoryDelegate(ReceiveHistory);
+	`XCOMNETMANAGER.AddReceiveHistoryDelegate(ReceiveHistory);
 }
 
 simulated function Cleanup()

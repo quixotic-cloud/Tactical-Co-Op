@@ -1,7 +1,7 @@
 //  *********   DRAGONPUNK SOURCE CODE   ******************
 //  FILE:    XComMPCOOPGRI
 //  AUTHOR:  Elad Dvash
-//  PURPOSE: Game Replication Class for the Co-Op game
+//  PURPOSE: Game Replication Class for the Co-Op game. Not really in use but left in JIC
 //---------------------------------------------------------------------------------------
                            
 Class XComMPCOOPGRI extends XComTacticalGRI;

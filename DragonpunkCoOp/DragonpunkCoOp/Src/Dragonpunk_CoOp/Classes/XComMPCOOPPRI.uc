@@ -1,5 +1,8 @@
-// This is an Unreal Script
-// NOT USED, WILL BE DELETED
+//  *********   DRAGONPUNK SOURCE CODE   ******************
+//  FILE:    XComMPCOOPPRI
+//  AUTHOR:  Elad Dvash
+//  PURPOSE: Player Replication Class for the Co-Op game. Not really in use but left in JIC
+//---------------------------------------------------------------------------------------
                            
 Class XComMPCOOPPRI extends XComPlayerReplicationInfo;
 

@@ -13,7 +13,10 @@ simulated function class<X2GameRuleset> GetGameRulesetClass()
 	return class'X2TacticalCoOpGameRuleset';
 }
 
-static event class<GameInfo> SetGameType(string MapName, string Options, string Portal) //Basically the old version from GameInfo.uc but with the Co-op ruleset option added.
+/*
+* Basically the old version from GameInfo.uc but with the Co-op ruleset option added.
+*/
+static event class<GameInfo> SetGameType(string MapName, string Options, string Portal) 
 {
 	local class<GameInfo>   GameInfoClass;
 	local string            GameInfoClassName;
