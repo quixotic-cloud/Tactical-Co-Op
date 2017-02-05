@@ -61,7 +61,7 @@ var TDialogueBoxData DialogData;
 
 var UIScreen DialogScreen;
 
-var UIButton SyncCoopButton;
+//var UIButton SyncCoopButton;
 var UIButton SwitchPlayersButton;
 
 var bool bSkipRemainingTurnActivty_B;
@@ -821,7 +821,7 @@ simulated function UIShowAlienTurnOverlay()
 			`PRES.m_kTurnOverlay.ShowAlienTurn();
 		}
 	}
-	SyncCoopButton.Hide();
+//	SyncCoopButton.Hide();
 }
 simulated function StartStateCreateXpManager(XComGameState StartState)
 {
@@ -2619,7 +2619,7 @@ Begin:
 			`log("Actions Available Start",,'Dragonpunk Tactical TurnState');
 			SendHistoryThisTurn=false;
 			WaitingForNewStatesTime = 0.0f;
-			SyncCoopButton.Hide();
+			//SyncCoopButton.Hide();
 			if(IsCurrentPlayerOfTeam(eTeam_XCom))
 			{
 				//StartTimerSync();
@@ -2971,7 +2971,7 @@ Begin:
 
 function StartTimerSync(int amount)
 {
-	SetTimer(amount,false,'SyncButtonShow');
+	//SetTimer(amount,false,'SyncButtonShow');
 }
 
 simulated state TurnPhase_Begin_Coop extends TurnPhase_Begin
@@ -3120,8 +3120,9 @@ Begin:
 	`log("WE ARE IN BEGIN COOP!");
 	if(!Launched)	
 	{
-		SyncCoopButton=UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD')).Spawn(class'UIButton',UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD'))).InitButton('MySyncButton',"Sync Co-Op",OnClickedSync ,eUIButtonStyle_SELECTED_SHOWS_HOTLINK);
-		SyncCoopButton.SetPosition(SyncCoopButton.Movie.GetUIResolution().x-192,16-SyncCoopButton.Height);
+	//	SyncCoopButton=UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD')).Spawn(class'UIButton',UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD'))).InitButton('MySyncButton',"Sync Co-Op",OnClickedSync ,eUIButtonStyle_SELECTED_SHOWS_HOTLINK);
+	//	SyncCoopButton.SetPosition(SyncCoopButton.Movie.GetUIResolution().x-192,16-SyncCoopButton.Height);
+		
 		SwitchPlayersButton=UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD')).Spawn(class'UIButton',UITacticalHUD(`ScreenStack.GetScreen(class'UITacticalHUD'))).InitButton('MySyncButton',"Switch Control",OnClickedSwitchPlayers ,eUIButtonStyle_SELECTED_SHOWS_HOTLINK);
 		SwitchPlayersButton.SetPosition(SwitchPlayersButton.Movie.GetUIResolution().x-192,16-SwitchPlayersButton.Height*2);
 		SwitchPlayersButton.Hide();
@@ -3299,7 +3300,7 @@ function OnClickedSync(UIButton Button)
 
 function SyncButtonShow()
 {
-	SyncCoopButton.Show();	
+	//SyncCoopButton.Show();	
 }
 
   
@@ -3468,6 +3469,15 @@ simulated state TurnPhase_BeginPlayerTurn extends TurnPhase_UnitActions
 		else if( Command ~= "GoToReplay" )
 		{
 			bShouldGoToReplay = true;
+		}
+		else if( Command ~= "ServerRequestEndTurn")
+		{
+			SendRemoteCommand("ServerEndTurn");
+			bServerEndedTurn=true;
+		}
+		else if( Command ~= "ServerEndTurn")
+		{
+			bServerEndedTurn=true;
 		}
 	}
 	simulated function InitializePlayerTurnOrder()
@@ -3640,6 +3650,15 @@ simulated state PerformingReplay
 			`PRES.UIHideAllHUD();
 			UIShowAlienTurnOverlay();
 		}
+		else if( Command ~= "ServerRequestEndTurn")
+		{
+			SendRemoteCommand("ServerEndTurn");
+			bServerEndedTurn=true;
+		}
+		else if( Command ~= "ServerEndTurn")
+		{
+			bServerEndedTurn=true;
+		}
 	}
 	
 	function EndReplay()
@@ -3698,6 +3717,15 @@ simulated state TurnPhase_CoOp_UnitActions extends TurnPhase_UnitActions
 		else if( Command ~= "EndTacticalGame" )
 		{
 			bGameEnded=true;
+		}
+		else if( Command ~= "ServerRequestEndTurn")
+		{
+			SendRemoteCommand("ServerEndTurn");
+			bServerEndedTurn=true;
+		}
+		else if( Command ~= "ServerEndTurn")
+		{
+			bServerEndedTurn=true;
 		}
 	}
 
