@@ -104,6 +104,7 @@ simulated static function FixAllMPAbilities()
 		TempAbilityTemplate.HideErrors.Length = 0;
 		TempAbilityTemplate.AbilityEventListeners.Length = 0;
 		TempAbilityTemplate.AbilityShooterConditions.Length = 0;
+		TempAbilityTemplate.AbilityShooterConditions.AddItem(new class'X2Condition_UnitInEvacZone');
 	}
 	
 	ATM=Class'X2AbilityTemplateManager'.static.GetAbilityTemplateManager();
@@ -133,6 +134,8 @@ simulated static function UnFixAllMPAbilities()
 {
 	local X2AbilityTemplateManager ATM;
 	local X2Condition_UnitValue UnitValue;
+	local array<name> SkipExclusions;
+	local X2Condition_UnitProperty UnitProperty;
 	local X2AbilityTemplate TempAbilityTemplate;
 
 	ATM=Class'X2AbilityTemplateManager'.static.GetAbilityTemplateManager();
@@ -155,13 +158,33 @@ simulated static function UnFixAllMPAbilities()
 	TempAbilityTemplate=ATM.FindAbilityTemplate('Evac');
 	if(TempAbilityTemplate!=none)
 	{
+		TempAbilityTemplate.HideErrors.Length = 0;
+		TempAbilityTemplate.AbilityEventListeners.Length = 0;
+		TempAbilityTemplate.AbilityShooterConditions.Length = 0;
+
 		TempAbilityTemplate.RemoveTemplateAvailablility(TempAbilityTemplate.BITFIELD_GAMEAREA_Multiplayer); 
 		TempAbilityTemplate.bAllowedByDefault = false;
 		TempAbilityTemplate.HideErrors.AddItem('AA_AbilityUnavailable');
+
 		TempAbilityTemplate.AddAbilityEventListener('EvacActivated', class'XComGameState_Ability'.static.EvacActivated, ELD_OnStateSubmitted);
+
 		UnitValue = new class'X2Condition_UnitValue';
 		UnitValue.AddCheckValue(default.EvacThisTurnName, default.MAX_EVAC_PER_TURN, eCheck_LessThan);
 		TempAbilityTemplate.AbilityShooterConditions.AddItem(UnitValue);
+
+		TempAbilityTemplate.AbilityShooterConditions.AddItem(new class'X2Condition_UnitInEvacZone');
+	
+		UnitProperty = new class'X2Condition_UnitProperty';
+		UnitProperty.ExcludeDead = true;
+		UnitProperty.ExcludeFriendlyToSource = false;
+		UnitProperty.ExcludeHostileToSource = true;
+		//UnitProperty.IsOutdoors = true;           //  evac zone will take care of this now
+		TempAbilityTemplate.AbilityShooterConditions.AddItem(UnitProperty);
+
+		SkipExclusions.AddItem(class'X2Ability_CarryUnit'.default.CarryUnitEffectName);
+		SkipExclusions.AddItem(class'X2AbilityTemplateManager'.default.DisorientedName);
+		SkipExclusions.AddItem(class'X2StatusEffects'.default.BurningName);
+		TempAbilityTemplate.AddShooterEffectExclusions(SkipExclusions);
 
 	}
 		
