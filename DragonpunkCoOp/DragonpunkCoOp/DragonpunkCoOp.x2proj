@@ -59,6 +59,9 @@
     <Content Include="Src\Dragonpunk_CoOp\Classes\XComCo_Op_ConnectionSetup.uc">
       <SubType>Content</SubType>
     </Content>
+    <Content Include="Src\Dragonpunk_CoOp\Classes\XComGameState_Unit_Helper.uc">
+      <SubType>Content</SubType>
+    </Content>
     <Content Include="Src\Dragonpunk_CoOp\Classes\XComMPCOOPGRI.uc">
       <SubType>Content</SubType>
     </Content>

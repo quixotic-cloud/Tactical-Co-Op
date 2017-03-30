@@ -33,6 +33,7 @@ event OnInit(UIScreen Screen)
 		`log("UI Mission Summary Initiated Cleanup!");
 		Cleanup();
 		ClearUnitEvac();
+		ReturnFlightStatToNormal();
 		class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.UnFixHackingAbilities();
 		class'X2Ability_DefaultAbilitySet_CoOpHackFix'.static.UnFixLootAbilities();
 
@@ -41,6 +42,10 @@ event OnInit(UIScreen Screen)
 			ConnectionSetupActor.Destroy();
 			ConnectionSetupActor=none;
 		}
+	}
+	else if( Screen.isA('UIAvengerHUD') )
+	{
+		DismissUnits(); 
 	}
 	else if(PlayingCoop && Screen.IsA('UITacticalHUD')) // Extends timers so the games dosnt end prematurely
 	{
@@ -54,7 +59,45 @@ event OnInit(UIScreen Screen)
 
 }
 
+simulated public function DismissUnits()
+{
+	local XComGameState_HeadquartersXCom XComHQ;
+	local StateObjectReference TempRef;
+	local XComGameState_Unit TempUnit;
 
+	XComHQ = class'UIUtilities_Strategy'.static.GetXComHQ();
+	foreach XComHQ.Crew(TempRef)
+	{
+		TempUnit = XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(TempRef.ObjectID));
+		if( InStr(TempUnit.GetLastName() , "(Remote Unit)" ) != -1 && TempUnit.IsSoldier()  )
+			XComHQ.FireStaff(TempRef);
+
+	}
+}
+
+function ReturnFlightStatToNormal()
+{
+	local XComGameStateHistory History;
+	local XComGameState_Unit Unit , NewUnit;
+	local XComGameState NewGameState;
+
+	History = `XCOMHISTORY;
+	NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("Remove Evac From all");
+
+	foreach History.IterateByClassType(class'XComGameState_Unit', Unit)
+	{
+		if(Unit.GetTeam() == eTeam_XCom && Unit.GetMaxStat(eStat_FlightFuel) == 10)
+		{
+			NewUnit = XComGameState_Unit(NewGameState.CreateStateObject(class'XComGameState_Unit', Unit.ObjectID));
+			NewUnit.SetBaseMaxStat(eStat_FlightFuel,0);
+			NewGameState.AddStateObject(NewUnit);
+		}
+	}
+	if(NewGameState.GetNumGameStateObjects() > 0)
+		`TACTICALRULES.SubmitGameState(NewGameState);
+	else
+		`XCOMHISTORY.CleanupPendingGameState(NewGameState);			
+}
 
 function DisconnectGame()
 {

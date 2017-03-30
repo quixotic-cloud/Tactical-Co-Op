@@ -97,6 +97,8 @@ simulated event StepReplayForward(bool bStepAll = false)
 		if(CurrentHistoryFrame == StepForwardStopFrame)
 		{
 			finishedReplay=true;
+			`XWORLD.SyncVisualizers();
+			`XWORLD.UpdateTileDataCache();
 			SendRemoteCommand("EndOfReplay");
 		}
 	}

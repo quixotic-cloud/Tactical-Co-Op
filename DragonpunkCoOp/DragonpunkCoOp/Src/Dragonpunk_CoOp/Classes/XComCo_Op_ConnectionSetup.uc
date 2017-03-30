@@ -956,6 +956,53 @@ function string HandleMissingMods(string InMods)
 	return outString;
 }
 
+function LoadPlayersFromClient()
+{
+	local XComGameStateHistory TempH;
+	local XComGameState SearchState,NewGameState;
+	local XComGameState_Unit UnitState,TempUnitState;
+	local SCATProgression ProgressAbility;
+	local int i;
+
+	NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("Add Client Soldiers");
+	SearchState=`ONLINEEVENTMGR.LatestSaveState(TempH);
+	foreach SearchState.IterateByClassType(class'XComGameState_Unit', UnitState)
+	{
+		if(UnitState.IsASoldier() && UnitState.IsAlive()) //Only soldiers... that are alive
+		{
+			`log("Unit Name Test:"@UnitState.GetFullName(),,'Dragonpunk Co Op Unit Load Test');
+			TempUnitState=UnitState.GetMyTemplate().CreateInstanceFromTemplate(NewGameState);
+			TempUnitState.SetTAppearance(UnitState.kAppearance);
+			TempUnitState.SetCharacterName(UnitState.GetFirstName() , UnitState.GetLastName() @"(Remote Unit)" , UnitState.GetNickName(false) );
+			TempUnitState.SetCountry( UnitState.GetCountry() );
+			TempUnitState.SetBackground( UnitState.GetBackground() );
+
+			for(i = 0 ; i < UnitState.GetRank() ; i++ )
+			{
+				TempUnitState.RankUpSoldier( NewGameState , UnitState.GetSoldierClassTemplateName() );
+			}
+			foreach UnitState.m_SoldierProgressionAbilties(ProgressAbility)
+			{
+				TempUnitState.BuySoldierProgressionAbility( NewGameState , ProgressAbility.iRank ,  ProgressAbility.iBranch );
+			}
+			for(i = 0 ; i < eStat_MAX ; i++)
+			{
+				TempUnitState.SetBaseMaxStat( ECharStatType(i) , UnitState.GetMaxStat( ECharStatType(i) ) );
+				TempUnitState.SetCurrentStat( ECharStatType(i) , UnitState.GetCurrentStat( ECharStatType(i) ) );
+			}
+			TempUnitState.SetXPForRank( UnitState.GetRank() );
+			NewGameState.AddStateObject(TempUnitState);
+			TempUnitState.ApplyBestGearLoadout(NewGameState);
+			`XCOMHQ.AddToCrew( NewGameState , TempUnitState );
+			`XCOMHQ.HandlePowerOrStaffingChange(NewGameState);
+		}
+	}
+	`XCOMHISTORY.AddGameStateToHistory(NewGameState);	
+	SendRemoteCommand("SyncClientUnits");
+}
+
+
+
 /*
 * Handels a lot of the back and forth logic between the server and client
 */
@@ -966,8 +1013,6 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 	local UISquadSelect UISS;
 	local XComGameState_Unit UnitState;
 	local StateObjectReference UnitRef;
-	local XComGameState SearchState;
-	local XComGameStateHistory TempH;
 //	`log(`location @"Dragonpunk Command" @ Command,,'Team Dragonpunk Co Op');
 
 	if (Command ~= "RequestHistory")
@@ -975,7 +1020,12 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		`XCOMNETMANAGER.SendHistory(`XCOMHISTORY, `XEVENTMGR);
 		`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
 	}
-	
+	else if(Command ~= "SyncClientUnits")
+	{
+		`XCOMHISTORY.UnRegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher);
+		`log(`location @ "Sending 'Request History' command",,'Team Dragonpunk Co Op');
+		SendRemoteCommand("RequestHistory");
+	}
 	else if(Command ~= "FixIgnoreSS")
 	{
 		SendRemoteCommand("FixIgnoreSS_Fix");
@@ -1029,6 +1079,10 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 	else if(Command~= "HistoryConfirmed")
 	{
 		XComHQ = XComGameState_HeadquartersXCom(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_HeadquartersXCom'));
+	
+		if( `XCOMNETMANAGER.HasClientConnection() )
+			LoadPlayersFromClient(); //Should work, see if we get the history transfered.
+
 		foreach XComHQ.Squad(UnitRef)
 		{
 			`log("Unit in squad HistoryConfirmed:"@XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(UnitRef.ObjectID)).GetFullName(),,'Team Dragonpunk Co Op');
@@ -1045,14 +1099,7 @@ function OnRemoteCommand(string Command, array<byte> RawParams)
 		//UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).m_kSlotList.RealizeLocation(); //fixes the x position of the list on the screen
 		
 		UISquadSelect(`SCREENSTACK.GetFirstInstanceOf(class'UISquadSelect')).UpdateData(false);
-		SearchState=`ONLINEEVENTMGR.LatestSaveState(TempH);
-		foreach SearchState.IterateByClassType(class'XComGameState_Unit', UnitState)
-		{
-			if(UnitState.IsASoldier() && UnitState.IsAlive()) //Only soldiers... that are alive
-			{
-				`log("Unit Name Test:"@UnitState.GetFullName(),,'Dragonpunk Co Op Unit Load Test');
-			}
-		}	
+			
 	
 		`XCOMHISTORY.RegisterOnNewGameStateDelegate(OnNewGameState_SquadWatcher); // Register for a Gamestate delegate so we can send new states over the net when they are submitted
 	}
